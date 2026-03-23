@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0B0A1D;
+  --foreground: #F0E6FF;
+}
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-mystic-900: #0B0A1D;
+  --color-mystic-800: #15112E;
+  --color-mystic-700: #251B42;
+  --color-mystic-purple: #9D4EDD;
+  --color-mystic-pink: #FF70A6;
+  --color-mystic-glow: #E0AAFF;
+  --color-pink-50: #fdf2f8;
+  --color-pink-100: #fce7f3;
+  --color-pink-200: #fbcfe8;
+  --color-pink-300: #f9a8d4;
+  --color-pink-400: #f472b6;
+  --color-pink-500: #ec4899;
+  --color-rose-400: #fb7185;
+  --color-purple-50: #faf5ff;
+  --color-purple-100: #f3e8ff;
+  --color-purple-200: #e9d5ff;
+  --color-purple-300: #d8b4fe;
+  --color-purple-400: #c084fc;
+  --color-blue-50: #eff6ff;
+  --color-blue-100: #dbeafe;
+  --color-blue-200: #bfdbfe;
+  --color-blue-400: #60a5fa;
+  --color-blue-500: #3b82f6;
+  --color-blue-600: #2563eb;
+  --color-green-50: #f0fdf4;
+  --color-green-100: #dcfce7;
+  --color-green-200: #bbf7d0;
+  --color-green-300: #86efac;
+  --color-green-500: #22c55e;
+  --color-green-700: #15803d;
+  --color-indigo-50: #eef2ff;
+  --color-indigo-200: #c7d2fe;
+  --color-indigo-400: #818cf8;
+  --color-indigo-500: #6366f1;
+  --color-indigo-600: #4f46e5;
+  --color-indigo-700: #4338ca;
+  --color-red-500: #ef4444;
+  --color-cyan-300: #67e8f9;
+  --color-teal-300: #5eead4;
+  --font-sans: var(--font-geist);
+}
+
+/* 스크롤바 커스텀 */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #f9a8d4;
+  border-radius: 2px;
+}
+
+/* PWA safe area */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* iOS 줌 방지 */
+input, textarea, select {
+  font-size: 16px;
+}
