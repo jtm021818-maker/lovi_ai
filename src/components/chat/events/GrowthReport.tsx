@@ -42,9 +42,9 @@ export default function GrowthReport({ event, onSelect, disabled }: GrowthReport
             <div className="flex flex-col items-center flex-1">
               <span className="text-[11px] font-bold text-gray-400 mb-1">처음 시작할 때</span>
               <span className="text-3xl mb-1 grayscale opacity-60">
-                {data.beforeScore <= 3 ? '😰' : data.beforeScore <= 6 ? '😐' : '🙂'}
+                {data.beforeScore <= -2 ? '😰' : data.beforeScore <= 1 ? '😐' : '🙂'}
               </span>
-              <span className="text-[14px] font-bold text-gray-600">{data.beforeScore}점</span>
+              <span className="text-[14px] font-bold text-gray-600">{data.beforeScore > 0 ? `+${data.beforeScore}` : data.beforeScore}점</span>
             </div>
             
             <div className="flex flex-col items-center justify-center px-2">
@@ -60,9 +60,9 @@ export default function GrowthReport({ event, onSelect, disabled }: GrowthReport
                 initial={{ scale: 0.8 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.8, bounce: 0.5 }}
                 className="text-3xl mb-1"
               >
-                {data.afterScore >= 7 ? '😊' : data.afterScore >= 4 ? '🙂' : '😐'}
+                {data.afterScore >= 2 ? '😊' : data.afterScore >= -1 ? '🙂' : '😐'}
               </motion.span>
-              <span className="text-[14px] font-bold text-teal-600">{data.afterScore}점</span>
+              <span className="text-[14px] font-bold text-teal-600">{data.afterScore > 0 ? `+${data.afterScore}` : data.afterScore}점</span>
             </div>
           </div>
 

@@ -29,11 +29,11 @@ export interface SolutionEntry {
     technique: string;               // '부드러운 시작(Gentle Start-Up)'
     principle: string;               // 원칙 설명
 
-    /** 3줄 공식: 공감→인사이트→행동 */
+    /** 공감→인사이트→행동 (확장형) */
     steps: {
-      validation: string;            // 공감 1줄
-      insight: string;               // 인사이트 1줄
-      action: string;                // 구체적 행동 1~2줄
+      validation: string;            // 공감 2~3줄
+      insight: string;               // 인사이트 3~4줄
+      action: string;                // 구체적 행동 3~5줄
     };
 
     /** 카톡 메시지 초안 */
@@ -42,6 +42,24 @@ export interface SolutionEntry {
     iMessageTemplate?: string;
     /** 근거 출처 */
     source?: string;
+
+    // 🆕 v11: 전문성 강화 필드
+    /** 연구 근거 상세 설명 (2~3줄) */
+    researchNote?: string;
+    /** 전문가 인용 (예: "Gottman 박사는...") */
+    expertQuote?: string;
+    /** 과학적 원리 (예: "편도체 위협 반응 시스템") */
+    scientificBasis?: string;
+    /** 한국 MZ세대 맥락 (예: "카톡 1 확인 문화") */
+    koreanContext?: string;
+    /** 감정 구간: crisis(-5~-3), distressed(-3~-1), confused(-2~0), mixed(양가), stable(1~5), mild(경미), anxious(불안), sad(슬픔) */
+    emotionTier?: 'crisis' | 'distressed' | 'confused' | 'mixed' | 'stable' | 'mild' | 'anxious' | 'sad';
+    /** 확장된 카톡 초안 (상황별 3종) */
+    additionalDrafts?: {
+      formal: string;                // 정중한 버전
+      casual: string;                // 캐주얼 버전
+      minimal: string;               // 최소한 버전
+    };
   };
 
   // ── 메타 ──

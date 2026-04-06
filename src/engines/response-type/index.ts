@@ -148,6 +148,8 @@ export interface PhaseContext {
   emotionScore: number;
   /** 🆕 v6: readiness 점수 (0~100) — 해결책 사전 기반 */
   readinessScore?: number;
+  /** 🆕 v20: LLM 기반 해결책 준비도 (5A Framework) */
+  solutionReadiness?: 'NOT_READY' | 'EXPLORING' | 'READY';
 }
 
 /**
@@ -158,25 +160,34 @@ export interface PhaseContext {
  */
 export function determineRelationshipPhase(ctx: PhaseContext): ConversationPhase {
   const readiness = ctx.readinessScore ?? 0;
+  const solReady = ctx.solutionReadiness ?? 'NOT_READY';
 
   // ── 위기 상황 — 조언 요청이 없으면 EXPLORATION 유지 ──
   if (ctx.emotionScore <= -4) {
-    // 🆕 v6: 위기여도 readiness 높으면 ACTION (공감+해결 동시)
+    if (solReady === 'READY' && ctx.turnCount >= 2) return 'ACTION';
     if (readiness >= 70 && ctx.turnCount >= 2) return 'ACTION';
     if (ctx.hasAskedForAdvice && ctx.turnCount >= 2) return 'ACTION';
-    if (ctx.turnCount >= 7) return 'ACTION';
+    if (ctx.turnCount >= 9) return 'ACTION';  // v20: 7→9 (NOT_READY 시 더 오래 대기)
     return 'EXPLORATION';
   }
 
-  // 🆕 v6: 콘텐츠 기반 전이 — readiness 높으면 즉시 ACTION!
+  // 🆕 v20: 5A 준비도 기반 전환 (LLM 평가 우선)
+  if (solReady === 'READY' && ctx.turnCount >= 2) return 'ACTION';
+  if (solReady === 'NOT_READY' && ctx.turnCount < 9) {
+    // 아직 감정 처리 중 → 턴 9까지는 ACTION 강제 전환 안 함
+    if (ctx.turnCount >= 3) return 'COMFORTING';
+    return 'EXPLORATION';
+  }
+
+  // 기존 readiness 스코어 기반 (5A와 병행)
   if (readiness >= 70 && ctx.turnCount >= 2) return 'ACTION';
   if (readiness >= 40) return 'COMFORTING';
 
   // ── 즉시 ACTION: 명시적 조언 요청 + 최소 2턴 경과 ──
   if (ctx.hasAskedForAdvice && ctx.turnCount >= 2) return 'ACTION';
 
-  // ── ACTION (해결책 단계) ──
-  if (ctx.turnCount >= 7) return 'ACTION';
+  // ── ACTION (해결책 단계) — v20: 턴 7→9 (무한 루프 방지) ──
+  if (ctx.turnCount >= 9) return 'ACTION';
   if (ctx.hasGivenPermission) return 'ACTION';
   if (ctx.hasExpressedInsight && ctx.turnCount >= 5) return 'ACTION';
 

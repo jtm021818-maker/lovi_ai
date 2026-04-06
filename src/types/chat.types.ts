@@ -33,16 +33,6 @@ export interface UserProfile {
   createdAt: string;
 }
 
-/** 감정 일기 */
-export interface JournalEntry {
-  id: string;
-  userId: string;
-  emotionWords: string[];
-  content: string;
-  gratitude?: string;
-  emotionScore: number;
-  createdAt: string;
-}
 
 /** 스트리밍 이벤트 */
 export interface StreamEvent {

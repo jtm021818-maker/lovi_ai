@@ -42,32 +42,32 @@ export async function POST(req: NextRequest) {
     return new Response('Missing sessionId or message', { status: 400 });
   }
 
-  // 🆕 v7+v8+v9: 세션에서 diagnostic_axes + phase 데이터 + locked_scenario 로드
-  const { data: sessionData } = await supabase
+  // 🆕 v22: 세션 데이터 로드 — 에러 체크 + 디버깅
+  const { data: sessionData, error: sessionError } = await supabase
     .from('counseling_sessions')
-    .select('diagnostic_axes, current_phase_v2, completed_events, emotion_baseline, locked_scenario, last_event_turn, confirmed_emotion_score')
+    .select('diagnostic_axes, current_phase_v2, completed_events, emotion_baseline, locked_scenario, last_event_turn, confirmed_emotion_score, emotion_history, last_prompt_style, emotion_accumulator, turn_count, phase_start_turn, session_metadata')
     .eq('id', sessionId)
     .single();
+
+  if (sessionError) {
+    console.error(`[Chat] ❌ 세션 로드 실패:`, sessionError.message, sessionError.code);
+  }
+  // 🆕 v22: DB 컬럼 존재 여부 디버깅
+  console.log(`[Chat] 📊 세션 로드: sessionData=${sessionData ? 'OK' : 'NULL'}, keys=${sessionData ? Object.keys(sessionData).join(',') : 'none'}, turn_count=${sessionData?.turn_count}, last_event_turn=${sessionData?.last_event_turn}, completed_events=${JSON.stringify(sessionData?.completed_events)}, phase=${sessionData?.current_phase_v2}`);
+
   const diagnosticAxes = sessionData?.diagnostic_axes ?? {};
-  const currentPhaseV2 = sessionData?.current_phase_v2 ?? undefined;
+  let currentPhaseV2 = sessionData?.current_phase_v2 ?? undefined;
   const completedEvents = sessionData?.completed_events ?? [];
   const emotionBaseline = sessionData?.emotion_baseline ?? undefined;
   const lockedScenario = sessionData?.locked_scenario ?? undefined;
-  const lastEventTurn: number = sessionData?.last_event_turn ?? 0;
+  let lastEventTurn: number = sessionData?.last_event_turn ?? 0;
   let confirmedEmotionScore: number | undefined = sessionData?.confirmed_emotion_score ?? undefined;
+  const emotionHistory: number[] = sessionData?.emotion_history ?? [];
+  const lastPromptStyle: string | undefined = sessionData?.last_prompt_style ?? undefined;
+  const emotionAccumulatorState = sessionData?.emotion_accumulator ?? undefined;
+  let phaseStartTurn: number = sessionData?.phase_start_turn ?? 0;
 
-  // 🆕 v10.1: 온도계 응답 시 유저 확정 감정 점수 저장
-  if (suggestionMeta?.source === 'emotion_thermometer' && suggestionMeta.context?.score !== undefined) {
-    // 유저가 조정한 점수 (0~10) → -5~+5 로 변환
-    const userScore = suggestionMeta.context.score as number;
-    confirmedEmotionScore = userScore - 5; // 0~10 → -5~+5
-    console.log(`[Chat] 🌡️ 감정 확정: 유저 ${userScore}(0-10) → 확정 ${confirmedEmotionScore}(-5~+5) | 조정: ${suggestionMeta.context.wasAdjusted}`);
-    // 즉시 DB 저장
-    await supabase
-      .from('counseling_sessions')
-      .update({ confirmed_emotion_score: confirmedEmotionScore })
-      .eq('id', sessionId);
-  }
+  // 🆕 v22: 온도계 핸들러는 turnCount 계산 후로 이동 (아래 참조)
 
   // 사용자 메시지 DB 저장 (선택지 메타 포함)
   const { error: insertError } = await supabase.from('messages').insert({
@@ -111,9 +111,131 @@ export async function POST(req: NextRequest) {
   }
 
   // 페르소나 + 턴 카운터
-  const persona: PersonaMode = (profile?.persona_mode as PersonaMode) || 'counselor';
+  const persona: PersonaMode = (profile?.persona_mode as PersonaMode) || 'luna';
   const turnCount = Math.max(1, chatHistory.filter(m => m.role === 'user').length);
   console.log(`[Chat] 📌 persona: "${persona}" | turnCount: ${turnCount} | chatHistory총: ${chatHistory.length} | user메시지: ${chatHistory.filter(m => m.role === 'user').length}`);
+
+  // 🆕 v22: 온도계 응답 처리 — turnCount 계산 후 실행 (stale DB 의존 제거)
+  if (suggestionMeta?.source === 'emotion_thermometer' && suggestionMeta.context?.score !== undefined) {
+    const userScore = suggestionMeta.context.score as number;
+    confirmedEmotionScore = userScore - 5; // 0~10 → -5~+5
+    console.log(`[Chat] 🌡️ 감정 확정: 유저 ${userScore}(0-10) → 확정 ${confirmedEmotionScore}(-5~+5) | 조정: ${suggestionMeta.context.wasAdjusted}`);
+
+    const updatedEvents = Array.isArray(completedEvents) ? [...completedEvents] : [];
+    if (!updatedEvents.includes('EMOTION_THERMOMETER')) {
+      updatedEvents.push('EMOTION_THERMOMETER');
+    }
+    // 🆕 v22: turnCount를 직접 사용 — chatHistory 기반이라 항상 정확
+    const currentTurnForEvent = turnCount;
+    await supabase
+      .from('counseling_sessions')
+      .update({
+        confirmed_emotion_score: confirmedEmotionScore,
+        completed_events: updatedEvents,
+        current_phase_v2: 'MIRROR',
+        last_event_turn: currentTurnForEvent,
+        phase_start_turn: currentTurnForEvent,
+        turn_count: currentTurnForEvent,
+      })
+      .eq('id', sessionId);
+    completedEvents.push('EMOTION_THERMOMETER');
+    lastEventTurn = currentTurnForEvent;
+    currentPhaseV2 = 'MIRROR';
+    phaseStartTurn = currentTurnForEvent;
+    console.log(`[Chat] 🔒 온도계 완료 → MIRROR 전환 + lastEventTurn=${currentTurnForEvent} (turnCount=${turnCount}, DB was: turn_count=${sessionData?.turn_count}, last_event_turn=${sessionData?.last_event_turn})`);
+  }
+
+  // 🆕 v25: 세션 간 연결 강화 — 메모리 프로필 + 최근 5세션
+  let previousSessionContext = '';
+  if (turnCount === 1) {
+    try {
+      // 🆕 v25: 유저 메모리 프로필 로드
+      const { formatMemoryForPrompt } = await import('@/engines/memory/extract-memory');
+      const { data: memProfile } = await supabase
+        .from('user_profiles')
+        .select('memory_profile')
+        .eq('id', user.id)
+        .single();
+
+      const memoryText = formatMemoryForPrompt((memProfile?.memory_profile as any) ?? {});
+      if (memoryText) {
+        previousSessionContext += `\n${memoryText}`;
+        console.log(`[Chat] 🧠 메모리 프로필 로드 완료`);
+      }
+
+      // 🆕 v25: 최근 5세션 로드 (1개→5개)
+      const { data: prevSessions } = await supabase
+        .from('counseling_sessions')
+        .select('session_summary, locked_scenario, emotion_end, emotion_baseline, homework_data, created_at')
+        .eq('user_id', user.id)
+        .eq('status', 'completed')
+        .neq('id', sessionId)
+        .order('ended_at', { ascending: false })
+        .limit(5);
+
+      if (prevSessions && prevSessions.length > 0) {
+        const sessionParts: string[] = [];
+        for (const prev of prevSessions.slice(0, 3)) {
+          const date = prev.created_at ? new Date(prev.created_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' }) : '';
+          const summary = prev.session_summary ? prev.session_summary.slice(0, 60) : '';
+          const scenario = prev.locked_scenario ?? '';
+          sessionParts.push(`  ${date}: ${scenario ? scenario + ' — ' : ''}${summary}`);
+        }
+
+        // 직전 세션 숙제 (있으면)
+        const latest = prevSessions[0];
+        if (latest.homework_data) {
+          const hw = latest.homework_data as any;
+          if (hw.homeworks && Array.isArray(hw.homeworks) && hw.homeworks.length > 0) {
+            sessionParts.push(`  → 지난 숙제: ${hw.homeworks.map((h: any) => h.task).join(', ')}`);
+          }
+        }
+
+        if (sessionParts.length > 0) {
+          previousSessionContext += `\n\n[최근 상담 히스토리]\n${sessionParts.join('\n')}`;
+          previousSessionContext += `\n\n→ 첫 인사에서 이전 기억을 자연스럽게 언급해. "저번에 그거 어떻게 됐어?" 식으로.`;
+          console.log(`[Chat] 📎 이전 세션 ${prevSessions.length}개 로드 완료`);
+        }
+      }
+      // 🆕 v25: 라운지 대화 + 감정 체크인 → 상담에 주입
+      const memProfile2 = memProfile?.memory_profile as any;
+      const today = new Date().toISOString().slice(0, 10);
+      const loungeHist = memProfile2?.loungeHistory;
+      if (loungeHist?.date === today && loungeHist?.messages?.length > 0) {
+        const recentLounge = (loungeHist.messages as any[]).slice(-5)
+          .filter((m: any) => m.type === 'user' || m.type === 'character')
+          .map((m: any) => `${m.speaker === 'luna' ? '루나' : m.speaker === 'tarot' ? '타로냥' : '유저'}: ${m.text}`)
+          .join('\n');
+        if (recentLounge) {
+          previousSessionContext += `\n\n[오늘 라운지에서 나눈 대화]\n${recentLounge}\n→ "아까 라운지에서..." 식으로 자연스럽게 참고.`;
+          console.log(`[Chat] 🏠 라운지 대화 ${loungeHist.messages.length}개 로드`);
+        }
+      }
+      const todayCheckin = (memProfile2?.dailyCheckins as any[])?.slice(-1)[0];
+      if (todayCheckin?.date === today) {
+        previousSessionContext += `\n오늘 감정 체크인: ${todayCheckin.mood} (${todayCheckin.score}/4)`;
+      }
+    } catch (err) {
+      console.warn('[Chat] 이전 세션/메모리 로드 실패 (무시):', err);
+    }
+
+    // 🆕 v23: 타로 세션 — 반복 카드 감지
+    if (persona === 'tarot') {
+      try {
+        const { getRecentReadings, detectRecurringCards, getRecurringCardsPrompt } = await import('@/engines/tarot/history-engine');
+        const readings = await getRecentReadings(supabase, user.id, 5);
+        if (readings.length > 0) {
+          const recurring = detectRecurringCards(readings);
+          if (recurring.length > 0) {
+            previousSessionContext += getRecurringCardsPrompt(recurring);
+            console.log(`[Chat] 🔮 반복 카드 ${recurring.length}개 감지: ${recurring.map(r => r.cardName).join(', ')}`);
+          }
+        }
+      } catch (err) {
+        console.warn('[Chat] 반복 카드 감지 실패 (무시):', err);
+      }
+    }
+  }
 
   // 🆕 선택지 게이트용 — 최근 선택지 표시 턴 + 전략 연속 횟수 계산
   const { data: recentStrategyLogs } = await supabase
@@ -162,13 +284,44 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // 🆕 v23: running session_metadata (stale 덮어쓰기 방지)
+  let runningSessionMeta = { ...(sessionData?.session_metadata ?? {}) };
+
+  // ===== v26: 타로냥 전처리 — 시나리오 기반 자동 스프레드 (AXIS_COLLECT 제거) =====
+  // 전문 타로 리더 방식: 대화 충분히 → 바로 스프레드 (에너지 카드 1장 단계 제거)
+  let tarotSessionMeta: { chosenSpreadType?: string; cards?: any[]; scenario?: string } | undefined;
+  if (persona === 'tarot') {
+    const tarotMeta = (runningSessionMeta as any).tarot ?? {};
+
+    // 스프레드 타입이 아직 없으면 시나리오 기반 자동 결정
+    if (!tarotMeta.chosenSpreadType && lockedScenario) {
+      const scenarioSpreadMap: Record<string, string> = {
+        UNREQUITED_LOVE: 'unrequited', RECONNECTION: 'reconnection',
+        FIRST_MEETING: 'pace', RELATIONSHIP_PACE: 'pace', COMMITMENT_FEAR: 'avoidant',
+      };
+      const autoSpread = scenarioSpreadMap[lockedScenario] ?? 'three';
+      tarotMeta.chosenSpreadType = autoSpread;
+      runningSessionMeta = { ...runningSessionMeta, tarot: { ...tarotMeta, chosenSpreadType: autoSpread, scenario: lockedScenario } };
+      await supabase.from('counseling_sessions').update({ session_metadata: runningSessionMeta }).eq('id', sessionId);
+      console.log(`[Chat] 🔮 스프레드 자동 결정: ${autoSpread} (시나리오: ${lockedScenario})`);
+    }
+
+    tarotSessionMeta = {
+      chosenSpreadType: tarotMeta.chosenSpreadType ?? 'three',
+      cards: tarotMeta.cards,
+      scenario: lockedScenario,
+    };
+    console.log(`[Chat] 🔮 타로 메타: spread=${tarotSessionMeta.chosenSpreadType}, cards=${tarotMeta.cards?.length ?? 0}`);
+  }
+  // ===== 타로냥 전처리 끝 =====
+
   // SSE 스트리밍
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
+      let fullText = '';
       try {
         const pipeline = new CounselingPipeline();
-        let fullText = '';
         let stateResult: any = null;
         let strategyResult: any = null;
         let responseMode: string | undefined = undefined;
@@ -177,13 +330,17 @@ export async function POST(req: NextRequest) {
         let finalCompletedEvents: string[] | undefined = undefined;
         let finalLastEventTurn: number = lastEventTurn;  // 🆕 v10
         let finalConfirmedEmotion: number | undefined = confirmedEmotionScore;  // 🆕 v10.1
+        let finalEmotionHistory: number[] = emotionHistory;  // 🆕 v10.2
+        let finalPhaseStartTurn: number = phaseStartTurn;  // 🆕 v22: 미리 초기화 (var hoisting 제거)
+        let finalPromptStyle: string | undefined = undefined;  // 🆕 v23: var→let
+        let finalEmotionAccumulator: any = undefined;  // 🆕 v23: var→let
 
         for await (const event of pipeline.execute(
           message,
           chatHistory,
-          profile?.onboarding_situation
+          (profile?.onboarding_situation
             ? `사용자 상황: ${profile.onboarding_situation}`
-            : '',
+            : '') + previousSessionContext,
           { supabase, userId: user.id },
           persona,
           turnCount,
@@ -206,6 +363,14 @@ export async function POST(req: NextRequest) {
           lastEventTurn,
           // 🆕 v10.1: 유저 확정 감정 점수
           confirmedEmotionScore,
+          // 🆕 v10.2: 감정 히스토리
+          emotionHistory,
+          // 🆕 v19: 감정 누적기 상태
+          emotionAccumulatorState,
+          // 🆕 v20: Phase 시작 턴
+          phaseStartTurn,
+          // 🆕 v23: 타로 세션 메타
+          tarotSessionMeta,
         )) {
           switch (event.type) {
             case 'state':
@@ -224,9 +389,15 @@ export async function POST(req: NextRequest) {
               if (typeof event.data === 'string' && event.data.includes('__REMOVE__')) {
                 break;
               }
-              fullText += event.data;
+              // 🆕 v26: SUGGESTIONS/STICKER 태그가 텍스트에 남으면 제거
+              let chunk = event.data as string;
+              chunk = chunk.replace(/\[?SUGGESTIONS:?\]?\s*\[[^\]]*\]/gi, '');
+              chunk = chunk.replace(/SUGGESTIONS:\s*"[^"]*"(,\s*"[^"]*")*/gi, '');
+              chunk = chunk.replace(/\bSUGGESTIONS\b[^\n]*/gi, '');
+              if (!chunk.trim()) break; // 제거 후 빈 문자열이면 스킵
+              fullText += chunk;
               controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({ type: 'text', data: event.data })}\n\n`)
+                encoder.encode(`data: ${JSON.stringify({ type: 'text', data: chunk })}\n\n`)
               );
               break;
 
@@ -264,6 +435,30 @@ export async function POST(req: NextRequest) {
               controller.enqueue(
                 encoder.encode(`data: ${JSON.stringify({ type: 'phase_event', data: event.data })}\n\n`)
               );
+              // 🆕 v23: TAROT_DRAW 카드 데이터를 running metadata에 저장 + 히스토리 기록
+              if ((event.data as any)?.type === 'TAROT_DRAW' && persona === 'tarot') {
+                const drawnCards = (event.data as any)?.data?.cards ?? [];
+                const updatedTarot = {
+                  ...(runningSessionMeta as any).tarot ?? {},
+                  ...(tarotSessionMeta ?? {}),
+                  cards: drawnCards,
+                  readingCompleted: true,
+                  scenario: lockedScenario,
+                };
+                runningSessionMeta = { ...runningSessionMeta, tarot: updatedTarot };
+                supabase.from('counseling_sessions').update({
+                  session_metadata: runningSessionMeta,
+                }).eq('id', sessionId).then(() => {});
+                // 🆕 v23: 히스토리 저장 (반복 카드 감지용)
+                import('@/engines/tarot/history-engine').then(({ saveReadingHistory }) => {
+                  saveReadingHistory(
+                    supabase, user.id, sessionId,
+                    tarotSessionMeta?.chosenSpreadType ?? 'three',
+                    lockedScenario ?? 'GENERAL',
+                    drawnCards,
+                  ).catch(() => {});
+                });
+              }
               break;
 
             case 'phase_change':
@@ -279,6 +474,10 @@ export async function POST(req: NextRequest) {
               finalCompletedEvents = (event.data as any).completedEvents;
               finalLastEventTurn = (event.data as any).lastEventTurn ?? lastEventTurn;  // 🆕 v10
               finalConfirmedEmotion = (event.data as any).confirmedEmotionScore ?? finalConfirmedEmotion;  // 🆕 v10.1
+              finalEmotionHistory = (event.data as any).emotionHistory ?? finalEmotionHistory;  // 🆕 v10.2
+              finalPromptStyle = (event.data as any).promptStyle;  // 🆕 v17
+              finalEmotionAccumulator = (event.data as any).emotionAccumulatorState;  // 🆕 v19
+              finalPhaseStartTurn = (event.data as any).phaseStartTurn ?? phaseStartTurn;  // 🆕 v22: let으로 상위 선언
               controller.enqueue(
                 encoder.encode(`data: ${JSON.stringify({ type: 'done', data: { phaseV2: finalPhaseV2 } })}\n\n`)
               );
@@ -286,7 +485,32 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // 후처리: fire-and-forget (Architect 피드백: 비동기 분리)
+        // 🆕 v24: 핵심 상태 항상 동기 저장 (레이스 컨디션 완전 방지)
+        // turn_count + last_message_preview + last_message_at 모두 여기서 저장
+        // → savePostProcessing fire-and-forget 실패해도 세션 기록 유지됨
+        {
+          const criticalUpdate: Record<string, any> = {
+            turn_count: turnCount,
+            last_message_preview: fullText.slice(0, 100) || message.slice(0, 100),
+            last_message_at: new Date().toISOString(),
+          };
+          if (finalCompletedEvents && finalCompletedEvents.length > 0) {
+            criticalUpdate.completed_events = finalCompletedEvents;
+            criticalUpdate.last_event_turn = finalLastEventTurn;
+            criticalUpdate.phase_start_turn = finalPhaseStartTurn;
+          }
+          if (finalPhaseV2) criticalUpdate.current_phase_v2 = finalPhaseV2;
+          const { error: criticalError } = await supabase
+            .from('counseling_sessions')
+            .update(criticalUpdate)
+            .eq('id', sessionId);
+          if (criticalError) {
+            console.error(`[Chat] ❌ CRITICAL UPDATE 실패:`, criticalError.message, criticalError.code, criticalError.details);
+          }
+          console.log(`[Chat] 🔒 핵심 상태 즉시 저장: phase=${finalPhaseV2}, turn=${turnCount}, events=[${finalCompletedEvents?.join(',') ?? ''}], lastEventTurn=${finalLastEventTurn}, phaseStartTurn=${finalPhaseStartTurn}, error=${criticalError ? criticalError.message : 'none'}`);
+        }
+
+        // 후처리: fire-and-forget (나머지 메타데이터)
         savePostProcessing(supabase, {
           sessionId,
           userId: user.id,
@@ -302,12 +526,24 @@ export async function POST(req: NextRequest) {
           turnCount,
           lastEventTurn: finalLastEventTurn,  // 🆕 v10
           confirmedEmotionScore: finalConfirmedEmotion,  // 🆕 v10.1
+          emotionHistory: finalEmotionHistory,  // 🆕 v10.2
+          promptStyle: finalPromptStyle,  // 🆕 v17
+          emotionAccumulator: finalEmotionAccumulator,  // 🆕 v19
         }).catch(console.error);
 
-      } catch (err) {
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ type: 'error', data: '응답 생성 중 오류가 발생했어요.' })}\n\n`)
-        );
+      } catch (err: any) {
+        console.error('[Chat] ❌ 스트리밍 에러:', err?.message || err);
+        // 이미 텍스트가 부분 전송된 경우 → done만 보내서 정상 종료 처리
+        if (fullText.length > 0) {
+          console.warn(`[Chat] ⚠️ 부분 텍스트 있음 (${fullText.length}자) — 그대로 완료 처리`);
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ type: 'done', data: {} })}\n\n`)
+          );
+        } else {
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ type: 'error', data: '응답 생성 중 오류가 발생했어요. 다시 시도해 주세요 💜' })}\n\n`)
+          );
+        }
       } finally {
         controller.close();
       }
@@ -341,9 +577,12 @@ async function savePostProcessing(
     turnCount?: number;
     lastEventTurn?: number;  // 🆕 v10
     confirmedEmotionScore?: number;  // 🆕 v10.1
+    emotionHistory?: number[];  // 🆕 v10.2
+    promptStyle?: string;  // 🆕 v17
+    emotionAccumulator?: any;  // 🆕 v19
   }
 ) {
-  const { sessionId, userId, aiContent, userMessage, stateResult, strategyResult, responseMode, updatedAxes, phaseV2, completedEvents: evts, emotionScore, turnCount, lastEventTurn: savedLastEventTurn, confirmedEmotionScore: savedConfirmedEmotion } = params;
+  const { sessionId, userId, aiContent, userMessage, stateResult, strategyResult, responseMode, updatedAxes, phaseV2, completedEvents: evts, emotionScore, turnCount, lastEventTurn: savedLastEventTurn, confirmedEmotionScore: savedConfirmedEmotion, emotionHistory: savedEmotionHistory, emotionAccumulator: savedEmotionAccumulator } = params;
 
   // AI 메시지 저장
   await supabase.from('messages').insert({
@@ -402,14 +641,11 @@ async function savePostProcessing(
     console.log(`[PostProcess] 📱 읽씹 축 DB 저장 완료:`, updatedAxes);
   }
 
-  // 🆕 v8: Phase 상태 DB 저장
+  // 🆕 v22: Phase 핵심 필드(completed_events, last_event_turn, phase_start_turn, current_phase_v2)는
+  // critical update에서 동기 저장됨 → 여기서는 중복 저장하지 않음 (double-write race 방지)
+  // 보조 필드만 저장: emotion_baseline, locked_scenario
   if (phaseV2) {
-    const phaseUpdate: Record<string, any> = {
-      current_phase_v2: phaseV2,
-    };
-    if (evts && evts.length > 0) {
-      phaseUpdate.completed_events = evts;
-    }
+    const phaseUpdate: Record<string, any> = {};
     // 감정 기준선 저장 (HOOK 구간에서만, 최초 1회)
     if (phaseV2 === 'HOOK' && emotionScore !== undefined) {
       phaseUpdate.emotion_baseline = emotionScore;
@@ -417,7 +653,6 @@ async function savePostProcessing(
     // 🆕 v9: 시나리오 고정 — GENERAL 아닌 시나리오가 처음 감지되면 세션에 잠금
     const detectedScenario = stateResult?.scenario;
     if (detectedScenario && detectedScenario !== 'GENERAL') {
-      // locked_scenario가 아직 없을 때만 저장 (최초 1회)
       const { data: currentSession } = await supabase
         .from('counseling_sessions')
         .select('locked_scenario')
@@ -428,15 +663,35 @@ async function savePostProcessing(
         console.log(`[PostProcess] 🔒 시나리오 잠금 저장: ${detectedScenario}`);
       }
     }
-    // 🆕 v10: lastEventTurn 같이 저장
-    if (savedLastEventTurn !== undefined) {
-      phaseUpdate.last_event_turn = savedLastEventTurn;
+    // 🆕 v17: promptStyle 저장
+    if ((params as any).promptStyle) {
+      phaseUpdate.last_prompt_style = (params as any).promptStyle;
     }
+    if (Object.keys(phaseUpdate).length > 0) {
+      await supabase
+        .from('counseling_sessions')
+        .update(phaseUpdate)
+        .eq('id', sessionId);
+      console.log(`[PostProcess] 📍 보조 필드 DB 저장: ${Object.keys(phaseUpdate).join(', ')}`);
+    }
+  }
+
+  // 🆕 v10.2: 감정 히스토리 DB 저장
+  if (savedEmotionHistory && savedEmotionHistory.length > 0) {
     await supabase
       .from('counseling_sessions')
-      .update(phaseUpdate)
+      .update({ emotion_history: savedEmotionHistory })
       .eq('id', sessionId);
-    console.log(`[PostProcess] 📍 Phase DB 저장: ${phaseV2} | 이벤트: ${evts?.length ?? 0}개 | lastEventTurn: ${savedLastEventTurn ?? 'n/a'}`);
+    console.log(`[PostProcess] 📊 감정 히스토리 DB 저장: [${savedEmotionHistory.join(', ')}]`);
+  }
+
+  // 🆕 v19: 감정 누적기 상태 저장
+  if (savedEmotionAccumulator) {
+    await supabase
+      .from('counseling_sessions')
+      .update({ emotion_accumulator: savedEmotionAccumulator })
+      .eq('id', sessionId);
+    console.log(`[PostProcess] 🧠 감정 누적기 DB 저장: signals=${savedEmotionAccumulator.signals?.length ?? 0}, deep="${savedEmotionAccumulator.deepEmotionHypothesis?.primaryEmotion ?? '(없음)'}"`);
   }
 
   // 🆕 v9.1: 매 턴 세션 메타데이터 업데이트 (turn_count, last_message, emotion)
@@ -448,6 +703,17 @@ async function savePostProcessing(
   // emotion_start: HOOK 구간(1턴)에서만 최초 1회 저장
   if (turnCount === 1 && emotionScore !== undefined) {
     sessionMeta.emotion_start = emotionScore;
+  }
+  // 🆕 v20: 자동 제목 생성 (턴 1 — 시나리오 + 유저 메시지 기반)
+  if (turnCount === 1 && userMessage) {
+    const SCENARIO_TITLE: Record<string, string> = {
+      READ_AND_IGNORED: '읽씹', GHOSTING: '잠수', JEALOUSY: '질투',
+      LONG_DISTANCE: '장거리', INFIDELITY: '외도', BREAKUP_CONTEMPLATION: '이별 고민',
+      BOREDOM: '권태기', GENERAL: '연애 고민',
+    };
+    const scenarioLabel = SCENARIO_TITLE[stateResult?.scenario ?? 'GENERAL'] ?? '연애 고민';
+    const preview = userMessage.slice(0, 20).replace(/\n/g, ' ');
+    sessionMeta.title = `${scenarioLabel} · ${preview}${userMessage.length > 20 ? '...' : ''}`;
   }
   await supabase
     .from('counseling_sessions')

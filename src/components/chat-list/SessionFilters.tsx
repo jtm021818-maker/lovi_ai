@@ -9,39 +9,57 @@ interface SessionFiltersProps {
 }
 
 export function SessionFilters({ currentFilter, onFilterChange, counts }: SessionFiltersProps) {
-  const tabs: { value: FilterType; label: string }[] = [
-    { value: 'ALL', label: '전체' },
-    { value: 'ACTIVE', label: '진행 중' },
-    { value: 'COMPLETED', label: '완료됨' },
-  ];
+  const tabs = [
+    { 
+      value: 'ALL', label: '전체', 
+      bg: 'bg-gradient-to-b from-[#E6D8FF] to-[#D1C4FA]', 
+      shadow: 'shadow-[0_3px_0_#BDB2E8]', 
+      text: 'text-[#3E3852]',
+      countBg: 'bg-white/70'
+    },
+    { 
+      value: 'ACTIVE', label: '진행 중', 
+      bg: 'bg-gradient-to-b from-[#C9EAFB] to-[#AEE0F8]', 
+      shadow: 'shadow-[0_3px_0_#9DCBE6]', 
+      text: 'text-[#3A4E5C]',
+      countBg: 'bg-white/60'
+    },
+    { 
+      value: 'COMPLETED', label: '완료됨', 
+      bg: 'bg-gradient-to-b from-[#FFF2B2] to-[#FFE599]', 
+      shadow: 'shadow-[0_3px_0_#E8C678]', 
+      text: 'text-[#5C4D2E]',
+      countBg: 'bg-white/80'
+    },
+  ] as const;
 
   return (
-    <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide px-2">
-      {tabs.map((tab) => {
-        const isActive = currentFilter === tab.value;
-        return (
-          <button
-            key={tab.value}
-            onClick={() => onFilterChange(tab.value)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-all ${
-              isActive
-                ? 'bg-gray-800 text-white shadow-md'
-                : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-200'
-            }`}
-          >
-            <span className={`text-sm font-bold ${isActive ? 'text-white' : 'text-gray-600'}`}>
-              {tab.label}
-            </span>
-            <span
-              className={`text-xs px-2 py-0.5 rounded-full ${
-                isActive ? 'bg-gray-600 text-gray-100' : 'bg-gray-100 text-gray-400'
-              }`}
+    <div className="relative mb-6">
+      <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide justify-between px-2">
+        {tabs.map((tab) => {
+          const isActive = currentFilter === tab.value;
+          return (
+            <button
+              key={tab.value}
+              onClick={() => onFilterChange(tab.value)}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl whitespace-nowrap transition-transform active:translate-y-1 active:shadow-none ${tab.bg} ${isActive ? tab.shadow + ' border-2 border-white/50' : tab.shadow + ' opacity-90'}`}
             >
-              {counts[tab.value] || 0}
-            </span>
-          </button>
-        );
-      })}
+              <span className={`text-[15px] font-extrabold ${tab.text}`}>
+                {tab.label}
+              </span>
+              <span
+                className={`text-sm font-bold px-2 py-0.5 rounded-full ${tab.countBg} ${tab.text}`}
+              >
+                {counts[tab.value] || 0}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {/* Pink divider bar under tabs */}
+      <div className="mx-2 h-1.5 bg-[#FFB5C5]/30 rounded-full overflow-hidden mt-1">
+        <div className="h-full bg-gradient-to-r from-[#FF9EBC] to-[#FF80A6] w-4/5 rounded-full" />
+      </div>
     </div>
   );
 }

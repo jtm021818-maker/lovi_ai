@@ -1,15 +1,24 @@
 /**
- * 🆕 v7: 해결책 사전 매칭 엔진
+ * 🆕 v7+v12+v13: 해결책 사전 매칭 엔진
  * 
- * 일반 시나리오: 시나리오 + 키워드 + 감정 + 애착 → 최적 해결책 매칭
- * 읽씹 시나리오: 5축 진단 기반 정밀 매칭
+ * 전 시나리오: 시나리오별 특화축 + 범용 10축 기반 정밀 매칭
+ * 읽씹: 5축 진단 + 범용 6축 기반 정밀 매칭
+ * 나머지 6개 시나리오: 확장 솔루션 파일 × 특화축 × 범용축
  */
 
 import { RelationshipScenario, AttachmentType } from '@/types/engine.types';
 import type { SolutionEntry, SolutionMatch } from './types';
 import { SOLUTION_DICTIONARY } from './dictionary-data';
 import { READ_IGNORED_SOLUTIONS, type ReadIgnoredSolutionEntry } from './read-ignored-solutions';
+import { GHOSTING_SOLUTIONS, type GhostingSolutionEntry } from './ghosting-solutions';
+import { JEALOUSY_SOLUTIONS, type JealousySolutionEntry } from './jealousy-solutions';
+import { INFIDELITY_SOLUTIONS, type InfidelitySolutionEntry } from './infidelity-solutions';
+import { BREAKUP_SOLUTIONS, type BreakupSolutionEntry } from './breakup-solutions';
+import { BOREDOM_SOLUTIONS, type BoredomSolutionEntry } from './boredom-solutions';
+import { LONG_DISTANCE_SOLUTIONS, type LongDistanceSolutionEntry } from './long-distance-solutions';
+import { GENERAL_SOLUTIONS, type GeneralSolutionEntry } from './general-solutions';
 import type { AxesCollectionState, ReadIgnoredAxes } from './read-ignored-axes';
+import type { DiagnosisResult, ScenarioAxes } from '@/engines/relationship-diagnosis/types';
 
 export { calculateReadiness } from './readiness';
 export type { SolutionMatch, SolutionEntry, ReadinessContext } from './types';
@@ -35,23 +44,188 @@ export function matchSolutions(
   attachmentStyle: AttachmentType | null,
   emotionScore: number,
   diagnosticAxes?: Partial<ReadIgnoredAxes> | null,
+  diagnosisResult?: DiagnosisResult | null,
 ): SolutionMatch[] {
-  // GENERAL이면 매칭 불가
-  if (scenario === RelationshipScenario.GENERAL) return [];
-
-  // 읽씹 시나리오 → 5축 기반 정밀 매칭
+  // 읽씹 시나리오 → 5축 + 범용 6축 기반 정밀 매칭 (기존 로직 유지)
   if (scenario === RelationshipScenario.READ_AND_IGNORED) {
     return matchReadIgnoredSolutions(
-      userMessage, attachmentStyle, emotionScore, diagnosticAxes,
+      userMessage, attachmentStyle, emotionScore, diagnosticAxes, diagnosisResult,
     );
   }
 
-  // 일반 시나리오 → 기존 키워드 기반 매칭
+  // 🆕 v13: 확장 솔루션이 있는 시나리오 → 축 기반 정밀 매칭
+  const extendedResult = matchExtendedSolutions(
+    scenario, userMessage, attachmentStyle, emotionScore, diagnosisResult,
+  );
+  if (extendedResult.length > 0) return extendedResult;
+
+  // 폴백: 기존 키워드 기반 매칭 (dictionary-data.ts)
   return matchGeneralSolutions(scenario, userMessage, attachmentStyle, emotionScore);
 }
 
 /**
- * 일반 시나리오 매칭 (기존 로직)
+ * 🆕 v13: 확장 솔루션 범용 매칭 함수
+ *
+ * 시나리오별 확장 파일(15개씩)의 특화축 + universalCondition + 키워드 + 감정 + 애착
+ * → 정밀 스코어링으로 최적 해결책 매칭
+ */
+type ExtendedEntry = SolutionEntry & {
+  axisCondition: Record<string, any>;
+  minAxisMatch: number;
+  universalCondition?: Record<string, any>;
+};
+
+function matchExtendedSolutions(
+  scenario: RelationshipScenario,
+  userMessage: string,
+  attachmentStyle: AttachmentType | null,
+  emotionScore: number,
+  diagnosisResult?: DiagnosisResult | null,
+): SolutionMatch[] {
+  // 시나리오별 확장 솔루션 + 특화축 키 매핑
+  const scenarioMap: Record<string, { solutions: ExtendedEntry[]; axisKeys: string[] }> = {
+    [RelationshipScenario.GHOSTING]: {
+      solutions: GHOSTING_SOLUTIONS as ExtendedEntry[],
+      axisKeys: ['ghostType'],
+    },
+    [RelationshipScenario.JEALOUSY]: {
+      solutions: JEALOUSY_SOLUTIONS as ExtendedEntry[],
+      axisKeys: ['jealousyType'],
+    },
+    [RelationshipScenario.INFIDELITY]: {
+      solutions: INFIDELITY_SOLUTIONS as ExtendedEntry[],
+      axisKeys: ['infidelityRole'],
+    },
+    [RelationshipScenario.BREAKUP_CONTEMPLATION]: {
+      solutions: BREAKUP_SOLUTIONS as ExtendedEntry[],
+      axisKeys: ['breakupAmbivalence'],
+    },
+    [RelationshipScenario.BOREDOM]: {
+      solutions: BOREDOM_SOLUTIONS as ExtendedEntry[],
+      axisKeys: ['boredomType'],
+    },
+    [RelationshipScenario.LONG_DISTANCE]: {
+      solutions: LONG_DISTANCE_SOLUTIONS as ExtendedEntry[],
+      axisKeys: ['ldrEndpoint'],
+    },
+    [RelationshipScenario.GENERAL]: {
+      solutions: GENERAL_SOLUTIONS as ExtendedEntry[],
+      axisKeys: ['generalConcernType'],
+    },
+  };
+
+  const config = scenarioMap[scenario];
+  if (!config || config.solutions.length === 0) return [];
+
+  const msgLower = userMessage.toLowerCase();
+  const sAxes = diagnosisResult?.scenario || {};
+  const uAxes = diagnosisResult?.universal;
+
+  const scored: SolutionMatch[] = config.solutions.map(entry => {
+    let score = 0.2; // 시나리오 기본점수
+    const reasons: string[] = [`시나리오:${scenario}`];
+
+    // ── 특화축 매칭 ──
+    let axisHits = 0;
+    for (const axisKey of config.axisKeys) {
+      const condValues = entry.axisCondition?.[axisKey];
+      const userValue = (sAxes as any)?.[axisKey];
+      if (condValues && userValue && condValues.includes(userValue)) {
+        axisHits++;
+        reasons.push(`${axisKey}:${userValue}`);
+      }
+    }
+    score += axisHits * 0.2;
+
+    // 최소 축 일치 미달 시 감점
+    if (axisHits < entry.minAxisMatch) {
+      score -= 0.05;
+    }
+
+    // ── 범용 축 매칭(universalCondition) ──
+    if (uAxes && entry.universalCondition) {
+      const uc = entry.universalCondition;
+      if (uc.conflictStyle && uAxes.conflictStyle && uc.conflictStyle.includes(uAxes.conflictStyle)) {
+        score += 0.12; reasons.push(`갈등스타일:${uAxes.conflictStyle}`);
+      }
+      if (uc.changeReadiness && uAxes.changeReadiness && uc.changeReadiness.includes(uAxes.changeReadiness)) {
+        score += 0.12; reasons.push(`변화준비:${uAxes.changeReadiness}`);
+      }
+      if (uc.partnerContext && uAxes.partnerContext && uc.partnerContext.includes(uAxes.partnerContext)) {
+        score += 0.08; reasons.push(`상대맥락:${uAxes.partnerContext}`);
+      }
+      if (uc.previousAttempts && uAxes.previousAttempts && uc.previousAttempts.includes(uAxes.previousAttempts)) {
+        score += 0.08; reasons.push(`이전시도:${uAxes.previousAttempts}`);
+      }
+      if (uc.stage && uAxes.stage && uc.stage.includes(uAxes.stage)) {
+        score += 0.08; reasons.push(`관계단계:${uAxes.stage}`);
+      }
+      if (uc.pattern && uAxes.pattern && uc.pattern.includes(uAxes.pattern)) {
+        score += 0.08; reasons.push(`빈도:${uAxes.pattern}`);
+      }
+      if (uc.attachmentClue && uAxes.attachmentClue && uc.attachmentClue.includes(uAxes.attachmentClue)) {
+        score += 0.1; reasons.push(`애착단서:${uAxes.attachmentClue}`);
+      }
+      if (uc.duration && uAxes.duration && uc.duration.includes(uAxes.duration)) {
+        score += 0.08; reasons.push(`기간:${uAxes.duration}`);
+      }
+    }
+
+    // ── 키워드 매칭 (0 ~ 0.2) ──
+    const keywordHits = entry.trigger.keywords.filter(kw => msgLower.includes(kw));
+    if (keywordHits.length > 0) {
+      score += Math.min(keywordHits.length * 0.05, 0.2);
+      reasons.push(`키워드:${keywordHits.join(',')}`);
+    }
+
+    // ── 감정 범위 매칭 (+0.15) ──
+    if (entry.trigger.emotionRange) {
+      const [min, max] = entry.trigger.emotionRange;
+      if (emotionScore >= min && emotionScore <= max) {
+        score += 0.15;
+        reasons.push('감정범위적합');
+      }
+    }
+
+    // ── 감정 구간(emotionTier) 매칭 (+0.1) ──
+    if (entry.solution.emotionTier) {
+      const tier = emotionScore <= -3 ? 'crisis' : emotionScore <= 0 ? 'confused' : 'stable';
+      if (entry.solution.emotionTier === tier) {
+        score += 0.1;
+        reasons.push(`감정구간:${tier}`);
+      }
+    }
+
+    // ── 애착 유형 매칭 (+0.1) ──
+    if (entry.trigger.attachmentStyles && attachmentStyle) {
+      if (entry.trigger.attachmentStyles.includes(attachmentStyle)) {
+        score += 0.1;
+        reasons.push(`애착:${attachmentStyle}`);
+      }
+    }
+
+    // priority 보정
+    score += (6 - entry.priority) * 0.02;
+
+    return {
+      entry: entry as SolutionEntry,
+      matchScore: Math.min(score, 1),
+      reason: reasons.join(' + '),
+    };
+  });
+
+  // 축 정보 유무에 따라 최소 점수 조정
+  const hasScenarioAxes = config.axisKeys.some(k => (sAxes as any)?.[k]);
+  const minScore = hasScenarioAxes ? 0.3 : 0.2;
+
+  return scored
+    .filter(s => s.matchScore >= minScore)
+    .sort((a, b) => b.matchScore - a.matchScore)
+    .slice(0, 3);
+}
+
+/**
+ * 일반 시나리오 매칭 (기존 로직 — 폴백)
  */
 function matchGeneralSolutions(
   scenario: RelationshipScenario,
@@ -121,9 +295,11 @@ function matchReadIgnoredSolutions(
   attachmentStyle: AttachmentType | null,
   emotionScore: number,
   diagnosticAxes?: Partial<ReadIgnoredAxes> | null,
+  diagnosisResult?: DiagnosisResult | null,
 ): SolutionMatch[] {
   const msgLower = userMessage.toLowerCase();
   const axes = diagnosticAxes || {};
+  const uAxes = diagnosisResult?.universal;
 
   const scored: SolutionMatch[] = READ_IGNORED_SOLUTIONS.map(entry => {
     let score = 0.2; // 읽씹 시나리오 기본점수
@@ -169,12 +345,21 @@ function matchReadIgnoredSolutions(
       reasons.push(`키워드:${keywordHits.join(',')}`);
     }
 
-    // ── 감정 범위 매칭 (+0.1) ──
+    // ── 감정 범위 매칭 (+0.2, 강화) ──
     if (entry.trigger.emotionRange) {
       const [min, max] = entry.trigger.emotionRange;
       if (emotionScore >= min && emotionScore <= max) {
-        score += 0.1;
+        score += 0.2;
         reasons.push('감정범위적합');
+      }
+    }
+
+    // 🆕 v11: 감정 구간(emotionTier) 매칭 (+0.15)
+    if (entry.solution.emotionTier) {
+      const tier = emotionScore <= -3 ? 'crisis' : emotionScore <= 0 ? 'confused' : 'stable';
+      if (entry.solution.emotionTier === tier) {
+        score += 0.15;
+        reasons.push(`감정구간:${tier}`);
       }
     }
 
@@ -183,6 +368,34 @@ function matchReadIgnoredSolutions(
       if (entry.trigger.attachmentStyles.includes(attachmentStyle)) {
         score += 0.1;
         reasons.push(`애착:${attachmentStyle}`);
+      }
+    }
+
+    // 🆕 v12: 범용 축 매칭 가중치
+    if (uAxes && entry.universalCondition) {
+      const uc = entry.universalCondition;
+      if (uc.conflictStyle && uAxes.conflictStyle && uc.conflictStyle.includes(uAxes.conflictStyle)) {
+        score += 0.15;
+        reasons.push(`갈등스타일:${uAxes.conflictStyle}`);
+      }
+      if (uc.changeReadiness && uAxes.changeReadiness && uc.changeReadiness.includes(uAxes.changeReadiness)) {
+        score += 0.15;
+        reasons.push(`변화준비:${uAxes.changeReadiness}`);
+      }
+      if (uc.partnerContext && uAxes.partnerContext && uc.partnerContext.includes(uAxes.partnerContext)) {
+        score += 0.1;
+        reasons.push(`상대맥락:${uAxes.partnerContext}`);
+      }
+      if (uc.previousAttempts && uAxes.previousAttempts && uc.previousAttempts.includes(uAxes.previousAttempts)) {
+        score += 0.1;
+        reasons.push(`이전시도:${uAxes.previousAttempts}`);
+      }
+      if (uc.horsemen && uAxes.horsemenDetected) {
+        const horsemenMatch = uAxes.horsemenDetected.some(h => uc.horsemen!.includes(h));
+        if (horsemenMatch) {
+          score += 0.15;
+          reasons.push(`4기수:${uAxes.horsemenDetected.join(',')}`);
+        }
       }
     }
 
@@ -217,6 +430,7 @@ export function getSolutionDictionaryPrompt(
   matches: SolutionMatch[],
   phase: 'EXPLORATION' | 'COMFORTING' | 'ACTION',
   persona: 'counselor' | 'friend' | 'panel',
+  diagnosisResult?: { universal: any; diagnosisQuality: string; keyFindings: { label: string }[] } | null,
 ): string {
   if (matches.length === 0 || persona === 'panel') return '';
 
@@ -251,17 +465,51 @@ export function getSolutionDictionaryPrompt(
 톤: ${tone}`;
   }
 
-  // ACTION 단계: 전체 해결책 (3줄 공식)
+  // ACTION 단계: 전체 해결책 (5단계 확장형)
   let prompt = `\n## 🎯 해결책 가이드 (${s.framework} — ${s.technique})
 
-이 사용자의 상황에 대해 검증된 해결책이 있습니다. 아래 구조로 응답하세요:
+이 사용자의 상황에 대해 검증된 해결책이 있습니다. 아래 5단계 구조로 충분히 설명하세요:
 
-1️⃣ 공감 (1~2줄): ${s.steps.validation}
-2️⃣ 인사이트 (1줄): ${s.steps.insight}
-3️⃣ 구체적 행동 (1~2줄): ${s.steps.action}`;
+1️⃣ 공감과 인정 (2~3줄): 감정을 구체적으로 반영하세요.
+${s.steps.validation}
 
+2️⃣ 전문적 인사이트 (3~4줄): 연구 근거를 포함한 설명.
+${s.steps.insight}`;
+
+  // 전문가 인용 추가
+  if (s.expertQuote) {
+    prompt += `\n💬 전문가: ${s.expertQuote}`;
+  }
+
+  prompt += `\n\n3️⃣ 구체적 행동 가이드 (3~5줄): 단계별 실천 방법.
+${s.steps.action}`;
+
+  // 연구 근거 노트
+  if (s.researchNote) {
+    prompt += `\n\n4️⃣ 전문가 한마디 (1~2줄): 이 정보를 자연스럽게 응답에 녹여주세요.
+📚 ${s.researchNote}`;
+  }
+
+  // 과학적 원리
+  if (s.scientificBasis) {
+    prompt += `\n🧪 과학적 배경: ${s.scientificBasis}`;
+  }
+
+  // 한국 콘텍스트
+  if (s.koreanContext) {
+    prompt += `\n🇰🇷 한국 맥락: ${s.koreanContext}`;
+  }
+
+  // 카톡 초안 (기존)
   if (s.messageDrafts && s.messageDrafts.length > 0) {
-    prompt += `\n4️⃣ 카톡 초안 제안:\n${s.messageDrafts.map(d => `   - "${d}"`).join('\n')}`;
+    prompt += `\n\n5️⃣ 카톡 초안 제안:\n${s.messageDrafts.map(d => `   - "${d}"`).join('\n')}`;
+  }
+
+  // 확장 초안 (formal/casual/minimal)
+  if (s.additionalDrafts) {
+    prompt += `\n   📝 정중한 버전: "${s.additionalDrafts.formal}"
+   💬 캐주얼 버전: "${s.additionalDrafts.casual}"
+   ✏️ 최소한 버전: "${s.additionalDrafts.minimal}"`;
   }
 
   if (s.iMessageTemplate) {
@@ -270,6 +518,16 @@ export function getSolutionDictionaryPrompt(
 
   prompt += `\n\n톤 지시: ${tone}`;
   prompt += `\n⚠️ 위 가이드를 참고하되, 사용자의 구체적 상황에 맞게 자연스럽게 변형하세요. 기계적 복사 금지!`;
+  prompt += `\n⚠️ 반드시 전문적 근거를 자연스럽게 녹여서 전문성이 느껴지게 하세요. (예: "~연구에 따르면", "~박사는 이런 상황에서...")` ;
+
+  // 🆕 v12: 진단 결과 기반 맞춤 조언 방향 주입
+  if (diagnosisResult && diagnosisResult.diagnosisQuality !== 'insufficient') {
+    const { generateDiagnosisPrompt: genDiagPrompt } = require('@/engines/relationship-diagnosis/diagnosis-prompts');
+    const diagPrompt = genDiagPrompt(diagnosisResult);
+    if (diagPrompt) {
+      prompt += diagPrompt;
+    }
+  }
 
   return prompt;
 }

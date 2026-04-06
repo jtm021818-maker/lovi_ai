@@ -32,7 +32,7 @@ interface RateLimitConfig {
 // 사용자 Rate Limit (Free / Premium 차별화)
 // ============================================================
 const TIERS: Record<string, RateLimitConfig> = {
-  free: { maxRequests: 30, windowMs: 24 * 60 * 60 * 1000 },    // 30회/일
+  free: { maxRequests: 5, windowMs: 24 * 60 * 60 * 1000 },     // 5회/일 (프리미엄 전환 유도)
   premium: { maxRequests: 200, windowMs: 24 * 60 * 60 * 1000 }, // 200회/일
 };
 
@@ -120,9 +120,13 @@ export async function syncRateLimitToDb(
 // AI 프로바이더 Rate Limit (Gemini/Groq/Cerebras 무료 한도)
 // ============================================================
 const PROVIDER_LIMITS: Record<string, RateLimitConfig> = {
-  gemini: { maxRequests: 950, windowMs: 24 * 60 * 60 * 1000 },    // 일일 ~950
-  groq: { maxRequests: 14000, windowMs: 24 * 60 * 60 * 1000 },    // 일일 ~14,000
-  cerebras: { maxRequests: 14000, windowMs: 24 * 60 * 60 * 1000 }, // 일일 ~14,000
+  // v22: 실제 무료 한도 반영
+  // Gemini: Flash Lite 통일 (500 RPD)
+  gemini: { maxRequests: 500, windowMs: 24 * 60 * 60 * 1000 },
+  // Groq: 8B 14,400 + Qwen3 ~3,000 + 70B 1,000 → 메인 응답 주력
+  groq: { maxRequests: 14000, windowMs: 24 * 60 * 60 * 1000 },
+  // Cerebras: 1M 토큰/일 → 8B 상태분석 + 70B 메인 폴백
+  cerebras: { maxRequests: 14000, windowMs: 24 * 60 * 60 * 1000 },
 };
 
 /** 프로바이더 한도 확인 (호출 전 체크) */

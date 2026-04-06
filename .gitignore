@@ -45,3 +45,44 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .env.local
+
+# AI tool metadata
+.claude/
+.gemini/
+.sisyphus/
+
+# Debug & temporary images
+ui_debug*.png
+align_debug*.png
+.tmp_trimmed.png
+
+# Temporary scripts
+crop-personas.js
+crop_cards.js
+normalize_cards.js
+process_avatar.js
+white_to_transparent.js
+
+# Server logs
+server.log
+server_utf8.log
+
+# Temp output files
+status_output.txt
+session_dump.json
+out.json
+del.json
+git_diff_output.txt
+git_log_output.txt
+help.txt
+
+# Debug configs
+debug_config.json
+ohmyopencode.json
+opencode.json
+
+# Temporary asset folders
+public/.tmp_crops/
+
+# Backup large video files
+*_original_backup.mp4

@@ -8,7 +8,7 @@ export default async function ChatPage({
   const { sessionId } = await params;
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="absolute inset-0 pb-[calc(env(safe-area-inset-bottom)+80px)] z-0 flex flex-col">
       <ChatContainer sessionId={sessionId} />
     </div>
   );

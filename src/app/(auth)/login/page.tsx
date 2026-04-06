@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -43,58 +44,59 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6 relative overflow-hidden">
-      {/* 장식용 배경 요소 */}
-      <div className="absolute top-20 right-10 w-48 h-48 bg-mystic-pink rounded-full mix-blend-screen filter blur-[100px] opacity-20 animate-pulse pointer-events-none" />
-      <div className="absolute bottom-20 left-10 w-64 h-64 bg-mystic-purple rounded-full mix-blend-screen filter blur-[120px] opacity-20 animate-pulse pointer-events-none" style={{ animationDelay: '2s' }} />
+    <div className="relative min-h-screen w-full flex flex-col items-center justify-end px-6 pb-12 overflow-hidden bg-[#fceae9]">
+      
+      {/* 
+        [배경 이미지 영역] 
+        luna_login.png 등 대표님이 넣어두신 이미지가 화면에 꽉 차게 들어갑니다.
+      */}
+      <div className="absolute inset-0 z-0 w-full h-full max-w-[500px] mx-auto">
+        <Image
+          src="/luna_login.png" // 👈 지정해주신 백그라운드 이미지 파일명
+          alt="Luna Login Background"
+          fill
+          className="object-cover object-top"
+          quality={100}
+          unoptimized={true}
+          priority
+        />
+        {/* 하단 입력 폼과 텍스트의 가독성을 높여주는 부드러운 오버레이 */}
+        <div className="absolute bottom-0 left-0 w-full h-[65%] bg-gradient-to-t from-[#fde7e8] via-[#fceae9]/90 to-transparent pointer-events-none" />
+      </div>
 
-      {/* 전체 화면 로딩 오버레이 */}
+      {/* 로딩 오버레이 */}
       <AnimatePresence>
         {loading && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-xl"
+            className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#fceae9]/80 backdrop-blur-sm"
           >
             <motion.div
-              animate={{ scale: [1, 1.2, 1], rotate: [0, 10, -10, 0] }}
-              transition={{ repeat: Infinity, duration: 1.5 }}
-              className="text-6xl mb-6 drop-shadow-[0_0_20px_rgba(157,78,221,0.8)]"
-            >
-              🔮
-            </motion.div>
-            <p className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-mystic-glow to-mystic-pink animate-pulse tracking-wide">
-              운명의 실타래를 연결하는 중...
-            </p>
+              animate={{ y: [0, -10, 0] }}
+              transition={{ repeat: Infinity, duration: 2 }}
+              className="w-16 h-16 rounded-full border-4 border-[#ee7c9f] border-t-transparent animate-spin mb-4"
+            />
+            <p className="text-[#e46b90] font-bold text-lg">로그인 중...</p>
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* 메인 로그인 폼 영역 */}
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: 'easeOut' }}
-        className="w-full max-w-sm bg-white/5 backdrop-blur-3xl p-8 rounded-[2rem] shadow-[0_8px_32px_rgba(0,0,0,0.5)] border border-white/10 relative z-10"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full max-w-[340px] z-10 flex flex-col relative"
       >
-        <div className="text-center mb-8">
-          <motion.div 
-            whileHover={{ scale: 1.05, rotate: 5 }}
-            className="w-16 h-16 rounded-2xl bg-gradient-to-br from-mystic-700 to-mystic-900 border border-white/10 flex items-center justify-center mx-auto mb-5 shadow-lg shadow-mystic-purple/20 text-2xl"
-          >
-            ✨
-          </motion.div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">다시 오셨군요!</h1>
-          <p className="text-sm text-mystic-glow mt-2 opacity-80">마음이가 카드를 준비해두었어요.</p>
-        </div>
-
-        {/* Google 로그인 버튼 */}
+        {/* Google 로그인 버튼 (이미지와 폼 사이 기준점 역할) */}
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={handleGoogleLogin}
           disabled={loading}
-          className="w-full py-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-white font-semibold shadow-sm hover:bg-white/20 transition-all flex items-center justify-center gap-3 mb-6 disabled:opacity-50"
+          className="w-full py-[16px] rounded-full bg-[#fffcf9]/90 backdrop-blur-md border border-[#e1c5c9] text-[#554b4d] font-bold text-[17px] shadow-sm flex items-center justify-center gap-3 mb-8 transition-all hover:bg-white disabled:opacity-50"
         >
           <svg width="20" height="20" viewBox="0 0 24 24">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
@@ -102,47 +104,36 @@ export default function LoginPage() {
             <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
             <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
           </svg>
-          Google로 로그인
+          Google로 시작하기
         </motion.button>
 
-        {/* OR 구분선 */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="flex-1 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-          <span className="text-xs text-gray-400 font-medium">또는 이메일로</span>
-          <div className="flex-1 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-        </div>
-
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form onSubmit={handleLogin} className="space-y-5 w-full">
           <div>
+            <label className="block text-[#a67c85] text-[15px] font-bold mb-2 ml-2">이메일 주소</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="이메일 입력"
+              placeholder="admin@pium.garden"
               required
-              className="w-full px-5 py-4 rounded-2xl bg-black/20 border border-white/10 text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-mystic-purple focus:border-transparent transition-all"
+              className="w-full px-6 py-4 rounded-full bg-[#ecf2fa] border border-transparent text-gray-800 placeholder-gray-800 text-[16px] font-medium focus:outline-none focus:border-[#eabac6] focus:ring-1 focus:ring-[#eabac6] transition-all"
             />
           </div>
           <div>
+            <label className="block text-[#a67c85] text-[15px] font-bold mb-2 ml-2">비밀번호</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="비밀번호 입력"
+              placeholder="••••••••"
               required
               minLength={6}
-              className="w-full px-5 py-4 rounded-2xl bg-black/20 border border-white/10 text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-mystic-purple focus:border-transparent transition-all"
+              className="w-full px-6 py-4 rounded-full bg-[#ecf2fa] border border-transparent text-gray-800 placeholder-gray-800 text-[16px] font-medium tracking-widest focus:outline-none focus:border-[#eabac6] focus:ring-1 focus:ring-[#eabac6] transition-all"
             />
           </div>
 
-          <div className="flex justify-end">
-            <button type="button" className="text-xs text-mystic-glow hover:text-white font-medium transition-colors">
-              비밀번호를 잊으셨나요?
-            </button>
-          </div>
-
           {error && (
-            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs text-rose-300 text-center bg-rose-950/50 border border-rose-900/50 py-3 rounded-xl backdrop-blur-md">
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm text-red-500 text-center font-bold mt-2">
               {error}
             </motion.p>
           )}
@@ -152,25 +143,23 @@ export default function LoginPage() {
             whileTap={{ scale: 0.98 }}
             type="submit"
             disabled={loading}
-            className="w-full py-4 mt-2 rounded-2xl bg-gradient-to-r from-mystic-purple to-mystic-pink text-white font-bold shadow-[0_0_15px_rgba(157,78,221,0.3)] hover:shadow-[0_0_25px_rgba(255,112,166,0.5)] disabled:opacity-50 transition-all border border-white/10"
+            className="w-full py-[18px] mt-2 rounded-[30px] bg-[#ef789c] text-white font-bold text-[17px] shadow-[0_8px_20px_rgba(239,120,156,0.25)] hover:shadow-[0_12px_25px_rgba(239,120,156,0.35)] disabled:opacity-50 transition-all border border-[#eb648b]"
           >
             로그인
           </motion.button>
         </form>
 
         <div className="mt-8 text-center flex flex-col items-center gap-4">
-          <p className="text-sm text-gray-400">
+          <Link href="/" className="text-[#a67c85] text-[15px] font-semibold hover:text-[#e46b90] transition-colors relative after:absolute after:bottom-0 after:left-0 after:w-full after:h-[1px] after:bg-[#a67c85] after:opacity-50 hover:after:bg-[#e46b90]">
+            메인 화면으로
+          </Link>
+          
+          <p className="text-[13px] text-[#b8959d] mt-2">
             아직 계정이 없으신가요?{' '}
-            <Link href="/signup" className="text-mystic-glow font-bold hover:underline drop-shadow-sm">
+            <Link href="/signup" className="text-[#e46b90] font-bold hover:underline">
               가입하기
             </Link>
           </p>
-          <button
-            onClick={() => router.push('/')}
-            className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
-          >
-            ← 운명의 기로로 돌아가기
-          </button>
         </div>
       </motion.div>
     </div>

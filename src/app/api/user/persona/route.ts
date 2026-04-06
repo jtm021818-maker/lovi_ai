@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
 
   const { persona_mode } = await request.json();
 
-  if (!['counselor', 'friend', 'panel'].includes(persona_mode)) {
+  if (!['luna', 'counselor', 'friend', 'panel', 'tarot'].includes(persona_mode)) {
     return NextResponse.json({ error: 'Invalid persona_mode' }, { status: 400 });
   }
 

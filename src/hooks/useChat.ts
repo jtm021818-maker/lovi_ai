@@ -36,6 +36,8 @@ export function useChat(sessionId: string): UseChatReturn {
   const [sessionStatus, setSessionStatus] = useState<'active' | 'completed' | 'crisis' | null>(null);
   const [sessionSummary, setSessionSummary] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // 🆕 v20: 턴 내 이벤트 중복 방지 (state 대신 ref로 — React 배칭 이슈 방지)
+  const firedEventTypesRef = useRef<Set<string>>(new Set());
 
   // 세션 진입 시 기존 메시지 로드
   useEffect(() => {
@@ -117,7 +119,10 @@ export function useChat(sessionId: string): UseChatReturn {
     setNudges([]);
     setSuggestions([]);
     setPanelData(null);
-    setPhaseEvents([]);
+    // 🆕 v25: 이벤트 UI 유지 — setPhaseEvents([]) 제거
+    // 이전 턴 이벤트를 채팅에 그대로 남겨둠 (카드 뽑기 UI 등)
+    // firedEventTypesRef는 리셋해서 새 턴의 이벤트는 추가 가능
+    firedEventTypesRef.current = new Set();
 
     // AI 응답 플레이스홀더
     const aiMsgId = crypto.randomUUID();
@@ -202,10 +207,26 @@ export function useChat(sessionId: string): UseChatReturn {
                 setPanelData(event.data as unknown as PanelResponse);
                 break;
 
-              case 'phase_event':
-                console.log('[useChat] 🎯 턴 이벤트 수신:', event.data);
-                setPhaseEvents((prev) => [...prev, event.data as unknown as PhaseEvent]);
+              case 'phase_event': {
+                const newEvent = event.data as unknown as PhaseEvent;
+                // 🆕 v20: ref 기반 중복 방지 (React 배칭 이슈 완전 차단)
+                if (firedEventTypesRef.current.has(newEvent.type)) {
+                  console.log(`[useChat] ⚠️ 중복 이벤트 무시 (ref): ${newEvent.type}`);
+                  break;
+                }
+                firedEventTypesRef.current.add(newEvent.type);
+                console.log('[useChat] 🎯 턴 이벤트 수신:', newEvent.type);
+                setPhaseEvents((prev) => [...prev, newEvent]);
+                // 🆕 v25: 이벤트를 메시지 리스트에도 삽입 (인라인 렌더링용)
+                setMessages((prev) => [...prev, {
+                  id: `event-${newEvent.type}-${Date.now()}`,
+                  sessionId,
+                  senderType: 'event' as any,
+                  content: JSON.stringify(newEvent),
+                  createdAt: new Date().toISOString(),
+                }]);
                 break;
+              }
 
               case 'phase_change': {
                 const phaseData = event.data as any;
@@ -232,15 +253,24 @@ export function useChat(sessionId: string): UseChatReturn {
       }
     } catch (err: any) {
       if (err.name !== 'AbortError') {
+        console.error('[useChat] 스트림 에러:', err?.message);
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === aiMsgId
+            m.id === aiMsgId && !m.content.trim()
               ? { ...m, content: '죄송해요, 응답을 생성하는 중 문제가 발생했어요. 다시 시도해 주세요.' }
               : m
           )
         );
       }
     } finally {
+      // 빈 AI 메시지 방어: 스트림은 끝났지만 content가 비어있으면 에러 표시
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === aiMsgId && !m.content.trim()
+            ? { ...m, content: '응답을 받지 못했어요. 다시 시도해 주세요 💜' }
+            : m
+        )
+      );
       setIsLoading(false);
     }
   }, [sessionId, isLoading]);

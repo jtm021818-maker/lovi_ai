@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 // 인증이 필요한 경로들
-const PROTECTED_PATHS = ['/chat', '/insights', '/journal', '/settings', '/onboarding'];
+const PROTECTED_PATHS = ['/chat', '/insights', '/settings', '/subscription', '/onboarding'];
 // 로그인 상태에서 접근 시 리다이렉트할 경로들
 const AUTH_PATHS = ['/welcome', '/login', '/signup'];
 

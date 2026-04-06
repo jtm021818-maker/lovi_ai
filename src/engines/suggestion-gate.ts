@@ -57,7 +57,7 @@ export function shouldShowSuggestions(input: SuggestionGateInput): GateResult {
   }
 
   // ━━━ Gate 1: turnGate — 최소 턴 간격 ━━━
-  const minInterval = input.persona === 'friend' ? 4 : 3;
+  const minInterval = input.persona === 'friend' ? 4 : 3; // luna, counselor = 3
   const turnsSinceLastSuggestion = input.lastSuggestionTurn >= 0
     ? input.turnCount - input.lastSuggestionTurn
     : input.turnCount; // 한번도 안 보여줬으면 turnCount 자체가 간격
@@ -88,7 +88,7 @@ export function shouldShowSuggestions(input: SuggestionGateInput): GateResult {
   }
 
   // ━━━ Gate 5: personaGate — 대화 초반 억제 ━━━
-  const minTurnBeforeFirstSuggestion = input.persona === 'friend' ? 3 : 2;
+  const minTurnBeforeFirstSuggestion = input.persona === 'friend' ? 3 : 2; // luna, counselor = 2
   if (input.turnCount < minTurnBeforeFirstSuggestion) {
     return {
       show: false,

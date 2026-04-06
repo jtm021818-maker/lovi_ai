@@ -1,16 +1,11 @@
 /**
- * 모델 라우터 (3사 확장)
- * 전략 + 위기수준 → smart-router 캐스케이드 체인 반환
- *
- * [개편]
- * - AS-IS: 전략 → ModelTier(haiku/sonnet) 반환
- * - TO-BE: 전략 + 위기수준 → 프로바이더별 캐스케이드 체인 반환
+ * 모델 라우터 (v24 — 무료 100명/일 설계)
  *
  * [라우팅 원칙]
- * - CRISIS: Gemini Pro (최고 품질, 100 RPD)
- * - CBT/ACT/MI: Gemini Flash (심층 추론, 250 RPD)
- * - SUPPORT: Groq Qwen3 (빠른 공감, 60 RPM)
- * - 상태 분석: Groq 8B (초고속, 14,400 RPD)
+ * - 매 턴 대화: Qwen3-32B → Cerebras 70B (한도 큰 모델)
+ * - 위기 대화: Gemini 2.5 Flash-Lite (공감 ★★★★)
+ * - 이벤트: Gemini 2.5 Flash-Lite (Stable, 임팩트 순간 집중)
+ * - 상태분석/검증: 8B 모델 (15,000+/일)
  */
 
 import { StrategyType, RiskLevel } from '@/types/engine.types';
@@ -18,7 +13,7 @@ import type { ModelTier } from '@/lib/ai/provider-registry';
 import type { CascadeItem } from '@/lib/ai/smart-router';
 import { getProviderCascade, getMaxTokensForTask } from '@/lib/ai/smart-router';
 
-/** 모델 선택 결과 (3사 확장) */
+/** 모델 선택 결과 */
 export interface ModelRouteResult {
   /** 선택된 모델 티어 (레거시 호환) */
   tier: ModelTier;
@@ -26,12 +21,12 @@ export interface ModelRouteResult {
   reason: string;
   /** 최대 토큰 수 */
   maxTokens: number;
-  /** 🆕 캐스케이드 체인 */
+  /** 캐스케이드 체인 */
   cascade: CascadeItem[];
 }
 
 /**
- * 전략 기반 모델 라우팅 (3사 확장)
+ * 전략 기반 모델 라우팅 (v22)
  */
 export function routeModel(
   strategy: StrategyType,
@@ -41,57 +36,47 @@ export function routeModel(
   const cascade = getProviderCascade('main_response', strategy, riskStr as RiskLevel);
   const maxTokens = getMaxTokensForTask('main_response', strategy);
 
-  // 위기 대응: CRITICAL/HIGH → Gemini Pro
+  // 위기 대응: Gemini 2.5 Flash-Lite 우선
   if (riskLevel === RiskLevel.CRITICAL || riskLevel === RiskLevel.HIGH) {
     return {
-      tier: 'opus',
-      reason: '🔴 위기 대응: Gemini Pro (최고 품질)',
+      tier: 'sonnet',
+      reason: '🔴 위기 대응: Gemini 2.5 Flash-Lite → Qwen3 → Cerebras 70B',
       maxTokens: 512,
       cascade,
     };
   }
 
-  // 전략별 라우팅
-  const routeMap: Record<StrategyType, { tier: ModelTier; reason: string }> = {
-    [StrategyType.CRISIS_SUPPORT]: {
-      tier: 'opus',
-      reason: '🆘 위기 지원: Gemini Pro → Flash → Groq 70B',
-    },
-    [StrategyType.CALMING]: {
-      tier: 'haiku',
-      reason: '🧊 안정화: Groq Qwen3 (60RPM 최고속)',
-    },
-    [StrategyType.CBT]: {
+  // 위기 지원 전략
+  if (strategy === StrategyType.CRISIS_SUPPORT) {
+    return {
       tier: 'sonnet',
-      reason: '🧠 CBT: Gemini Flash (심층 추론)',
-    },
-    [StrategyType.ACT]: {
-      tier: 'sonnet',
-      reason: '💎 ACT: Gemini Flash (가치 탐색)',
-    },
-    [StrategyType.MI]: {
-      tier: 'sonnet',
-      reason: '⚖️ MI: Gemini Flash (OARS 기술)',
-    },
-    [StrategyType.SUPPORT]: {
-      tier: 'haiku',
-      reason: '🤗 SUPPORT: Groq Qwen3 (비용 절약, 빠른 응답)',
-    },
+      reason: '🆘 위기 지원: Gemini 2.5 Flash-Lite → Qwen3 → Cerebras 70B',
+      maxTokens: 512,
+      cascade,
+    };
+  }
+
+  // 모든 일반 전략 → Qwen3 우선 (한도 절약)
+  const reasonMap: Record<StrategyType, string> = {
+    [StrategyType.CALMING]: '🧊 안정화: Qwen3 → Cerebras 70B',
+    [StrategyType.CBT]: '🧠 CBT: Qwen3 → Cerebras 70B',
+    [StrategyType.ACT]: '💎 ACT: Qwen3 → Cerebras 70B',
+    [StrategyType.MI]: '⚖️ MI: Qwen3 → Cerebras 70B',
+    [StrategyType.SUPPORT]: '🤗 공감: Qwen3 → Cerebras 70B',
+    [StrategyType.CRISIS_SUPPORT]: '🆘 위기: Gemini 2.5 Flash-Lite',
   };
 
-  const route = routeMap[strategy];
-
   return {
-    tier: route.tier,
-    reason: route.reason,
+    tier: 'haiku',
+    reason: reasonMap[strategy] || '🤗 공감: Qwen3 → Cerebras 70B',
     maxTokens,
     cascade,
   };
 }
 
-/** 모델 티어별 표시 이름 (3사 확장) */
+/** 모델 티어별 표시 이름 (v22) */
 export const MODEL_TIER_DISPLAY: Record<ModelTier, string> = {
-  haiku: 'Groq Qwen3 / Cerebras 8B',
-  sonnet: 'Gemini Flash',
-  opus: 'Gemini Pro',
+  haiku: 'Qwen3-32B / Cerebras 8B',
+  sonnet: 'Gemini 2.5 Flash-Lite / Cerebras 70B',
+  opus: 'Gemini 2.5 Flash-Lite (이벤트)',
 };

@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { extractSessionMemory, mergeMemory, createEmptyProfile, type UserMemoryProfile } from '@/engines/memory/extract-memory';
 
 /**
  * PATCH /api/sessions/[sessionId]/complete
@@ -21,7 +22,7 @@ export async function PATCH(
   // 1. 세션 정보 로드
   const { data: session } = await supabase
     .from('counseling_sessions')
-    .select('locked_scenario, emotion_baseline, current_phase_v2, turn_count')
+    .select('locked_scenario, emotion_baseline, current_phase_v2, turn_count, emotion_accumulator')
     .eq('id', sessionId)
     .eq('user_id', user.id)
     .single();
@@ -67,6 +68,16 @@ export async function PATCH(
     lastMessages: msgSummary,
   });
 
+  // 🆕 v20: 숙제 데이터 추출 (emotion_accumulator → 다음 세션에서 참조)
+  const accumulatorData = session.emotion_accumulator as any;
+  const homeworkData = accumulatorData?.deepEmotionHypothesis
+    ? {
+        deepEmotion: accumulatorData.deepEmotionHypothesis.primaryEmotion,
+        scenario: session.locked_scenario,
+        homeworks: [], // 실제 숙제는 HOMEWORK_CARD 이벤트에서 이미 표시됨
+      }
+    : null;
+
   // 5. DB 업데이트
   const { error } = await supabase
     .from('counseling_sessions')
@@ -75,6 +86,7 @@ export async function PATCH(
       ended_at: new Date().toISOString(),
       session_summary: summary,
       emotion_end: emotionEnd,
+      homework_data: homeworkData,  // 🆕 v20: 다음 세션 연결용
     })
     .eq('id', sessionId)
     .eq('user_id', user.id);
@@ -85,6 +97,53 @@ export async function PATCH(
   }
 
   console.log(`[Complete] ✅ 세션 종료: ${sessionId} | 요약: ${summary}`);
+
+  // 🆕 v25: 메모리 추출 (fire-and-forget — 세션 종료 응답을 블로킹하지 않음)
+  (async () => {
+    try {
+      // 전체 메시지 로드 (메모리 추출용)
+      const { data: allMessages } = await supabase
+        .from('messages')
+        .select('sender_type, content')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: true })
+        .limit(30);
+
+      if (!allMessages || allMessages.length < 4) return;
+
+      const sessionMsgs = allMessages.map((m) => ({
+        role: m.sender_type as string,
+        content: m.content as string,
+      }));
+
+      // 기존 메모리 프로필 로드
+      const { data: profileData } = await supabase
+        .from('user_profiles')
+        .select('memory_profile')
+        .eq('id', user.id)
+        .single();
+
+      const existingMemory: UserMemoryProfile = (profileData?.memory_profile as UserMemoryProfile) ?? createEmptyProfile();
+
+      // 메모리 추출 (LLM 호출 1회 — Gemini haiku)
+      const extraction = await extractSessionMemory(sessionMsgs, session.locked_scenario ?? undefined, existingMemory);
+      if (!extraction) return;
+
+      // 기존 메모리에 머지
+      const merged = mergeMemory(existingMemory, extraction, new Date().toISOString());
+
+      // DB 저장
+      await supabase
+        .from('user_profiles')
+        .update({ memory_profile: merged })
+        .eq('id', user.id);
+
+      console.log(`[Memory] ✅ 메모리 추출 완료: ${extraction.newFacts.length}개 새 사실, hook="${extraction.nextSessionHook}"`);
+    } catch (e) {
+      console.error('[Memory] 메모리 추출 실패 (무시):', e);
+    }
+  })();
+
   return NextResponse.json({ ok: true, summary });
 }
 

@@ -166,55 +166,148 @@ const NEGATIVE_EMOTIONS: EmotionEntry[] = [
 // 연애 특화 표현 사전
 // ============================================================
 const ROMANTIC_EXPRESSIONS: EmotionEntry[] = [
-  // 연락 관련
+  // ──── 읽씹/안읽씹 (메시지 무시) ────
   { stem: '읽씹', score: -4, category: 'romantic' },
   { stem: '안읽씹', score: -3, category: 'romantic' },
-  { stem: '씹', score: -3, category: 'romantic' },
-  { stem: '카톡', score: 0, category: 'romantic' },
-  { stem: '연락', score: -1, category: 'romantic' },
+  { stem: '씹혔', score: -4, category: 'romantic' },
+  { stem: '씹힘', score: -4, category: 'romantic' },
+  { stem: '씹힌', score: -4, category: 'romantic' },
+  { stem: '톡 씹', score: -4, category: 'romantic' },
+  { stem: '톡을 씹', score: -4, category: 'romantic' },
+  { stem: '카톡 씹', score: -4, category: 'romantic' },
+  { stem: '카톡을 씹', score: -4, category: 'romantic' },
+  { stem: '문자 씹', score: -4, category: 'romantic' },
+  { stem: '문자를 씹', score: -4, category: 'romantic' },
+  { stem: '메시지 씹', score: -4, category: 'romantic' },
+  { stem: '메시지를 씹', score: -4, category: 'romantic' },
+  { stem: '연락 씹', score: -4, category: 'romantic' },
+  { stem: '연락을 씹', score: -4, category: 'romantic' },
+  { stem: 'DM 씹', score: -4, category: 'romantic' },
+  { stem: '디엠 씹', score: -4, category: 'romantic' },
+
+  // ──── 답장/연락 없음 ────
+  { stem: '답장이 없', score: -3, category: 'romantic' },
+  { stem: '답장 없', score: -3, category: 'romantic' },
+  { stem: '답이 없', score: -3, category: 'romantic' },
+  { stem: '답 없', score: -3, category: 'romantic' },
+  { stem: '답이 안 와', score: -3, category: 'romantic' },
+  { stem: '답이 안와', score: -3, category: 'romantic' },
+  { stem: '답 안 와', score: -3, category: 'romantic' },
+  { stem: '답 안와', score: -3, category: 'romantic' },
+  { stem: '답이 안 옴', score: -3, category: 'romantic' },
+  { stem: '답 안 옴', score: -3, category: 'romantic' },
+  { stem: '답장이 안 와', score: -3, category: 'romantic' },
   { stem: '연락이 없', score: -3, category: 'romantic' },
   { stem: '연락 없', score: -3, category: 'romantic' },
   { stem: '연락 안', score: -3, category: 'romantic' },
-  { stem: '답장', score: -1, category: 'romantic' },
-  { stem: '답장이 없', score: -3, category: 'romantic' },
-  { stem: '문자', score: 0, category: 'romantic' },
-  { stem: '전화', score: 0, category: 'romantic' },
-  { stem: '전화 안', score: -2, category: 'romantic' },
-  // 이별·거절
+  { stem: '연락이 안 돼', score: -3, category: 'romantic' },
+  { stem: '연락이 안돼', score: -3, category: 'romantic' },
+  { stem: '연락두절', score: -4, category: 'romantic' },
+  { stem: '연락 두절', score: -4, category: 'romantic' },
+  { stem: '연락이 끊', score: -4, category: 'romantic' },
+  { stem: '소식이 없', score: -3, category: 'romantic' },
+  { stem: '소식 없', score: -3, category: 'romantic' },
+  { stem: '감감무소식', score: -4, category: 'romantic' },
+
+  // ──── 카톡 읽음표시 "1" ────
+  { stem: '1 안 사라', score: -4, category: 'romantic' },
+  { stem: '1 안사라', score: -4, category: 'romantic' },
+  { stem: '1 그대로', score: -4, category: 'romantic' },
+  { stem: '1이 그대로', score: -4, category: 'romantic' },
+  { stem: '1 안 없어', score: -4, category: 'romantic' },
+  { stem: '1이 안 없어', score: -4, category: 'romantic' },
+
+  // ──── 단답/성의 없는 답장 ────
+  { stem: '단답', score: -2, category: 'romantic' },
+  { stem: '건성으로 답', score: -3, category: 'romantic' },
+  { stem: '대충 답', score: -3, category: 'romantic' },
+  { stem: '성의없이 답', score: -3, category: 'romantic' },
+
+  // ──── 잠수/고스팅 ────
+  { stem: '잠수', score: -3, category: 'romantic' },
+  { stem: '잠수타', score: -3, category: 'romantic' },
+  { stem: '잠수 타', score: -3, category: 'romantic' },
+  { stem: '고스팅', score: -4, category: 'romantic' },
+  { stem: '고스팅당', score: -4, category: 'romantic' },
+  { stem: '증발했', score: -4, category: 'romantic' },
+  { stem: '잠적', score: -3, category: 'romantic' },
+  { stem: '행방불명', score: -3, category: 'romantic' },
+
+  // ──── 차단/삭제 ────
+  { stem: '차단', score: -4, category: 'romantic' },
+  { stem: '차단당', score: -4, category: 'romantic' },
+  { stem: '블락', score: -4, category: 'romantic' },
+  { stem: '블럭', score: -4, category: 'romantic' },
+  { stem: '친삭', score: -3, category: 'romantic' },
+  { stem: '친구 삭제', score: -3, category: 'romantic' },
+
+  // ──── 이별·거절 ────
   { stem: '차였', score: -5, category: 'romantic' },
   { stem: '차이', score: -4, category: 'romantic' },
+  { stem: '차버리', score: -5, category: 'romantic' },
   { stem: '헤어', score: -4, category: 'romantic' },
   { stem: '이별', score: -4, category: 'romantic' },
   { stem: '이별했', score: -4, category: 'romantic' },
   { stem: '헤어졌', score: -4, category: 'romantic' },
   { stem: '거절', score: -3, category: 'romantic' },
-  { stem: '고백', score: 2, category: 'romantic' },
-  // 바람·불신
+  { stem: '끝내자', score: -4, category: 'romantic' },
+  { stem: '끝내고 싶', score: -4, category: 'romantic' },
+  { stem: '미련', score: -3, category: 'romantic' },
+
+  // ──── 바람·외도·배신 ────
   { stem: '바람', score: -5, category: 'romantic' },
   { stem: '바람피', score: -5, category: 'romantic' },
   { stem: '외도', score: -5, category: 'romantic' },
   { stem: '불륜', score: -5, category: 'romantic' },
+  { stem: '양다리', score: -5, category: 'romantic' },
+  { stem: '투타임', score: -5, category: 'romantic' },
+  { stem: '배신', score: -4, category: 'romantic' },
+  { stem: '배신감', score: -4, category: 'romantic' },
   { stem: '의심', score: -3, category: 'romantic' },
   { stem: '믿을 수 없', score: -4, category: 'romantic' },
   { stem: '믿을수없', score: -4, category: 'romantic' },
-  // 관계 긍정
+  { stem: '몰래 만나', score: -4, category: 'romantic' },
+
+  // ──── 질투·집착 ────
+  { stem: '질투', score: -3, category: 'romantic' },
+  { stem: '집착', score: -3, category: 'romantic' },
+  { stem: '소유욕', score: -3, category: 'romantic' },
+  { stem: '독점욕', score: -3, category: 'romantic' },
+  { stem: '의처증', score: -3, category: 'romantic' },
+  { stem: '의부증', score: -3, category: 'romantic' },
+  { stem: '매달', score: -3, category: 'romantic' },
+  { stem: '버려질', score: -4, category: 'romantic' },
+  { stem: '버려지', score: -4, category: 'romantic' },
+
+  // ──── 권태기 ────
+  { stem: '권태기', score: -3, category: 'romantic' },
+  { stem: '설레지 않', score: -3, category: 'romantic' },
+  { stem: '감정이 식', score: -3, category: 'romantic' },
+  { stem: '정만 남', score: -3, category: 'romantic' },
+  { stem: '무관심', score: -3, category: 'romantic' },
+
+  // ──── 장거리 ────
+  { stem: '장거리', score: -2, category: 'romantic' },
+  { stem: '장거리 연애', score: -2, category: 'romantic' },
+  { stem: '시차', score: -1, category: 'romantic' },
+
+  // ──── 관계 긍정 ────
+  { stem: '고백', score: 2, category: 'romantic' },
   { stem: '사귀', score: 3, category: 'romantic' },
   { stem: '오래오래', score: 2, category: 'romantic' },
   { stem: '함께', score: 2, category: 'romantic' },
   { stem: '데이트', score: 3, category: 'romantic' },
   { stem: '커플', score: 2, category: 'romantic' },
-  // 집착·불안애착
-  { stem: '집착', score: -3, category: 'romantic' },
-  { stem: '매달', score: -3, category: 'romantic' },
-  { stem: '버려질', score: -4, category: 'romantic' },
-  { stem: '버려지', score: -4, category: 'romantic' },
-  // [추가] 연애 특화 확장
-  { stem: '잠수', score: -3, category: 'romantic' },
-  { stem: '잠수타', score: -3, category: 'romantic' },
+  { stem: '재회', score: 1, category: 'romantic' },
+
+  // ──── 중립 ────
+  { stem: '카톡', score: 0, category: 'romantic' },
+  { stem: '문자', score: 0, category: 'romantic' },
+  { stem: '전화', score: 0, category: 'romantic' },
   { stem: '디엠', score: 0, category: 'romantic' },
-  { stem: '좋아요 취소', score: -2, category: 'romantic' },
-  { stem: '차단', score: -4, category: 'romantic' },
-  { stem: '차단당', score: -4, category: 'romantic' },
+  { stem: '답장', score: -1, category: 'romantic' },
+  { stem: '연락', score: -1, category: 'romantic' },
+  { stem: '전화 안', score: -2, category: 'romantic' },
   { stem: '썸', score: 1, category: 'romantic' },
   { stem: '밀당', score: -1, category: 'romantic' },
   { stem: '돌싱', score: -1, category: 'romantic' },
@@ -222,8 +315,8 @@ const ROMANTIC_EXPRESSIONS: EmotionEntry[] = [
   { stem: '스토리', score: 0, category: 'romantic' },
   { stem: '전남친', score: -2, category: 'romantic' },
   { stem: '전여친', score: -2, category: 'romantic' },
-  { stem: '재회', score: 1, category: 'romantic' },
   { stem: '플러팅', score: 1, category: 'romantic' },
+  { stem: '어장관리', score: -3, category: 'romantic' },
 ];
 
 // ============================================================

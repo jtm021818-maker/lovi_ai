@@ -1,17 +1,16 @@
 /**
  * 3사 AI 프로바이더 레지스트리 (Gemini + Groq + Cerebras)
  *
- * [역할 분배]
- * - Gemini Pro:      위기 응답 전용 (최고 품질, 100 RPD)
- * - Gemini Flash:    CBT/ACT/MI 심층 응답 (250 RPD)
- * - Gemini Lite:     폴백 공감 (1,000 RPD)
- * - Groq Qwen3:      SUPPORT/CALMING 응답 (1,000 RPD, 60 RPM)
- * - Groq Llama 70B:  심층 폴백 (1,000 RPD)
- * - Groq Llama 8B:   상태 분석 + 응답 검증 (14,400 RPD)
- * - Cerebras 8B:     상태 분석 폴백 + 세션 요약 (14,400 RPD, 16bit)
+ * [v24 역할 분배 — 무료 100명/일 설계]
+ * - Groq Qwen3-32B:   메인 상담 응답 (3,000 RPD, 매 턴 사용)
+ * - Cerebras 70B:      메인 응답 폴백 (1M 토큰/일)
+ * - Gemini 2.5 Flash-Lite: 이벤트/위기/폴백 통일 (Stable, 무료 한도 최대)
+ * - Groq/Cerebras 8B:  상태분석 + 응답검증 (14,400+ RPD)
  *
- * [프롬프트 캐싱]
- * Groq/Cerebras는 프롬프트 프리픽스를 자동 캐싱 → 시스템 프롬프트 앞 배치 필수
+ * [원칙]
+ * - 매 턴 대화는 Qwen3/Cerebras (한도 큰 모델)
+ * - Gemini는 이벤트/위기에만 (임팩트에 집중)
+ * - Preview 대신 Stable 모델 사용 (rate limit 넉넉)
  */
 
 import { GoogleGenAI } from '@google/genai';
@@ -41,8 +40,8 @@ export type ModelTier = 'haiku' | 'sonnet' | 'opus';
 const PROVIDER_MODELS: Record<Provider, Record<ModelTier, string>> = {
   gemini: {
     haiku: 'gemini-2.5-flash-lite',
-    sonnet: 'gemini-2.5-flash',
-    opus: 'gemini-2.5-pro',         // 🆕 위기 전용!
+    sonnet: 'gemini-2.5-flash-lite',
+    opus: 'gemini-2.5-flash-lite',    // 🆕 v24: Stable 모델 통일 (무료 한도 최대)
   },
   groq: {
     haiku: 'llama-3.1-8b-instant',
@@ -50,15 +49,15 @@ const PROVIDER_MODELS: Record<Provider, Record<ModelTier, string>> = {
     opus: 'llama-3.3-70b-versatile',
   },
   cerebras: {
-    haiku: 'llama-3.1-8b',          // 16bit 고정밀
-    sonnet: 'llama-3.1-8b',         // Cerebras는 8B만 무료
-    opus: 'llama-3.1-8b',
+    haiku: 'llama-3.1-8b',          // 16bit 고정밀 (상태분석/검증용)
+    sonnet: 'llama-3.1-70b',        // 70B (메인 응답 폴백)
+    opus: 'llama-3.1-70b',          // 70B (최후 폴백)
   },
 };
 
 /** Groq 추가 모델 (직접 지정용) */
 export const GROQ_EXTRA_MODELS = {
-  qwen3: 'qwen-qwq-32b',           // 60 RPM, SUPPORT 최적
+  qwen3: 'qwen/qwen3-32b',           // qwen-qwq-32b 폐기 → qwen3-32b 대체 (무료 확인)
 } as const;
 
 /** 전략별 temperature */
@@ -140,15 +139,21 @@ async function groqGenerate(
     ...messages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
   ];
 
+  const model = modelOverride || PROVIDER_MODELS.groq[tier];
+  const isQwen3 = model.includes('qwen3');
+
   const response = await groq.chat.completions.create({
-    model: modelOverride || PROVIDER_MODELS.groq[tier],
+    model,
     messages: groqMessages,
     max_tokens: maxTokens,
     temperature: TEMPERATURE[tier],
+    ...(isQwen3 && { reasoning_format: 'hidden' as any }),
   });
 
   recordProviderUsage('groq');
-  return response.choices[0]?.message?.content ?? '';
+  // qwen3 thinking 모드가 hidden이어도 혹시 <think> 태그가 남을 수 있으므로 제거
+  const content = response.choices[0]?.message?.content ?? '';
+  return content.replace(/<think>[\s\S]*?<\/think>\s*/g, '');
 }
 
 async function* groqStream(
@@ -163,12 +168,17 @@ async function* groqStream(
     ...messages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
   ];
 
+  // qwen3-32b thinking 모드 OFF (토큰 절약 + 2~5초 지연 제거)
+  const model = modelOverride || PROVIDER_MODELS.groq[tier];
+  const isQwen3 = model.includes('qwen3');
+
   const stream = await groq.chat.completions.create({
-    model: modelOverride || PROVIDER_MODELS.groq[tier],
+    model,
     messages: groqMessages,
     max_tokens: maxTokens,
     temperature: TEMPERATURE[tier],
     stream: true,
+    ...(isQwen3 && { reasoning_format: 'hidden' as any }),
   });
 
   for await (const chunk of stream) {
@@ -323,10 +333,26 @@ export async function* streamWithCascade(
     const limit = checkProviderRateLimit(provider);
     if (!limit.allowed) continue;
 
+    let hasYieldedAny = false;
+    const actualModel = modelOverride || PROVIDER_MODELS[provider][tier];
+    const startTime = Date.now();
     try {
-      yield* streamWithProvider(provider, systemPrompt, messages, tier, maxTokens, modelOverride);
-      return;
+      const gen = streamWithProvider(provider, systemPrompt, messages, tier, maxTokens, modelOverride);
+      for await (const chunk of gen) {
+        if (!hasYieldedAny) {
+          console.log(`[ProviderRegistry] ✅ 스트리밍 시작: ${provider}/${tier} (model: ${actualModel}) | TTFB: ${Date.now() - startTime}ms`);
+        }
+        hasYieldedAny = true;
+        yield chunk;
+      }
+      console.log(`[ProviderRegistry] ✅ 스트리밍 완료: ${provider}/${tier} (model: ${actualModel}) | 총 ${Date.now() - startTime}ms`);
+      return; // 정상 완료
     } catch (err: any) {
+      // 이미 텍스트가 부분 전송된 경우 → 폴백하면 중복되므로 그대로 종료
+      if (hasYieldedAny) {
+        console.warn(`[ProviderRegistry] ${provider}/${tier} 스트리밍 중간 에러 (부분전송됨, 그대로 종료):`, err?.message);
+        return;
+      }
       if (err?.status === 429 || err?.code === 429) {
         console.warn(`[ProviderRegistry] ${provider}/${tier} 스트리밍 429 → 다음 폴백`);
         continue;
@@ -338,7 +364,10 @@ export async function* streamWithCascade(
 
   // 모든 폴백 실패 → 마지막 강제
   const last = chain[chain.length - 1];
-  yield* streamWithProvider(last.provider, systemPrompt, messages, last.tier, maxTokens, last.modelOverride);
+  const gen = streamWithProvider(last.provider, systemPrompt, messages, last.tier, maxTokens, last.modelOverride);
+  for await (const chunk of gen) {
+    yield chunk;
+  }
 }
 
 /** 프로바이더 가용 확인 */

@@ -22,6 +22,6 @@ export async function GET() {
     .single();
 
   return NextResponse.json({
-    persona_mode: profile?.persona_mode || 'counselor',
+    persona_mode: profile?.persona_mode || 'luna',
   });
 }

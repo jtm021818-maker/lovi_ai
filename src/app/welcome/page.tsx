@@ -2,69 +2,59 @@
 
 import { motion } from 'framer-motion';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function WelcomePage() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden">
-      {/* 장식용 애니메이션 신비로운 배경 요소 (오로라 느낌) */}
-      <motion.div 
-        animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3], rotate: [0, 90, 0] }}
-        transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-mystic-purple rounded-full mix-blend-screen filter blur-[100px] opacity-40 pointer-events-none" 
-      />
-      <motion.div 
-        animate={{ scale: [1, 1.3, 1], opacity: [0.2, 0.5, 0.2], rotate: [0, -90, 0] }}
-        transition={{ duration: 15, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-        className="absolute bottom-[-10%] right-[-10%] w-[30rem] h-[30rem] bg-mystic-pink rounded-full mix-blend-screen filter blur-[120px] opacity-30 pointer-events-none" 
-      />
+    <div className="relative min-h-screen w-full flex flex-col items-center justify-end px-6 pb-14 overflow-hidden bg-[#fadcd6]">
+      {/* 
+        [전체 화면 통이미지 영역]
+        대표님이 쓰실 통이미지 1장(캐릭터 포함)을 여기에 넣으시면 됩니다.
+      */}
+      <div className="absolute inset-0 z-0 w-full h-full">
+        <Image
+          src="/stitch_luna_landing.png" // 👈 쓰실 통이미지 경로
+          alt="Luna AI Coach"
+          fill
+          className="object-cover object-center"
+          quality={100}
+          unoptimized={true}
+          priority
+        />
+        {/* 하단 UI 버튼 가독성 확보 및 원본 그림과의 이질감을 줄이기 위한 가장 자연스러운 부드러운 그라데이션 */}
+        <div className="absolute bottom-0 left-0 w-full h-[35%] bg-gradient-to-t from-[#fadcd6] via-[#fadcd6]/60 to-transparent pointer-events-none" />
+      </div>
 
+      {/* 
+        [인터랙션 CTA 버튼 영역] 
+        이미지 위 같은 위치에 오버레이 됩니다.
+      */}
       <motion.div
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-        className="text-center z-10 w-full max-w-sm"
+        transition={{ duration: 0.8, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full max-w-[340px] z-10 space-y-4 mb-2 relative"
       >
-        {/* 마음이 아바타 (신비로운 타로 오라 느낌) */}
-        <motion.div
-          animate={{ y: [0, -10, 0] }}
-          transition={{ repeat: Infinity, duration: 4, ease: 'easeInOut' }}
-          className="relative w-32 h-32 mx-auto mb-10"
-        >
-          <div className="absolute inset-0 bg-gradient-to-br from-mystic-glow to-mystic-purple rounded-full blur-xl opacity-50 animate-pulse" />
-          <div className="relative w-full h-full rounded-full bg-white/10 backdrop-blur-2xl border border-white/20 flex items-center justify-center shadow-[0_0_40px_rgba(157,78,221,0.3)]">
-            <span className="text-6xl drop-shadow-[0_0_15px_rgba(255,255,255,0.8)]">🔮</span>
-          </div>
-        </motion.div>
+        <Link href="/login" className="block">
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="w-full py-[18px] rounded-full bg-[#fffcf8] text-[#d17a7a] font-bold text-[17px] shadow-[0_8px_20px_rgba(209,122,122,0.15)] hover:shadow-[0_12px_25px_rgba(209,122,122,0.2)] transition-all border border-white/80"
+          >
+            기존 계정으로 로그인
+          </motion.button>
+        </Link>
 
-        <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-br from-white via-mystic-glow to-mystic-purple mb-4 tracking-tight drop-shadow-sm">
-          Love AI 마음이
-        </h1>
-        <p className="text-gray-300 text-base mb-14 leading-relaxed whitespace-pre-line font-medium">
-          {`마음 속 깊은 곳의 연애 고민,\n우주의 기운을 담아 들어줄게요.`}
-        </p>
-
-        <div className="space-y-4 w-full px-2">
-          <Link href="/signup" className="block">
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-mystic-purple to-mystic-pink text-white font-bold shadow-[0_0_20px_rgba(157,78,221,0.4)] hover:shadow-[0_0_30px_rgba(255,112,166,0.6)] transition-all border border-white/20 overflow-hidden relative group"
-            >
-              <div className="absolute inset-0 bg-white/20 translate-x-[-100%] skew-x-[-15deg] group-hover:animate-[shimmer_1.5s_infinite]" />
-              <span className="relative z-10">새로운 여정 시작하기</span>
-            </motion.button>
-          </Link>
-          
-          <Link href="/login" className="block">
-            <motion.button
-              whileHover={{ scale: 1.02, backgroundColor: "rgba(255, 255, 255, 0.15)" }}
-              whileTap={{ scale: 0.98 }}
-              className="w-full py-4 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 text-mystic-glow font-semibold hover:border-white/30 transition-all shadow-lg"
-            >
-              이미 계정이 있어요
-            </motion.button>
-          </Link>
-        </div>
+        <Link href="/signup" className="block">
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="w-full py-[18px] rounded-full bg-gradient-to-r from-[#f99b82] to-[#ef8670] text-white font-bold text-[17px] shadow-[0_10px_25px_rgba(244,138,117,0.4)] hover:shadow-[0_14px_30px_rgba(244,138,117,0.5)] transition-all overflow-hidden relative group"
+          >
+            <div className="absolute inset-0 bg-white/25 translate-x-[-150%] skew-x-[-15deg] transition-all duration-700 ease-out group-hover:translate-x-[150%]" />
+            <span className="relative z-10 tracking-wide">새로 시작하기 (회원가입)</span>
+          </motion.button>
+        </Link>
       </motion.div>
     </div>
   );
