@@ -134,9 +134,9 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
   const [userOverrideScenario, setUserOverrideScenario] = useState<RelationshipScenario | null>(null);
   const [isThoughtHistoryOpen, setIsThoughtHistoryOpen] = useState(false);
   const [openingVideoEnded, setOpeningVideoEnded] = useState(false);
-  const [isListenSkipOpen, setIsListenSkipOpen] = useState(false);
   const [xrayResult, setXrayResult] = useState<XRayResult | null>(null);
   const [xrayLoading, setXrayLoading] = useState(false);
+  const [isInsightCollapsed, setIsInsightCollapsed] = useState(false);
   const personaRef = useRef<HTMLDivElement>(null);
 
 
@@ -323,27 +323,39 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
           {/* 🆕 v36: 동적 인사이트 위젯 (왼쪽) - 루나의 상황 인식 & 속마음 */}
           <div className="flex flex-col items-start gap-1 flex-1 min-w-0 pr-1">
             {showScenarioTag ? (
-              <>
-                {/* 1. 상황 인식 (SITUATION_READ) - 시나리오 대체 */}
-                <motion.button
-                  whileTap={{ scale: 0.96 }}
-                  onClick={() => setIsScenarioPanelOpen(true)}
-                  className="flex items-center gap-1.5 bg-white/70 backdrop-blur-md border border-white/60 px-2.5 py-1.5 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] w-fit max-w-full"
-                >
-                  <div className="flex items-center justify-center bg-violet-50/80 rounded-full w-[18px] h-[18px] shadow-inner shrink-0">
-                    <span className="text-[10px]">🔍</span>
-                  </div>
-                  <span className="text-[11px] font-bold text-[#6D4C41] truncate tracking-tight">
-                    {stateResult?.situationRead || '상황 듣는 중...'}
-                  </span>
-                  <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#A1887F" strokeWidth="3" strokeLinecap="round" className="opacity-80 shrink-0">
-                    <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                  </svg>
-                </motion.button>
+              <div className="flex flex-col items-start gap-1 w-full relative">
+                {/* 1. 상황 인식 (SITUATION_READ) + 토글 버튼 */}
+                <div className="flex items-center gap-1.5 w-full max-w-full">
+                  <motion.button
+                    whileTap={{ scale: 0.96 }}
+                    onClick={() => setIsScenarioPanelOpen(true)}
+                    className="flex items-center gap-1.5 bg-white/70 backdrop-blur-md border border-white/60 px-2.5 py-1.5 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] w-fit flex-shrink"
+                    style={{ maxWidth: 'calc(100% - 32px)' }}
+                  >
+                    <div className="flex items-center justify-center bg-violet-50/80 rounded-full w-[18px] h-[18px] shadow-inner shrink-0">
+                      <span className="text-[10px]">🔍</span>
+                    </div>
+                    <span className="text-[11px] font-bold text-[#6D4C41] truncate tracking-tight">
+                      {stateResult?.situationRead || '상황 듣는 중...'}
+                    </span>
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#A1887F" strokeWidth="3" strokeLinecap="round" className="opacity-80 shrink-0">
+                      <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                    </svg>
+                  </motion.button>
 
-                {/* 2. 루나의 속마음 (LUNA_THOUGHT) — 클릭 시 히스토리 */}
+                  <button 
+                    onClick={() => setIsInsightCollapsed(!isInsightCollapsed)}
+                    className="w-7 h-7 flex items-center justify-center rounded-full bg-white/50 backdrop-blur-sm border border-white/40 text-[#A1887F] hover:bg-white/80 transition-colors shrink-0"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${isInsightCollapsed ? 'rotate-180' : ''}`}>
+                      <polyline points="18 15 12 9 6 15"></polyline>
+                    </svg>
+                  </button>
+                </div>
+
+                {/* 2. 루나의 속마음 (LUNA_THOUGHT) — 토글 시 보임/숨김 */}
                 <AnimatePresence>
-                  {stateResult?.lunaThought && (
+                  {!isInsightCollapsed && stateResult?.lunaThought && (
                     <motion.button
                       initial={{ opacity: 0, height: 0, marginTop: -4, scale: 0.95 }}
                       animate={{ opacity: 1, height: 'auto', marginTop: 0, scale: 1 }}
@@ -371,7 +383,7 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
                     </motion.button>
                   )}
                 </AnimatePresence>
-              </>
+              </div>
             ) : (
               <div className="flex items-center gap-1.5 bg-white/70 backdrop-blur-md border border-white/60 px-2.5 py-1.5 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] w-fit max-w-full">
                 {messages.length === 0 ? (
@@ -395,157 +407,7 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
             )}
           </div>
 
-          {/* 🆕 v28.8: 루나 상태 카드 (HOOK + MIRROR) — Phase 전환 시 내용 변경 */}
-          {activePersona !== 'tarot' && (currentPhase === 'HOOK' || currentPhase === 'MIRROR') && userMsgCount >= 1 && (() => {
-            // 카드를 시나리오 태그와 같은 줄 높이로 맞추기
-            const isHook = currentPhase === 'HOOK';
-            const cardGradient = isHook
-              ? 'from-pink-50 to-purple-50'
-              : 'from-violet-50 to-indigo-50';
-            const borderColor = isHook ? 'border-pink-100/80' : 'border-violet-100/80';
-            const titleColor = isHook ? 'text-pink-600' : 'text-violet-600';
-            const subColor = isHook ? 'text-pink-400' : 'text-violet-400';
-            const barFrom = isHook ? 'from-pink-300' : 'from-violet-300';
-            const barTo = isHook ? 'to-purple-300' : 'to-indigo-300';
-            const barBg = isHook ? 'bg-pink-100' : 'bg-violet-100';
-            const dotColor = isHook ? 'bg-pink-300' : 'bg-violet-300';
 
-            const title = isHook ? '이야기 듣는 중' : '마음 들여다보는 중';
-            const subtitle = isHook ? '이야기 더 들어볼게...' : '진짜 감정을 찾고 있어...';
-            const labelLeft = isHook ? '듣기' : '겉감정';
-            const labelRight = isHook ? '정리' : '속감정';
-            const gaugeProgress = isHook
-              ? Math.min(90, (userMsgCount / 5) * 100)
-              : Math.min(90, (userMsgCount / 8) * 100);
-
-            // 스킵 팝업 내용
-            const skipTitle = isHook ? '할 말 다 했어!' : '감정 정리 됐어!';
-            const skipDesc = isHook ? '바로 다음 단계로 넘어갈게' : '이제 방법을 찾아보자';
-            const stayTitle = isHook ? '아직 더 얘기할래' : '좀 더 생각해볼래';
-            const popupTitle = isHook ? '이야기 듣는 중' : '마음 탐색 중';
-            const popupDesc = isHook
-              ? '루나가 충분히 들었는지 판단해요. 할 말 다 했으면 넘어갈 수 있어요.'
-              : '루나가 진짜 감정을 찾고 있어요. 정리됐으면 넘어갈 수 있어요.';
-
-            // 루나 귀 이미지 아이콘
-            const svgIcon = (
-              <img
-                src="/char_img/luna_ear.png"
-                alt="루나"
-                width={26}
-                height={26}
-                className="rounded-full object-cover"
-                style={{ width: 26, height: 26 }}
-              />
-            );
-
-            return (
-              <motion.div
-                key={currentPhase}
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="flex-shrink-0 relative -mt-8"
-              >
-                <motion.button
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => setIsListenSkipOpen(prev => !prev)}
-                  className={`bg-gradient-to-br ${cardGradient} border ${borderColor} rounded-2xl px-3 py-2 shadow-sm min-w-[110px] text-left`}
-                >
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <div className="relative flex-shrink-0">
-                      {svgIcon}
-                      <motion.div
-                        animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1, 0.8] }}
-                        transition={{ duration: 1.5, repeat: Infinity }}
-                        className={`absolute -right-0.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full ${dotColor}`}
-                      />
-                    </div>
-                    <div>
-                      <div className={`text-[10px] font-bold ${titleColor}`}>{title}</div>
-                      <motion.div
-                        animate={{ opacity: [0.5, 1, 0.5] }}
-                        transition={{ duration: 2, repeat: Infinity }}
-                        className={`text-[8px] ${subColor}`}
-                      >
-                        {subtitle}
-                      </motion.div>
-                    </div>
-                  </div>
-                  <div className={`relative h-1.5 ${barBg} rounded-full overflow-hidden`}>
-                    <motion.div
-                      className={`h-full rounded-full bg-gradient-to-r ${barFrom} ${barTo}`}
-                      initial={{ width: '10%' }}
-                      animate={{ width: `${gaugeProgress}%` }}
-                      transition={{ type: 'spring', damping: 20 }}
-                    />
-                    <motion.div
-                      animate={{ x: ['-100%', '200%'] }}
-                      transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-                      className="absolute inset-y-0 w-4 bg-white/40 skew-x-12"
-                    />
-                  </div>
-                  <div className="flex justify-between mt-0.5">
-                    <span className={`text-[7px] ${subColor}`}>{labelLeft}</span>
-                    <span className={`text-[7px] ${subColor}`}>{labelRight}</span>
-                  </div>
-                </motion.button>
-
-                {/* 클릭 시 팝업 */}
-                <AnimatePresence>
-                  {isListenSkipOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -4, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -4, scale: 0.95 }}
-                      transition={{ duration: 0.15 }}
-                      className="absolute right-0 top-full mt-1.5 z-[60] w-48 bg-white/98 backdrop-blur-xl rounded-2xl border border-pink-100 shadow-lg overflow-hidden"
-                    >
-                      <div className="px-3.5 pt-3 pb-2">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                            <circle cx="12" cy="12" r="10" stroke={isHook ? '#F48FB1' : '#CE93D8'} strokeWidth="1.5" fill={isHook ? '#FFF0F5' : '#F3E5F5'}/>
-                            <path d="M12 7v6M12 16h.01" stroke={isHook ? '#EC407A' : '#AB47BC'} strokeWidth="2" strokeLinecap="round"/>
-                          </svg>
-                          <span className="text-[11px] font-bold text-gray-700">{popupTitle}</span>
-                        </div>
-                        <p className="text-[9px] text-gray-400 leading-relaxed">{popupDesc}</p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setIsListenSkipOpen(false);
-                          sendMessage(' ', { source: 'skip_phase' as any, context: { skipToNextPhase: true } });
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3.5 py-3 border-t border-pink-50 hover:bg-pink-50/50 transition-colors"
-                      >
-                        <div className={`w-7 h-7 rounded-full bg-gradient-to-br ${cardGradient} flex items-center justify-center flex-shrink-0`}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={isHook ? '#EC407A' : '#AB47BC'} strokeWidth="2.5" strokeLinecap="round">
-                            <path d="M5 12h14M12 5l7 7-7 7"/>
-                          </svg>
-                        </div>
-                        <div>
-                          <div className={`text-[11px] font-bold ${titleColor}`}>{skipTitle}</div>
-                          <div className="text-[8px] text-gray-400">{skipDesc}</div>
-                        </div>
-                      </button>
-                      <button
-                        onClick={() => setIsListenSkipOpen(false)}
-                        className="w-full flex items-center gap-2.5 px-3.5 py-2.5 border-t border-pink-50 hover:bg-gray-50/50 transition-colors"
-                      >
-                        <div className="w-7 h-7 rounded-full bg-gray-50 flex items-center justify-center flex-shrink-0">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9E9E9E" strokeWidth="2.5" strokeLinecap="round">
-                            <path d="M19 12H5M12 19l-7-7 7-7"/>
-                          </svg>
-                        </div>
-                        <div>
-                          <div className="text-[10px] font-semibold text-gray-500">{stayTitle}</div>
-                        </div>
-                      </button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            );
-          })()}
         </div>
       </div>
 

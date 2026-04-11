@@ -49,15 +49,23 @@ const TAROT_GATE_EVENTS: Record<string, PhaseEventType[]> = {
 };
 
 // ============================================
-// 🛡️ Safety Net — AI 태그 누락 시에만 작동
-// 이 턴 수에 도달하면 게이트 이벤트 없이도 강제 전환
+// 🛡️ Safety Net — AI 태그 누락 시에만 작동 (진짜 비상구)
+// 정상 흐름: 프롬프트가 루나의 직관으로 판단 → 태그 즉시 출력
+// 이 숫자는 "여기 도달하면 뭔가 크게 잘못된 것" 수준으로 설정
+//
+// v43: 진짜 언니 기준으로 대폭 하향
+//   - HOOK: 10→6 (친한 언니는 2~3턴이면 감 잡음, 6턴은 한계)
+//   - MIRROR: 10→6
+//   - BRIDGE: 8→6
+//   - SOLVE: 8→5
+//   - EMPOWER: 6→4
 // ============================================
 const SAFETY_MAX_TURNS: Record<string, number> = {
-  HOOK: 10,
-  MIRROR: 10,
-  BRIDGE: 8,
-  SOLVE: 8,
-  EMPOWER: 6,
+  HOOK: 6,
+  MIRROR: 6,
+  BRIDGE: 6,
+  SOLVE: 5,
+  EMPOWER: 4,
 };
 
 // ============================================
