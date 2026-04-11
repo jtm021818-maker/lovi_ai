@@ -144,7 +144,23 @@ export type PhaseEventType =
   | 'HOMEWORK_CARD'         // 🆕 v20: 숙제 카드 📝
   | 'TAROT_DRAW'            // 🔮 타로카드 뽑기
   | 'TAROT_AXIS_COLLECT'    // 🔮 타로냥 스프레드 축 수집
-  | 'TAROT_INSIGHT';        // 🔮 타로냥 카드 인사이트 (SOLVE단계)
+  | 'TAROT_INSIGHT'         // 🔮 타로냥 카드 인사이트 (SOLVE단계)
+  | 'MIND_READING'          // 🆕 v31: 마음 읽기 🦊 (감정온도계 교체)
+  | 'LUNA_STORY'            // 🆕 ACE v4: 루나의 이야기 📖 (자기개방, 클리프행어)
+  | 'LUNA_STRATEGY'         // 🆕 ACE v4: 루나의 작전회의 🔥 (MIRROR 끝 → SOLVE 모드 선택)
+  // ──────────────────────────────
+  // 🆕 v35: 모드별 SOLVE 이벤트
+  // ──────────────────────────────
+  | 'TONE_SELECT'           // 💬 톤 3선택지 (부드럽게/솔직하게/단호하게)
+  | 'DRAFT_WORKSHOP'        // 💬 카톡 초안 A/B/C 워크샵
+  | 'ROLEPLAY_FEEDBACK'     // 🎭 롤플레이 피드백 카드
+  | 'PANEL_REPORT'          // 🍿 연참 분석 리포트
+  | 'IDEA_REFINE'           // 🤔 아이디어 다듬기 전후 비교
+  // ──────────────────────────────
+  // 🆕 v39: BRIDGE→SOLVE→EMPOWER 재설계 이벤트
+  // ──────────────────────────────
+  | 'ACTION_PLAN'           // 🎯 오늘의 작전 — SOLVE 마지막 (실행 계획 확정)
+  | 'WARM_WRAP';            // 💜 오늘의 마무리 — EMPOWER (다독이기 + 재방문 약속)
 
 /** Phase 이벤트 데이터 */
 export interface PhaseEvent {
@@ -188,6 +204,207 @@ export interface EmotionMirrorData {
   deepEmoji: string;          // 깊은 감정 이모지
   lunaMessage: string;        // 루나의 한마디 (예: "이거 맞아? 아니면 다른 느낌이야?")
   choices: { label: string; value: string }[];
+}
+
+/** 🆕 ACE v4: 루나의 이야기 데이터 (자기개방 + 클리프행어) */
+export interface LunaStoryData {
+  /** 루나 오프너 — 이야기 시작 멘트 ("야 근데 있잖아... 나도 비슷한 거 겪어본 적 있거든") */
+  opener: string;
+  /** 루나의 상황 묘사 ("나도 그때 답장 안 오면 가슴이 쿵 내려앉는 그런 느낌이었어") */
+  situation: string;
+  /** 그때 루나의 속마음 ("'나한테 관심 없나?' 그 생각이 계속 맴돌더라고") */
+  innerThought: string;
+  /** 클리프행어 — BRIDGE 연결 장치 ("근데 나중에 알게 됐거든? 그게 ~가 아니라...") */
+  cliffhanger: string;
+  /** 3선택지 (curious / relate / different) */
+  choices: { label: string; emoji: string; value: 'curious' | 'relate' | 'different' }[];
+}
+
+/** 🆕 ACE v4: 루나의 작전회의 데이터 (BRIDGE→SOLVE 전환)
+ *
+ * 추상적 성격(쿨/솔직/과감) 대신 "클릭하면 뭘 하는지" 명확한 액션 카드.
+ * 각 액션은 SOLVE Phase에서 다른 모드로 동작.
+ */
+export type LunaStrategyType =
+  | 'message_draft'  // 💬 메시지 초안 같이 짜기 (A/B/C 버전)
+  | 'roleplay'       // 🎭 상황 롤플레이 (루나가 상대 역할)
+  | 'panel'          // 🍿 연참 모드 (객관적 시각 + 재미있는 평가)
+  | 'custom';        // 🤔 다른 거 생각 중 (유저 본인 아이디어)
+
+export interface LunaStrategyAction {
+  type: LunaStrategyType;
+  emoji: string;
+  title: string;            // 카드 제목 ("메시지 초안 같이 짜기")
+  description: string;      // 한 줄 설명 ("걔한테 뭐라고 보낼지 같이 만들어볼까?")
+  preview: string;          // 클릭 시 무엇이 일어나는지 ("카톡 버전 A/B/C 만들어줄게")
+  lunaComment?: string;     // 루나의 추천 멘트 (선택)
+}
+
+export interface LunaStrategyData {
+  /** 루나 오프너 — 작전회의 소집 ("자 이제 작전 짜자 🔥") */
+  opener: string;
+  /** 상황 한 줄 정리 ("지금 ~한 상태인 거잖아") */
+  situationSummary: string;
+  /** 3가지 액션 카드 (고정 타입, 동적 설명) */
+  actions: LunaStrategyAction[];
+  /** 4번째 옵션 — 유저 본인 아이디어 */
+  customOption: {
+    label: string;
+    emoji: string;
+  };
+}
+
+// ──────────────────────────────────────
+// 🆕 v35: 모드별 SOLVE 데이터 인터페이스
+// ──────────────────────────────────────
+
+/** 💬 톤 선택 이벤트 데이터 (메시지 초안 모드 Turn 1) */
+export interface ToneSelectData {
+  /** 루나의 한 줄 멘트 ("어떤 느낌으로 보낼까?") */
+  lunaMessage: string;
+  /** 3가지 톤 옵션 (상황별 동적) */
+  options: Array<{
+    label: string;      // "부드럽게"
+    sublabel: string;   // "편하게 시작하기"
+    emoji: string;      // "🌸"
+    value: 'soft' | 'honest' | 'direct';
+  }>;
+}
+
+/** 💬 카톡 초안 워크샵 데이터 (메시지 초안 모드 Turn 2) */
+export interface DraftWorkshopData {
+  /** 루나의 한 줄 멘트 */
+  lunaMessage: string;
+  /** 3가지 초안 (A/B/C) */
+  drafts: Array<{
+    version: 'A' | 'B' | 'C';
+    tone: string;       // "부드럽게"
+    text: string;       // 실제 카톡 텍스트
+    intent: string;     // 의도 설명
+  }>;
+}
+
+/** 🎭 롤플레이 피드백 데이터 */
+export interface RoleplayFeedbackData {
+  /** 잘한 점 (구체적 발화 인용) */
+  strengths: string[];
+  /** 조심할 점 / 개선 포인트 */
+  improvements: string[];
+  /** 실전 팁 1개 */
+  tip: string;
+  /** 다시 해볼지 선택지 */
+  options: Array<{
+    label: string;
+    emoji: string;
+    type: 'retry' | 'done';
+  }>;
+}
+
+/** 🍿 연참 분석 리포트 데이터 */
+export interface PanelReportData {
+  /** 상황 요약 (한 문단) */
+  situationSummary: string;
+  /** 유저 강점 목록 */
+  strengths: Array<{ icon: string; text: string }>;
+  /** 주의 포인트 목록 */
+  cautions: Array<{ icon: string; text: string }>;
+  /** 루나의 한 마디 */
+  lunaVerdict: string;
+  /** 선택 옵션 */
+  options: Array<{
+    label: string;
+    emoji: string;
+    value: 'detail' | 'action' | 'switch_mode';
+  }>;
+}
+
+/** 🤔 아이디어 다듬기 데이터 */
+export interface IdeaRefineData {
+  /** 유저 원래 아이디어 */
+  original: string;
+  /** 루나가 다듬은 버전 */
+  refined: string;
+  /** 다듬기 이유 */
+  reason: string;
+  /** 선택 옵션 */
+  options: Array<{
+    label: string;
+    emoji: string;
+    value: 'accept' | 'more_refine';
+  }>;
+}
+
+/**
+ * 🆕 v39: 🎯 ACTION_PLAN — "오늘의 작전" 카드 (SOLVE 마무리)
+ *
+ * BRIDGE 모드 실행 후, SOLVE에서 "같이 만든 것"을 한 장의 실행 계획 카드로.
+ * 교과서적 솔루션이 아니라 "친한 언니가 같이 짜준 오늘의 작전".
+ */
+export interface ActionPlanData {
+  /** 모드 종류 — 어떤 작전인지 */
+  planType: 'kakao_draft' | 'roleplay' | 'panel' | 'custom';
+  /** 작전 타이틀 ("오늘의 작전: 걔한테 카톡 보내기") */
+  title: string;
+  /** 핵심 액션 한 줄 ("이 카톡, 오늘 밤 10시에 보내보기") */
+  coreAction: string;
+  /** 같이 만든 내용 — 카톡 초안이거나 롤플 포인트거나 연참 조언이거나 */
+  sharedResult: string;
+  /** 플랜 B — 만약 잘 안 되면 */
+  planB?: string;
+  /** 타이밍 힌트 */
+  timingHint?: string;
+  /** 루나의 마지막 응원 한 마디 */
+  lunaCheer: string;
+  /** 2 선택지: 해볼래 / 조금만 수정 */
+  options: Array<{
+    label: string;
+    emoji: string;
+    value: 'commit' | 'tweak';
+  }>;
+}
+
+/**
+ * 🆕 v39: 💜 WARM_WRAP — "오늘의 마무리" 카드 (EMPOWER)
+ *
+ * 학술적 요약이 아니라 "언니가 동생 보내기 전에 하는 다독임 + 재방문 약속".
+ * 오늘 찾은 강점 + 감정 변화 + 다음 스텝 + 루나의 진심 한 마디.
+ */
+export interface WarmWrapData {
+  /** 오늘 발견한 강점 한 줄 ("끝까지 고민하는 진심, 그거 진짜 멋져") */
+  strengthFound: string;
+  /** 감정 변화 묘사 ("처음엔 답답했는데, 지금은 좀 가벼워진 것 같지?") */
+  emotionShift: string;
+  /** 다음 스텝 (숙제 아닌 권유) ("해보고 어떻게 됐는지 알려줘") */
+  nextStep: string;
+  /** 루나의 진심 한 마디 ("항상 여기 있을게 💜") */
+  lunaMessage: string;
+  /** 2 선택지: 고마워 / 다음에 또 와 */
+  options: Array<{
+    label: string;
+    emoji: string;
+    value: 'thanks' | 'revisit';
+  }>;
+}
+
+/** 🆕 v35: 작전 모드 타입 — SOLVE 단계의 특화 모드 */
+export type StrategyMode = 'message_draft' | 'roleplay' | 'panel' | 'custom';
+
+/** 🆕 v35: 세션 내 작전 상태 (모드 진입 후 SOLVE 단계 추적) */
+export interface SessionStrategyState {
+  /** 유저가 작전회의에서 선택한 모드 */
+  activeMode: StrategyMode | null;
+  /** 모드 진입 시점 턴 번호 */
+  modeEntryTurn: number;
+  /** 모드 내 서브 턴 (모드별 전개 추적) */
+  modeTurn: number;
+  /** 선택된 톤 (message_draft 전용) */
+  selectedTone?: 'soft' | 'honest' | 'direct';
+  /** 롤플레이 라운드 카운트 */
+  roleplayRound?: number;
+  /** 루나가 in-character인지 (롤플레이 전용) */
+  isInCharacter?: boolean;
+  /** 유저 아이디어 (custom 전용) */
+  userIdea?: string;
 }
 
 /**
@@ -489,6 +706,14 @@ export interface StateResult {
   emotionSignal?: EmotionSignal;
   /** 🆕 v20: 해결책 준비도 (5A Framework) */
   solutionReadiness?: 'NOT_READY' | 'EXPLORING' | 'READY';
+  /** 🆕 v36: 루나의 상황 인식 — AI가 판단한 한 줄 상황 요약 */
+  situationRead?: string;
+  /** 🆕 v37: 루나의 상황 인식 히스토리 — 대화 중 누적된 상황 변화 */
+  situationReadHistory?: string[];
+  /** 🆕 v36: 루나의 속마음 — AI 내면의 한 줄 독백 */
+  lunaThought?: string;
+  /** 🆕 v36: 루나의 속마음 히스토리 — 대화 중 누적된 생각들 */
+  lunaThoughtHistory?: string[];
 }
 
 /** 전략 선택 결과 */
@@ -536,7 +761,7 @@ export type SuggestionCategory =
 /** 선택지 메타 정보 — 프론트→서버→엔진 전달 */
 export interface SuggestionMeta {
   /** 메시지 출처 */
-  source: 'typed' | 'suggestion' | 'emotion_thermometer' | 'insight_card' | 'emotion_mirror' | 'pattern_mirror' | 'solution_preview' | 'solution_preview_delay' | 'solution_card_draft' | 'solution_card_other' | 'message_copy' | 'message_modify' | 'message_custom' | 'growth_report_promise' | 'growth_report_continue';
+  source: 'typed' | 'suggestion' | 'emotion_thermometer' | 'insight_card' | 'emotion_mirror' | 'luna_story' | 'luna_strategy' | 'mind_reading' | 'pattern_mirror' | 'solution_preview' | 'solution_preview_delay' | 'solution_card_draft' | 'solution_card_other' | 'message_copy' | 'message_modify' | 'message_custom' | 'growth_report_promise' | 'growth_report_continue' | 'tone_select' | 'draft_workshop' | 'roleplay_feedback' | 'panel_report' | 'idea_refine';
   context?: Record<string, any>;
   /** 선택지가 의도한 전략 */
   strategyHint?: StrategyType;

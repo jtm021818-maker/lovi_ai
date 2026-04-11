@@ -1,15 +1,16 @@
 /**
  * 3사 AI 프로바이더 레지스트리 (Gemini + Groq + Cerebras)
  *
- * [v24 역할 분배 — 무료 100명/일 설계]
- * - Groq Qwen3-32B:   메인 상담 응답 (3,000 RPD, 매 턴 사용)
- * - Cerebras 70B:      메인 응답 폴백 (1M 토큰/일)
- * - Gemini 2.5 Flash-Lite: 이벤트/위기/폴백 통일 (Stable, 무료 한도 최대)
+ * [v25 역할 분배 — 무료 100명/일 설계]
+ * - Gemini 2.5 Flash:  메인 상담 응답 (한국어 최강, ~1,000 RPD)
+ * - Groq Qwen3-32B:    상담 폴백 + 라운지 메인 (3,000 RPD)
+ * - Cerebras 70B:      최종 폴백 (1M 토큰/일)
+ * - Gemini 2.5 Flash-Lite: 라운지 최후 폴백 + 상태분석 3순위
  * - Groq/Cerebras 8B:  상태분석 + 응답검증 (14,400+ RPD)
  *
  * [원칙]
- * - 매 턴 대화는 Qwen3/Cerebras (한도 큰 모델)
- * - Gemini는 이벤트/위기에만 (임팩트에 집중)
+ * - 상담 = Gemini Flash 메인 (한국어 감정 표현 품질 우선)
+ * - 라운지 = Groq Qwen3 메인 (한도 절약)
  * - Preview 대신 Stable 모델 사용 (rate limit 넉넉)
  */
 
@@ -39,9 +40,9 @@ export type ModelTier = 'haiku' | 'sonnet' | 'opus';
 /** 프로바이더별 모델 매핑 */
 const PROVIDER_MODELS: Record<Provider, Record<ModelTier, string>> = {
   gemini: {
-    haiku: 'gemini-2.5-flash-lite',
-    sonnet: 'gemini-2.5-flash-lite',
-    opus: 'gemini-2.5-flash-lite',    // 🆕 v24: Stable 모델 통일 (무료 한도 최대)
+    haiku: 'gemini-2.5-flash-lite',               // 라운지/상태분석 폴백
+    sonnet: 'gemini-3.1-flash-lite-preview',       // 🆕 v25: 상담 메인 (카톡 엑스레이와 동일)
+    opus: 'gemini-3.1-flash-lite-preview',         // 상담 위기 대응
   },
   groq: {
     haiku: 'llama-3.1-8b-instant',
@@ -50,7 +51,7 @@ const PROVIDER_MODELS: Record<Provider, Record<ModelTier, string>> = {
   },
   cerebras: {
     haiku: 'llama-3.1-8b',          // 16bit 고정밀 (상태분석/검증용)
-    sonnet: 'llama-3.1-70b',        // 70B (메인 응답 폴백)
+    sonnet: 'llama-3.1-70b',        // 70B (상담/라운지 최종 폴백)
     opus: 'llama-3.1-70b',          // 70B (최후 폴백)
   },
 };
@@ -207,7 +208,7 @@ async function cerebrasGenerate(
   ];
 
   const response = await cerebras.chat.completions.create({
-    model: PROVIDER_MODELS.cerebras.haiku,
+    model: PROVIDER_MODELS.cerebras[_tier],
     messages: cerebrasMessages,
     max_tokens: maxTokens,
     temperature: TEMPERATURE[_tier],
@@ -232,7 +233,7 @@ async function* cerebrasStream(
   ];
 
   const stream = await cerebras.chat.completions.create({
-    model: PROVIDER_MODELS.cerebras.haiku,
+    model: PROVIDER_MODELS.cerebras[_tier],
     messages: cerebrasMessages,
     max_tokens: maxTokens,
     temperature: TEMPERATURE[_tier],
@@ -292,7 +293,17 @@ export async function* streamWithProvider(
   }
 }
 
-/** 캐스케이드 호출 — 4단계 폴백 체인 */
+/** 🆕 v31: 타임아웃 헬퍼 — Promise.race로 최대 대기시간 제한 */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`[Timeout] ${label} ${ms}ms 초과`)), ms)
+    ),
+  ]);
+}
+
+/** 캐스케이드 호출 — 4단계 폴백 체인 (🆕 v31: 8초 타임아웃) */
 export async function generateWithCascade(
   chain: { provider: Provider; tier: ModelTier; modelOverride?: string }[],
   systemPrompt: string,
@@ -301,10 +312,18 @@ export async function generateWithCascade(
 ): Promise<{ text: string; usedProvider: Provider; usedTier: ModelTier }> {
   for (const { provider, tier, modelOverride } of chain) {
     const limit = checkProviderRateLimit(provider);
-    if (!limit.allowed) continue;
+    if (!limit.allowed) {
+      console.log(`[ProviderRegistry] ⏭️ ${provider}/${tier} rate limit → 즉시 스킵`);
+      continue;
+    }
 
     try {
-      const text = await generateWithProvider(provider, systemPrompt, messages, tier, maxTokens, modelOverride);
+      // 🆕 v31: 8초 타임아웃 — 먹통 프로바이더 즉시 폴백
+      const text = await withTimeout(
+        generateWithProvider(provider, systemPrompt, messages, tier, maxTokens, modelOverride),
+        8000,
+        `${provider}/${tier}`
+      );
       return { text, usedProvider: provider, usedTier: tier };
     } catch (err: any) {
       if (err?.status === 429 || err?.code === 429) {

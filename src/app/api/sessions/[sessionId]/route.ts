@@ -15,7 +15,7 @@ export async function GET(
 
   const { data: session, error } = await supabase
     .from('counseling_sessions')
-    .select('id, status, session_summary, current_phase_v2, locked_scenario, emotion_baseline, turn_count')
+    .select('id, status, session_summary, current_phase_v2, locked_scenario, emotion_baseline, turn_count, situation_read, situation_read_history, luna_thought_history')
     .eq('id', sessionId)
     .eq('user_id', user.id)
     .single();

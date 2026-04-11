@@ -12,8 +12,8 @@ export const MS_PER_CHAR = 20;
 /** 최대 딜레이 (ms) */
 export const MAX_DELAY_MS = 3000;
 
-/** 최소 딜레이 (ms) */
-export const MIN_DELAY_MS = 500;
+/** 최소 딜레이 (ms) — v31: 500→100ms (TTFB 최적화) */
+export const MIN_DELAY_MS = 100;
 
 /**
  * AI 응답 텍스트 길이에 따른 타이핑 딜레이 계산

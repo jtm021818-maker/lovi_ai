@@ -1,0 +1,2 @@
+﻿src/app/(app)/settings/page.tsx(125,35): error TS7006: Parameter 'res' implicitly has an 'any' type.
+src/app/(app)/settings/page.tsx(136,16): error TS7006: Parameter 'result' implicitly has an 'any' type.

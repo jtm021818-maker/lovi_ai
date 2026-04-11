@@ -58,63 +58,65 @@ export async function* streamMessage(
   yield* streamWithCascade(cascade, systemPrompt, messages, maxTokens);
 }
 
-/** 구조화된 상태 분석 — Groq 8B 1순위 (14,400 RPD) */
+/** 구조화된 상태 분석 — v33 (H2): 프롬프트 조건부 분리로 입력 토큰 ~40-60% 절감 */
 export async function analyzeStateWithHaiku(
   userMessage: string,
   recentMessages: string[],
-  context: string
+  context: string,
+  /** 🆕 v33: 시나리오 힌트 — 해당 시나리오 전용 필드만 포함 */
+  scenarioHint?: string
 ): Promise<string> {
-  const systemPrompt = `You are a Korean relationship counseling state analysis expert. Analyze the user's message and respond ONLY in the JSON format below.
+  // ===== 기본 프롬프트 (~1,200 토큰, 항상 포함) =====
+  let systemPrompt = `You are a Korean relationship counseling state analysis expert. Analyze the user's message and respond ONLY in JSON.
 
-**IMPORTANT: Use ONLY the exact uppercase strings listed below for all values.**
+**Required fields (always include):**
+- emotionScore: integer -5 to +5
+- emotionReason: Korean 1 sentence max 30 chars explaining the score
+- cognitiveDistortions: array. Values: "MIND_READING","CATASTROPHIZING","PERSONALIZATION","ALL_OR_NOTHING","OVERGENERALIZATION","EMOTIONAL_REASONING","SHOULD_STATEMENTS","LABELING" (empty if none)
+- attachmentType: "ANXIOUS","AVOIDANT","SECURE","UNKNOWN"
+- horsemenDetected: array. Values: "CRITICISM","CONTEMPT","DEFENSIVENESS","STONEWALLING" (empty if none)
+- isAmbivalent: boolean
+- isSuppressive: boolean
+- primaryIntent: "VENTING","STORYTELLING","SEEKING_VALIDATION","SEEKING_ADVICE","EXPRESSING_AMBIVALENCE","INSIGHT_EXPRESSION","RESISTANCE","MINIMAL_RESPONSE"
+- secondaryIntent: same as primaryIntent or null
+- emotionalIntensity: "low","medium","high","crisis"
+- relationshipScenario: "READ_AND_IGNORED","GHOSTING","LONG_DISTANCE","JEALOUSY","INFIDELITY","BREAKUP_CONTEMPLATION","BOREDOM","GENERAL"
+  Scenario detection hints:
+  READ_AND_IGNORED: 읽씹/안읽씹/톡씹/답장없/답안옴/확인만/읽고무시/단답/대충답
+  GHOSTING: 잠수/고스팅/연락두절/차단/블락/사라짐/감감무소식
+  LONG_DISTANCE: 장거리/해외연애/군대연애/유학
+  JEALOUSY: 질투/집착/의심/여사친/남사친/폰검사/통제
+  INFIDELITY: 바람/외도/불륜/양다리/배신
+  BREAKUP_CONTEMPLATION: 이별/헤어지자/끝내고싶/전남친/전여친
+  BOREDOM: 권태기/설레지않음/감정식음/친구같은
+- detectedEmotions: array of 1-3 Korean emotion words. e.g. ["서운함","불안","화남"]
+- eftLayer: "primary_adaptive","primary_maladaptive","secondary_reactive","instrumental"
+- primaryDeepEmotion: Korean 1 phrase max 15 chars. What the user REALLY feels underneath. null if unclear.
+- suppressionSignals: array of Korean phrases indicating suppression. e.g. ["괜찮아","별거 아닌데"]. Empty if none.
+- attachmentFear: "abandonment","rejection","inadequacy","loss_of_control" or null
+- emotionEvidence: array of 1-2 SHORT Korean quotes (max 20 chars each) as evidence.
+- solutionReadiness: "NOT_READY"(venting/processing),"EXPLORING"(recognizing patterns),"READY"(asking for advice)`;
 
-Analysis criteria:
-- emotionScore: integer from -5 (very negative) to +5 (very positive)
-- emotionReason: A brief Korean sentence explaining why this emotion score was given, based on the user's words. Example: "읽씹당한 후 불안과 서운함이 강하게 느껴졌어요" (MUST be in Korean, 1 sentence, max 30 chars)
-- cognitiveDistortions: array. Use ONLY: "MIND_READING", "CATASTROPHIZING", "PERSONALIZATION", "ALL_OR_NOTHING", "OVERGENERALIZATION", "EMOTIONAL_REASONING", "SHOULD_STATEMENTS", "LABELING" (empty array if none)
-- attachmentType: Use ONLY: "ANXIOUS", "AVOIDANT", "SECURE", "UNKNOWN"
-- horsemenDetected: array. Use ONLY: "CRITICISM", "CONTEMPT", "DEFENSIVENESS", "STONEWALLING" (empty array if none)
-- isAmbivalent: true or false
-- isSuppressive: true or false
-- primaryIntent: The user's primary communicative intent. Use ONLY: "VENTING" (emotional outpouring, ㅠㅠ, 미칠것같아), "STORYTELLING" (describing situation/events), "SEEKING_VALIDATION" (asking for confirmation: 맞지?, 정상이지?), "SEEKING_ADVICE" (asking what to do: 어떻게 해?), "EXPRESSING_AMBIVALENCE" (mixed feelings: ~인데 ~도), "INSIGHT_EXPRESSION" (realization: 아..., 그러네, 사실은), "RESISTANCE" (minimizing/deflecting: 별거 아닌데, 그건 아니고), "MINIMAL_RESPONSE" (very short: 응, 몰라, 그래)
-- secondaryIntent: Optional second intent, same values as primaryIntent. null if not applicable.
-- emotionalIntensity: How intense the emotion is. Use ONLY: "low", "medium", "high", "crisis"
-- relationshipScenario: The specific dating/relationship scenario. Use ONLY:
-  "READ_AND_IGNORED" — 읽씹/안읽씹/톡씹/문자씹/카톡씹/씹혔/씹힘/답장없음/답안옴/답안와/확인만하고/읽고무시/봤는데답없/1안사라짐/1그대로/단답/대충답/보냈는데답없/DM씹/메시지무시. 핵심: 메시지를 보냈는데 상대가 읽고 답하지 않거나 아예 안 읽는 상황.
-  "GHOSTING" — 잠수/잠수타다/고스팅/연락두절/연락끊김/사라짐/증발/잠적/행방불명/차단/블락/친삭/감감무소식/며칠째연락없/소식끊김. 핵심: 상대가 갑자기 장기간 완전히 연락이 끊긴 상황 (읽씹보다 더 긴 기간, 완전 소멸).
-  "LONG_DISTANCE" — 장거리연애/해외연애/군대연애/유학/워홀/파견/다른도시/다른나라/시차/자주못만남/한달에한번/군인남친/군인여친/입대/면회/위문편지. 핵심: 물리적 거리로 인한 고충.
-  "JEALOUSY" — 질투/집착/의심/의처증/의부증/여사친/남사친/이성친구/다른여자/다른남자/좋아요감시/인스타감시/팔로우감시/폰검사/카톡검사/핸드폰확인/통화기록확인/소유욕/독점욕/통제/간섭/위치추적. 핵심: 상대에 대한 질투심이나 집착/통제 행동.
-  "INFIDELITY" — 바람/바람피다/외도/불륜/양다리/투타임/이중연애/몰래만남/비밀연락/다른사람만남/배신/속임/내연녀/내연남/바람증거/어장관리. 핵심: 상대 또는 본인의 외도/바람 상황.
-  "BREAKUP_CONTEMPLATION" — 이별/이별고민/이별통보/헤어지자/헤어질까/헤어지고싶/끝내고싶/끝내야하나/관계정리/더이상못하겠/그만하고싶/차였/차버리/쿨이별/합의이별/미련/복합/재회/전남친/전여친. 핵심: 이별을 고민하거나 이별 직후 상황.
-  "BOREDOM" — 권태기/매너리즘/설레지않음/설렘없음/감정식음/정만남음/사랑인지정인지/지루/심드렁/시큰둥/무미건조/친구같은/가족같은/변화없음/항상똑같/스킨십줄음/스킨십없음/끌리지않음/매력없음. 핵심: 관계의 열정이 식고 권태로운 상황.
-  "GENERAL" — none of the above specific scenarios
+  // ===== READ_AND_IGNORED 전용 필드 (~400 토큰, 조건부) =====
+  if (scenarioHint === 'READ_AND_IGNORED') {
+    systemPrompt += `
 
-**🆕 READ_AND_IGNORED 진단 축 (relationshipScenario가 READ_AND_IGNORED일 때만 추출, 아니면 null):**
-- readIgnoredDuration: How long since the message was ignored. Use ONLY: "HOURS" (<6h), "SAME_DAY" (6-24h), "DAYS_2_3" (2-3 days), "DAYS_4_7" (4 days to 1 week), "OVER_WEEK" (more than 1 week). null if unknown. (예: "금요일에 보냈는데" → calculate days from conversation context)
-- readIgnoredStage: Relationship stage. Use ONLY: "SOME" (썸/소개팅), "EARLY_DATING" (1-3 months), "ESTABLISHED" (3+ months), "POST_BREAKUP" (after breakup), "RECONCILIATION" (trying to get back). null if unknown.
-- readIgnoredReadType: Type of being ignored. Use ONLY: "READ_NO_REPLY" (read but no reply), "UNREAD_IGNORED" (not even read), "PARTIAL_REPLY" (short/dismissive reply), "SELECTIVE" (ignores specific topics), "DELAYED_READ" (read very late). null if unknown.
-- readIgnoredPattern: Frequency pattern. Use ONLY: "FIRST_TIME", "OCCASIONAL", "FREQUENT", "ALWAYS", "WORSENING". null if unknown.
+**READ_AND_IGNORED extra fields (only when scenario=READ_AND_IGNORED):**
+- readIgnoredDuration: "HOURS"(<6h),"SAME_DAY"(6-24h),"DAYS_2_3","DAYS_4_7","OVER_WEEK". null if unknown.
+- readIgnoredStage: "SOME","EARLY_DATING"(1-3mo),"ESTABLISHED"(3+mo),"POST_BREAKUP","RECONCILIATION". null if unknown.
+- readIgnoredReadType: "READ_NO_REPLY","UNREAD_IGNORED","PARTIAL_REPLY","SELECTIVE","DELAYED_READ". null if unknown.
+- readIgnoredPattern: "FIRST_TIME","OCCASIONAL","FREQUENT","ALWAYS","WORSENING". null if unknown.`;
+  }
 
-**🆕 v12: 관계진단 범용 축 (ALL scenarios, not just READ_AND_IGNORED):**
-- conflictStyle: How the user typically reacts in this conflict. Use ONLY: "PURSUE" (keeps reaching out, sends more messages, 또 보냈어/연달아), "WITHDRAW" (pulls back, waits silently, 나도 안 보냄/기다려), "CONFRONT" (wants to talk directly, 얘기하자/만나서), "AVOID" (ignores the issue, 모른 척/안 꺼냄). null if unknown.
-- relationshipStrength: How strong the relationship is normally (not during this crisis). Use ONLY: "STRONG" (normally great, this is unusual), "MODERATE" (up and down), "WEAK" (already struggling), "UNCERTAIN" (can't tell). null if unknown.
-- changeReadiness: What the user wants RIGHT NOW. Use ONLY: "READY_TO_ACT" (wants specific action: 뭐라고 보내?/어떻게 해?), "NEEDS_PROCESSING" (still confused: 왜 이러는지 모르겠어), "WANTS_VALIDATION" (wants reassurance: 내가 이상한거야?/이게 정상이야?), "CONSIDERING_EXIT" (thinking of ending: 끝내야하나/헤어질까). null if unknown.
-- partnerContext: Why is the partner behaving this way? Use ONLY: "LIKELY_BUSY" (partner seems busy: 시험/출장/야근), "LIKELY_UPSET" (partner seems upset: after a fight), "LIKELY_DISTANCING" (partner is deliberately distancing), "UNKNOWN" (no clue why). null if unknown.
-- previousAttempts: What has the user already tried? Use ONLY: "SENT_MORE" (sent additional messages), "WAITED" (been waiting), "CHECKED_SNS" (checked their SNS/인스타), "ASKED_FRIENDS" (asked friends), "NOTHING" (hasn't done anything yet). null if unknown.
+  // ===== 관계진단 범용 축 (~300 토큰, 항상 포함) =====
+  systemPrompt += `
 
-**🆕 v19: 감정 신호 추출 (EFT 기반 — 매 턴 필수 추출)**
-- detectedEmotions: array of Korean emotion words/phrases detected in the message. Examples: ["서운함", "불안", "화남", "외로움", "두려움", "수치심", "죄책감", "답답함"]. Extract 1-3 core emotions. Empty array if purely factual.
-- eftLayer: The EFT emotion layer. Use ONLY: "primary_adaptive" (healthy direct response — genuine sadness, appropriate anger), "primary_maladaptive" (old trauma-based — core shame, abandonment fear, worthlessness), "secondary_reactive" (emotion about emotion — anger covering hurt, guilt about anger), "instrumental" (strategic display — tears to control, anger to intimidate)
-- primaryDeepEmotion: The PRIMARY emotion beneath the surface, in Korean, 1 phrase max 15 chars. What the user REALLY feels underneath. Examples: "버림받을까 봐 두려움", "무시당한 서운함", "내가 부족한 건 아닌지 불안", "관계가 끝날까 봐 공포". null if unclear.
-- suppressionSignals: array of Korean phrases in the message that indicate emotion suppression/minimization. Examples: ["괜찮아", "별거 아닌데", "상관없어", "그냥", "뭐 어쩔 수 없지", "신경 안 써"]. Empty array if none.
-- attachmentFear: The core attachment fear driving this message. Use ONLY: "abandonment" (fear of being left/ignored), "rejection" (fear of not being accepted), "inadequacy" (fear of not being enough), "loss_of_control" (fear of losing autonomy). null if not applicable.
-- emotionEvidence: array of 1-2 SHORT direct quotes from the user's message (in Korean) that are the strongest evidence for the detected deep emotion. Max 20 chars each. Example: ["읽씹당하니까 너무 서운해", "나한테 관심 없는 거 같아"]. Empty array if no clear evidence.
-
-**🆕 v20: 해결책 준비도 (5A Framework — Ask→Advise→Assess→Assist→Arrange)**
-- solutionReadiness: How ready the user is for advice/solutions RIGHT NOW. Use ONLY:
-  "NOT_READY" — Still venting, telling story, processing emotions. Needs empathy, not advice. Signs: long emotional outpouring, no questions about what to do, "ㅠㅠ", just started talking.
-  "EXPLORING" — Starting to recognize patterns, showing some insight. Signs: "왜 이러는 걸까", "나도 문제가 있나", self-reflection, noticing patterns.
-  "READY" — Explicitly asking for advice or showing action-readiness. Signs: "어떻게 해?", "뭐라고 보내?", "이제 좀 알겠어, 근데 어떻게", clear desire for next steps.
+**Relationship diagnosis fields (all scenarios):**
+- conflictStyle: "PURSUE"(keeps reaching out),"WITHDRAW"(pulls back),"CONFRONT"(wants to talk),"AVOID"(ignores). null if unknown.
+- relationshipStrength: "STRONG","MODERATE","WEAK","UNCERTAIN". null if unknown.
+- changeReadiness: "READY_TO_ACT","NEEDS_PROCESSING","WANTS_VALIDATION","CONSIDERING_EXIT". null if unknown.
+- partnerContext: "LIKELY_BUSY","LIKELY_UPSET","LIKELY_DISTANCING","UNKNOWN". null if unknown.
+- previousAttempts: "SENT_MORE","WAITED","CHECKED_SNS","ASKED_FRIENDS","NOTHING". null if unknown.
 
 Return pure JSON only, no code blocks.`;
 

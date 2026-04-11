@@ -249,31 +249,31 @@ export function createEmptyProfile(): UserMemoryProfile {
 // ─── 메모리 프로필 → 프롬프트 텍스트 변환 ────────────────
 
 export function formatMemoryForPrompt(memory: UserMemoryProfile): string {
-  if (!memory || memory.totalSessions === 0) return '';
+  if (!memory || !memory.totalSessions) return '';
 
   const parts: string[] = ['[이 유저에 대해 알고 있는 것]'];
 
-  // 기본 정보
+  // 기본 정보 — 안전한 접근 (빈 객체 방어)
   const info: string[] = [];
-  if (memory.basicInfo.age) info.push(memory.basicInfo.age);
-  if (memory.basicInfo.occupation) info.push(memory.basicInfo.occupation);
-  if (memory.relationshipContext.status) info.push(memory.relationshipContext.status);
-  if (memory.relationshipContext.duration) info.push(`사귄 지 ${memory.relationshipContext.duration}`);
+  if (memory.basicInfo?.age) info.push(memory.basicInfo.age);
+  if (memory.basicInfo?.occupation) info.push(memory.basicInfo.occupation);
+  if (memory.relationshipContext?.status) info.push(memory.relationshipContext.status);
+  if (memory.relationshipContext?.duration) info.push(`사귄 지 ${memory.relationshipContext.duration}`);
   if (info.length > 0) parts.push(`- 기본: ${info.join(', ')}`);
 
   // 주요 고민
-  if (memory.relationshipContext.mainIssues.length > 0) {
+  if (memory.relationshipContext?.mainIssues?.length > 0) {
     parts.push(`- 주요 고민: ${memory.relationshipContext.mainIssues.join(', ')}`);
   }
 
   // 감정 패턴
-  if (memory.emotionPatterns.dominantEmotions.length > 0) {
+  if (memory.emotionPatterns?.dominantEmotions?.length > 0) {
     parts.push(`- 감정 패턴: ${memory.emotionPatterns.dominantEmotions.join(', ')}`);
   }
-  if (memory.emotionPatterns.triggers.length > 0) {
+  if (memory.emotionPatterns?.triggers?.length > 0) {
     parts.push(`- 감정 트리거: ${memory.emotionPatterns.triggers.join(', ')}`);
   }
-  if (memory.emotionPatterns.emotionTrend) {
+  if (memory.emotionPatterns?.emotionTrend) {
     const trendLabel = memory.emotionPatterns.emotionTrend === 'improving' ? '개선 추세'
       : memory.emotionPatterns.emotionTrend === 'declining' ? '악화 추세 (주의)'
       : '안정적';
@@ -281,15 +281,15 @@ export function formatMemoryForPrompt(memory: UserMemoryProfile): string {
   }
 
   // 소통 선호
-  if (memory.communicationPrefs.whatWorks.length > 0) {
+  if (memory.communicationPrefs?.whatWorks?.length > 0) {
     parts.push(`- 효과적인 접근: ${memory.communicationPrefs.whatWorks.join(', ')}`);
   }
-  if (memory.communicationPrefs.whatDoesnt.length > 0) {
+  if (memory.communicationPrefs?.whatDoesnt?.length > 0) {
     parts.push(`- 피해야 할 것: ${memory.communicationPrefs.whatDoesnt.join(', ')}`);
   }
 
   // 최근 세션 (최근 3개만 프롬프트에)
-  const recentHighlights = memory.sessionHighlights.slice(-3);
+  const recentHighlights = memory.sessionHighlights?.slice(-3) ?? [];
   if (recentHighlights.length > 0) {
     parts.push('- 최근 상담:');
     for (const h of recentHighlights) {

@@ -23,6 +23,19 @@ import {
   TarotInsightData,
   StateResult,
   RelationshipScenario,
+  LunaStoryData,
+  LunaStrategyData,
+  LunaStrategyAction,
+  // 🆕 v35: 모드별 SOLVE 데이터
+  ToneSelectData,
+  DraftWorkshopData,
+  RoleplayFeedbackData,
+  PanelReportData,
+  IdeaRefineData,
+  // 🆕 v39: SOLVE 마무리 + EMPOWER 다독이기
+  ActionPlanData,
+  WarmWrapData,
+  StrategyMode,
 } from '@/types/engine.types';
 import { drawCards, getSingleSpread, getThreeCardSpread, getLoveSpread, getUnrequitedSpread, getReconnectionSpread, getPaceSpread, getAvoidantSpread, getYesNoSpread } from '@/engines/tarot';
 // spread-recommender는 pipeline에서 자동 선택용으로 사용
@@ -81,6 +94,172 @@ export function createEmotionThermometer(emotionScore: number = 0, emotionReason
   return {
     type: 'EMOTION_THERMOMETER',
     phase: 'HOOK',
+    data: data as unknown as Record<string, unknown>,
+  };
+}
+
+/**
+ * 🦊 마음 읽기 이벤트 생성 (HOOK 구간 — 감정온도계 교체)
+ *
+ * 루나가 유저 이야기를 듣고 핵심 감정을 추측 → 카드로 제시
+ * "너 지금 이런 거 아니야?" → 맞아/아니 선택
+ */
+export function createMindReading(
+  surfaceEmotion: string,
+  deepGuess: string,
+  emotionScore: number,
+  _emotionReason?: string,
+): PhaseEvent {
+  // 🆕 GTC 모델: Tentative Guess (가설형 문장 — 단정이 아닌 탐색)
+  const fullText = deepGuess
+    ? `혹시... ${surfaceEmotion}보다 사실은 ${deepGuess} 느낌도 있어?`
+    : `지금 제일 힘든 게 ${surfaceEmotion}인 건지... 아니면 다른 게 있어?`;
+
+  // 🆕 GTC: 허락 질문 스타일 오프너 (Permission Question)
+  const naturalOpeners = [
+    '야 잠깐, 나 느낌 오는 게 하나 있는데',
+    '근데 있잖아, 나 듣다 보니까 뭔가 느껴지는 게 있어',
+    '잠깐만... 나 물어볼 게 있는데, 괜찮아?',
+    '야 나 솔직한 느낌 말해도 돼?',
+  ];
+  const lunaMessage = naturalOpeners[Math.floor(Math.random() * naturalOpeners.length)];
+
+  return {
+    type: 'MIND_READING' as PhaseEventType,
+    phase: 'HOOK',
+    data: {
+      surfaceEmotion,
+      deepGuess,
+      fullText,
+      lunaMessage,
+      lunaConfidence: Math.min(1, Math.abs(emotionScore) * 0.15 + 0.3),
+      aiAssessedScore: Math.round(Math.max(-5, Math.min(5, emotionScore))),
+      // 🆕 GTC: 3선택지 (기존 2 → 3)
+      choices: [
+        { label: '어 맞아! 그런 것 같아', value: 'confirm', emoji: '💡' },
+        { label: '음 좀 다른 것 같은데...', value: 'different', emoji: '🤔' },
+        { label: '나도 잘 모르겠어', value: 'unsure', emoji: '😶' },
+      ],
+    } as unknown as Record<string, unknown>,
+  };
+}
+
+/**
+ * 🆕 ACE v4: 루나의 이야기 이벤트 생성 (EMOTION_MIRROR 대체)
+ *
+ * "친한 누나가 자기 이야기 꺼내는 순간"
+ * - Self-Disclosure (자기개방) → 연대감 형성 + 보편성 인식
+ * - 클리프행어 → 호기심 유발 + BRIDGE 자연 전환
+ * - 3선택지: 뭔데?(curious) / 나도비슷해(relate) / 좀다른데(different)
+ *
+ * 심리학 근거:
+ * - Self-Disclosure 상호성 (jaenung.net, arxiv 2025)
+ * - 보편성 인식 → 수치심/자책 감소 (mindthos.com)
+ * - 모델링 효과 (상담심리학)
+ * - Vulnerability Hangover 방지 (psychologytoday.com)
+ */
+export function createLunaStory(
+  opener: string,
+  situation: string,
+  innerThought: string,
+  cliffhanger: string,
+): PhaseEvent {
+  // 폴백 — AI가 빈 값 줬을 때
+  const safeOpener = opener || '야 근데 있잖아... 나도 비슷한 거 겪어본 적 있거든';
+  const safeSituation = situation || '나도 그때 진짜 마음이 무거웠어';
+  const safeInner = innerThought || "'나만 이런 건가?' 그 생각이 계속 들더라고";
+  const safeCliff = cliffhanger || '근데 나중에 알게 됐거든? 그게 사실...';
+
+  const data: LunaStoryData = {
+    opener: safeOpener,
+    situation: safeSituation,
+    innerThought: safeInner,
+    cliffhanger: safeCliff,
+    choices: [
+      { label: '뭔데..?', emoji: '👀', value: 'curious' },
+      { label: '나도 비슷해', emoji: '💭', value: 'relate' },
+      { label: '글쎄 난 좀 다른 것 같아', emoji: '🤔', value: 'different' },
+    ],
+  };
+
+  return {
+    type: 'LUNA_STORY' as PhaseEventType,
+    phase: 'MIRROR',
+    data: data as unknown as Record<string, unknown>,
+  };
+}
+
+/**
+ * 🆕 ACE v4: 루나의 작전회의 이벤트 생성 (BRIDGE→SOLVE 전환)
+ *
+ * "친한 누나가 관점 전환 끝나고 작전 짜자고 부르는 순간"
+ *
+ * 핵심: 추상적 성격(쿨/솔직/과감) 대신 "클릭하면 뭘 하는지" 명확한 액션 카드.
+ * - 💬 메시지 초안 → SOLVE에서 카톡 버전 A/B/C 생성
+ * - 🎭 상황 롤플레이 → 루나가 상대 역할
+ * - 🍿 연참 모드 → 객관적/재미있는 평가
+ *
+ * 심리학:
+ * - Reactance Theory: "이렇게 해" 대신 "이거 해볼까?" 선택권 부여
+ * - Self-Determination: 유저가 직접 선택 → 자기결정감 ↑
+ * - Behavioral Rehearsal (CBT): 롤플레이로 실전 전 연습
+ * - Choice Architecture: 3개 옵션 — 결정 피로 최소화
+ */
+export function createLunaStrategy(
+  opener: string,
+  situationSummary: string,
+  draftHook: string,
+  roleplayHook: string,
+  panelHook: string,
+): PhaseEvent {
+  // 폴백 — AI가 빈 값 줬을 때
+  const safeOpener = opener || '자 이제 작전 짜자 🔥';
+  const safeSituation = situationSummary || '지금 상황 보면, 뭔가 액션이 필요할 거 같거든';
+  const safeDraftHook = draftHook || '걔한테 보낼 카톡 같이 만들어볼까?';
+  const safeRoleplayHook = roleplayHook || '내가 걔 역할 해줄게, 한번 연습해봐';
+  const safePanelHook = panelHook || '객관적으로 한번 정리해줄까?';
+
+  // 3가지 액션 카드 — 클릭하면 뭘 하는지 명확하게
+  const actions: LunaStrategyAction[] = [
+    {
+      type: 'message_draft',
+      emoji: '💬',
+      title: '메시지 초안 같이 짜기',
+      description: safeDraftHook,
+      preview: '카톡 버전 A/B/C 만들어줄게',
+      lunaComment: '뭐라고 보낼지 막막하면 이거. 같이 만들어보자',
+    },
+    {
+      type: 'roleplay',
+      emoji: '🎭',
+      title: '상황 롤플레이',
+      description: safeRoleplayHook,
+      preview: '내가 상대 역할 해줄게, 실전처럼 연습',
+      lunaComment: '실제로 만나서 얘기할 거면 미리 연습하는 게 좋지',
+    },
+    {
+      type: 'panel',
+      emoji: '🍿',
+      title: '연참 모드 (객관적 평가)',
+      description: safePanelHook,
+      preview: '한 발 떨어져서 너의 상황 정리 + 평가',
+      lunaComment: '너무 가까워서 안 보일 때 이거. 객관적 시각으로',
+    },
+  ];
+
+  const data: LunaStrategyData = {
+    opener: safeOpener,
+    situationSummary: safeSituation,
+    actions,
+    customOption: {
+      label: '다른 거 생각 중',
+      emoji: '🤔',
+    },
+  };
+
+  return {
+    type: 'LUNA_STRATEGY' as PhaseEventType,
+    phase: 'BRIDGE',
     data: data as unknown as Record<string, unknown>,
   };
 }
@@ -229,12 +408,19 @@ export function createEmotionMirror(
 
   const pair = (scenario && scenarioEmotions[scenario]) ?? defaultPair;
 
+  // 🆕 v4 ACE: 자연스러운 감정 거울 — 분석이 아니라 대화 느낌
+  const mirrorOpeners = [
+    '야 근데 나 좀 느껴지는 게 있어... 이거 맞는지 봐봐',
+    '잠깐, 나 듣다 보니까 이런 느낌인 거 같은데',
+    '근데 있잖아... 겉으로는 이런 거 같은데 사실은 좀 다른 거 같아',
+    '내가 들은 거 정리해보면... 이런 느낌인 거 같거든',
+  ];
   const data: EmotionMirrorData = {
     surfaceEmotion: pair.surface,
     surfaceEmoji: pair.surfaceEmoji,
     deepEmotion: pair.deep,
     deepEmoji: pair.deepEmoji,
-    lunaMessage: '이거 맞아? 아니면 다른 느낌이야? 🦊',
+    lunaMessage: mirrorOpeners[Math.floor(Math.random() * mirrorOpeners.length)],
     choices: [
       { label: '맞아 그런 것 같아', value: 'confirm' },
       { label: '음 좀 다른데', value: 'different' },
@@ -807,6 +993,222 @@ export function createTarotDraw(
   return {
     type: 'TAROT_DRAW',
     phase: spreadType === 'single' ? 'HOOK' : 'BRIDGE',
+    data: data as unknown as Record<string, unknown>,
+  };
+}
+
+// ==============================================================
+// 🆕 v35: 모드별 BRIDGE 이벤트 생성 함수 5개
+// ==============================================================
+
+/**
+ * 💬 TONE_SELECT — 메시지 초안 모드 Turn 1: 톤 3선택지
+ *
+ * 유저가 "메시지 초안 같이 짜기"를 고른 후, 어떤 톤으로 보낼지 물어봄.
+ * AI가 [TONE_SELECT:부드럽게|솔직하게|단호하게] 태그를 출력하면 pipeline이 이 함수로 이벤트 생성.
+ */
+export function createToneSelect(
+  softLabel: string,
+  honestLabel: string,
+  directLabel: string,
+): PhaseEvent {
+  const data: ToneSelectData = {
+    lunaMessage: '어떤 느낌으로 보내고 싶어?',
+    options: [
+      { label: softLabel || '부드럽게', sublabel: '편하게 시작', emoji: '🌸', value: 'soft' },
+      { label: honestLabel || '솔직하게', sublabel: '직접 전달', emoji: '💎', value: 'honest' },
+      { label: directLabel || '단호하게', sublabel: '깔끔하게', emoji: '🔥', value: 'direct' },
+    ],
+  };
+  return {
+    type: 'TONE_SELECT' as PhaseEventType,
+    phase: 'BRIDGE',
+    data: data as unknown as Record<string, unknown>,
+  };
+}
+
+/**
+ * 💬 DRAFT_WORKSHOP — 메시지 초안 모드 Turn 2: 카톡 초안 A/B/C
+ *
+ * AI가 [DRAFT_CARD:A|톤|텍스트|의도] 태그를 3번 출력하면 pipeline이 이 함수로 이벤트 생성.
+ */
+export function createDraftWorkshop(
+  drafts: Array<{ version: 'A' | 'B' | 'C'; tone: string; text: string; intent: string }>,
+): PhaseEvent {
+  const data: DraftWorkshopData = {
+    lunaMessage: '자 이 중에 끌리는 거 있어? 수정하고 싶으면 말해줘',
+    drafts,
+  };
+  return {
+    type: 'DRAFT_WORKSHOP' as PhaseEventType,
+    phase: 'BRIDGE',
+    data: data as unknown as Record<string, unknown>,
+  };
+}
+
+/**
+ * 🎭 ROLEPLAY_FEEDBACK — 롤플레이 모드 마무리: 피드백 카드
+ *
+ * 롤플레이 2~4라운드 후, 루나가 캐릭터에서 빠져나와 피드백을 주는 시점.
+ * AI가 [ROLEPLAY_FEEDBACK:잘한점|조심할점|팁] 태그를 출력하면 pipeline이 이 함수로 이벤트 생성.
+ */
+export function createRoleplayFeedback(
+  strengthsRaw: string,
+  improvementsRaw: string,
+  tip: string,
+): PhaseEvent {
+  const data: RoleplayFeedbackData = {
+    strengths: strengthsRaw.split(',').map(s => s.trim()).filter(Boolean),
+    improvements: improvementsRaw.split(',').map(s => s.trim()).filter(Boolean),
+    tip: tip.trim(),
+    options: [
+      { label: '다시 해보기', emoji: '🔄', type: 'retry' },
+      { label: '충분해, 다음으로', emoji: '🦊', type: 'done' },
+    ],
+  };
+  return {
+    type: 'ROLEPLAY_FEEDBACK' as PhaseEventType,
+    phase: 'BRIDGE',
+    data: data as unknown as Record<string, unknown>,
+  };
+}
+
+/**
+ * 🍿 PANEL_REPORT — 연참 모드: 객관적 분석 리포트
+ *
+ * AI가 [PANEL_REPORT]...[/PANEL_REPORT] 블록을 출력하면 pipeline이 파싱 후 이 함수로 이벤트 생성.
+ */
+export function createPanelReport(
+  situationSummary: string,
+  strengths: string[],
+  cautions: string[],
+  lunaVerdict: string,
+): PhaseEvent {
+  // 기본 아이콘 자동 매핑
+  const strengthIcons = ['💪', '🧡', '✨', '🌟'];
+  const cautionIcons = ['📱', '😰', '⚠️', '🔔'];
+
+  const data: PanelReportData = {
+    situationSummary: situationSummary || '상황 파악 중',
+    strengths: strengths.map((text, i) => ({
+      icon: strengthIcons[i % strengthIcons.length],
+      text,
+    })),
+    cautions: cautions.map((text, i) => ({
+      icon: cautionIcons[i % cautionIcons.length],
+      text,
+    })),
+    lunaVerdict: lunaVerdict || '근데 결국 너 잘하고 있어 진짜',
+    options: [
+      { label: '더 자세히', emoji: '📖', value: 'detail' },
+      { label: '이제 액션 짜자', emoji: '🔥', value: 'action' },
+    ],
+  };
+  return {
+    type: 'PANEL_REPORT' as PhaseEventType,
+    phase: 'BRIDGE',
+    data: data as unknown as Record<string, unknown>,
+  };
+}
+
+/**
+ * 🤔 IDEA_REFINE — 커스텀 모드: 아이디어 전후 비교
+ *
+ * AI가 [IDEA_REFINE:원래|다듬은|이유] 태그를 출력하면 pipeline이 이 함수로 이벤트 생성.
+ */
+export function createIdeaRefine(
+  original: string,
+  refined: string,
+  reason: string,
+): PhaseEvent {
+  const data: IdeaRefineData = {
+    original: original.trim(),
+    refined: refined.trim(),
+    reason: reason.trim(),
+    options: [
+      { label: '이거로 해볼래', emoji: '✨', value: 'accept' },
+      { label: '더 다듬기', emoji: '✏️', value: 'more_refine' },
+    ],
+  };
+  return {
+    type: 'IDEA_REFINE' as PhaseEventType,
+    phase: 'BRIDGE',
+    data: data as unknown as Record<string, unknown>,
+  };
+}
+
+/**
+ * 🆕 v39: 🎯 ACTION_PLAN — 오늘의 작전 카드 (SOLVE 마무리)
+ *
+ * BRIDGE에서 모드별로 같이 만든 결과(카톡 초안/롤플 결과/연참 조언/유저 아이디어)를
+ * 한 장의 "오늘의 작전"으로 확정. 교과서적 솔루션 아님. "같이 짰어" 느낌.
+ *
+ * AI가 [ACTION_PLAN:모드|제목|핵심액션|공유결과|플랜B|타이밍|응원] 태그를 출력하면 생성.
+ */
+export function createActionPlan(
+  planType: StrategyMode | 'kakao_draft',
+  title: string,
+  coreAction: string,
+  sharedResult: string,
+  planB: string,
+  timingHint: string,
+  lunaCheer: string,
+): PhaseEvent {
+  // StrategyMode의 'message_draft' → 'kakao_draft' 매핑 (UI 친화)
+  const normalizedType: 'kakao_draft' | 'roleplay' | 'panel' | 'custom' =
+    planType === 'message_draft' ? 'kakao_draft'
+    : planType === 'kakao_draft' ? 'kakao_draft'
+    : planType === 'roleplay' ? 'roleplay'
+    : planType === 'panel' ? 'panel'
+    : 'custom';
+
+  const data: ActionPlanData = {
+    planType: normalizedType,
+    title: title.trim() || '오늘의 작전',
+    coreAction: coreAction.trim() || '같이 정한 거 해보기',
+    sharedResult: sharedResult.trim(),
+    planB: planB?.trim() || undefined,
+    timingHint: timingHint?.trim() || undefined,
+    lunaCheer: lunaCheer.trim() || '해보고 어땠는지 꼭 알려줘!',
+    options: [
+      { label: '좋아, 해볼래', emoji: '🔥', value: 'commit' },
+      { label: '조금만 수정', emoji: '✏️', value: 'tweak' },
+    ],
+  };
+  return {
+    type: 'ACTION_PLAN' as PhaseEventType,
+    phase: 'SOLVE',
+    data: data as unknown as Record<string, unknown>,
+  };
+}
+
+/**
+ * 🆕 v39: 💜 WARM_WRAP — 오늘의 마무리 카드 (EMPOWER)
+ *
+ * 학술 요약이 아니라 "언니가 동생 보내기 전 다독이는" 마무리.
+ * 강점 + 감정변화 + 다음 스텝 + 진심 한 마디.
+ *
+ * AI가 [WARM_WRAP:강점|감정변화|다음스텝|루나말] 태그를 출력하면 생성.
+ */
+export function createWarmWrap(
+  strengthFound: string,
+  emotionShift: string,
+  nextStep: string,
+  lunaMessage: string,
+): PhaseEvent {
+  const data: WarmWrapData = {
+    strengthFound: strengthFound.trim() || '끝까지 고민하는 그 진심',
+    emotionShift: emotionShift.trim() || '처음보다 마음이 좀 가벼워진 것 같지?',
+    nextStep: nextStep.trim() || '해보고 어떻게 됐는지 알려줘 — 진짜 궁금해',
+    lunaMessage: lunaMessage.trim() || '항상 여기 있을게 💜',
+    options: [
+      { label: '고마워 루나', emoji: '💜', value: 'thanks' },
+      { label: '또 올게', emoji: '🤗', value: 'revisit' },
+    ],
+  };
+  return {
+    type: 'WARM_WRAP' as PhaseEventType,
+    phase: 'EMPOWER',
     data: data as unknown as Record<string, unknown>,
   };
 }

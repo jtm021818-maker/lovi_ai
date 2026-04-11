@@ -5,6 +5,8 @@ import type { ChatMessage, StreamEvent } from '@/types/chat.types';
 import type { NudgeAction, StateResult, SuggestionMeta, SuggestionItem, PhaseEvent, ConversationPhaseV2 } from '@/types/engine.types';
 import type { PanelResponse } from '@/types/persona.types';
 import { MIN_DELAY_MS } from '@/lib/utils/typing-delay';
+import { calcTypingDelay, calcBubbleGapDelay } from '@/engines/human-like/adaptive-typing';
+import type { LunaEmotion } from '@/engines/human-like/luna-emotion-core';
 
 interface UseChatReturn {
   messages: ChatMessage[];
@@ -18,8 +20,28 @@ interface UseChatReturn {
   phaseEvents: PhaseEvent[];
   currentPhase: ConversationPhaseV2 | null;
   phaseProgress: number;
+  concernDepth: 'light' | 'medium' | 'deep' | null;
+  depthOverride: 'light' | 'medium' | 'deep' | null;
+  setDepthOverride: (d: 'light' | 'medium' | 'deep' | null) => void;
   sessionStatus: 'active' | 'completed' | 'crisis' | null;
   sessionSummary: string | null;
+  pendingEventLock: boolean;
+  lunaThinking: string;
+  understandingLevel: number;
+  // 🆕 v40: 루나 딥리서치 (Gemini Grounding) "진짜 고민 중" 상태
+  thinkingDeep: {
+    active: boolean;
+    phrases: string[];
+    keyword?: string;
+  } | null;
+  // 🆕 v41: 친밀도 레벨업 (축하 팝업용)
+  intimacyLevelUp: {
+    oldLevel: number;
+    newLevel: number;
+    newLevelName: string;
+  } | null;
+  /** 친밀도 레벨업 팝업을 닫음 */
+  dismissIntimacyLevelUp: () => void;
 }
 
 export function useChat(sessionId: string): UseChatReturn {
@@ -33,8 +55,27 @@ export function useChat(sessionId: string): UseChatReturn {
   const [phaseEvents, setPhaseEvents] = useState<PhaseEvent[]>([]);
   const [currentPhase, setCurrentPhase] = useState<ConversationPhaseV2 | null>('HOOK');
   const [phaseProgress, setPhaseProgress] = useState(0);
+  const [concernDepth, setConcernDepth] = useState<'light' | 'medium' | 'deep' | null>(null);
+  const [depthOverride, setDepthOverride] = useState<'light' | 'medium' | 'deep' | null>(null);
   const [sessionStatus, setSessionStatus] = useState<'active' | 'completed' | 'crisis' | null>(null);
   const [sessionSummary, setSessionSummary] = useState<string | null>(null);
+  // 🆕 ACE v4: 이벤트 대기 잠금 — 이벤트 선택 전까지 채팅 입력 비활성화
+  const [pendingEventLock, setPendingEventLock] = useState(false);
+  // 🆕 ACE v4: 루나의 현재 생각 + 이해도 (PhaseProgress 동적 표시용)
+  const [lunaThinking, setLunaThinking] = useState('이야기 더 들어볼게...');
+  // 🆕 v40: 루나 딥리서치(Gemini Grounding) "진짜 고민 중" 상태
+  const [thinkingDeep, setThinkingDeep] = useState<{
+    active: boolean;
+    phrases: string[];
+    keyword?: string;
+  } | null>(null);
+  // 🆕 v41: 친밀도 레벨업 팝업 상태
+  const [intimacyLevelUp, setIntimacyLevelUp] = useState<{
+    oldLevel: number;
+    newLevel: number;
+    newLevelName: string;
+  } | null>(null);
+  const [understandingLevel, setUnderstandingLevel] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   // 🆕 v20: 턴 내 이벤트 중복 방지 (state 대신 ref로 — React 배칭 이슈 방지)
   const firedEventTypesRef = useRef<Set<string>>(new Set());
@@ -51,13 +92,30 @@ export function useChat(sessionId: string): UseChatReturn {
       })
       .then((data) => {
         if (!cancelled && Array.isArray(data)) {
-          const loaded: ChatMessage[] = data.map((m: any) => ({
-            id: m.id,
-            sessionId: m.session_id || sessionId,
-            senderType: m.sender_type,
-            content: m.content,
-            createdAt: m.created_at,
-          }));
+          // 🆕 v28: AI 메시지의 ||| 구분자를 여러 말풍선으로 분리 (재진입 시에도 카톡 스타일)
+          const loaded: ChatMessage[] = [];
+          for (const m of data) {
+            if (m.sender_type === 'ai' && m.content?.includes('|||')) {
+              const chunks = m.content.split('|||').map((c: string) => c.trim()).filter((c: string) => c.length > 0);
+              chunks.forEach((chunk: string, i: number) => {
+                loaded.push({
+                  id: i === 0 ? m.id : `${m.id}-${i}`,
+                  sessionId: m.session_id || sessionId,
+                  senderType: 'ai' as const,
+                  content: chunk,
+                  createdAt: m.created_at,
+                });
+              });
+            } else {
+              loaded.push({
+                id: m.id,
+                sessionId: m.session_id || sessionId,
+                senderType: m.sender_type,
+                content: m.content,
+                createdAt: m.created_at,
+              });
+            }
+          }
           setMessages(loaded);
         }
       })
@@ -84,8 +142,8 @@ export function useChat(sessionId: string): UseChatReturn {
             setPhaseProgress(Math.min(baseProgress + turnBonus, 100));
           }
 
-          // 🆕 시나리오 + 감정 상태 복원 (시나리오 태그 + 감정 뱃지 표시용)
-          if (data.locked_scenario || data.emotion_baseline !== null) {
+          // 🆕 시나리오 + 감정 상태 + 인사이트 복원
+          if (data.locked_scenario || data.emotion_baseline !== null || data.situation_read) {
             setStateResult((prev) => ({
               ...(prev || {
                 emotionScore: 0,
@@ -94,7 +152,27 @@ export function useChat(sessionId: string): UseChatReturn {
               }),
               scenario: data.locked_scenario || undefined,
               emotionScore: data.emotion_baseline ?? prev?.emotionScore ?? 0,
+              // 🆕 v36: 루나 인사이트 복원
+              situationRead: data.situation_read || prev?.situationRead || undefined,
+              // 🆕 v37: 상황 인식 히스토리 복원
+              situationReadHistory: data.situation_read_history || prev?.situationReadHistory || [],
+              lunaThought: data.luna_thought_history?.length > 0
+                ? data.luna_thought_history[data.luna_thought_history.length - 1]
+                : prev?.lunaThought || undefined,
+              lunaThoughtHistory: data.luna_thought_history || prev?.lunaThoughtHistory || [],
             } as StateResult));
+          }
+
+          // 🆕 v29: 고민 깊이(concernDepth) 복원 — 재진입 시 UI 표시용
+          // DB에 저장되지 않으므로 턴 카운트 기반 추정
+          const turnCount = data.turn_count ?? 0;
+          if (turnCount > 0) {
+            const estimatedDepth: 'light' | 'medium' | 'deep' =
+              turnCount <= 4 ? 'medium'    // 초반: 아직 판단 어려움 → 기본값
+              : (data.emotion_baseline !== null && data.emotion_baseline <= -3) ? 'deep'  // 감정 심각 → 깊은 상담
+              : turnCount >= 10 ? 'deep'   // 대화 길면 → 깊은 상담
+              : 'medium';                  // 그 외 → 보통
+            setConcernDepth(estimatedDepth);
           }
         }
       })
@@ -104,6 +182,11 @@ export function useChat(sessionId: string): UseChatReturn {
   }, [sessionId]);
 
   const sendMessage = useCallback(async (content: string, meta?: SuggestionMeta) => {
+    // 🆕 ACE v4: 이벤트 선택으로 호출된 경우 잠금 해제
+    if (pendingEventLock && meta?.source) {
+      setPendingEventLock(false);
+      console.log(`[useChat] 🔓 이벤트 응답 → 잠금 해제 (source: ${meta.source})`);
+    }
     if (!content.trim() || isLoading) return;
 
     // 사용자 메시지 추가
@@ -123,6 +206,8 @@ export function useChat(sessionId: string): UseChatReturn {
     // 이전 턴 이벤트를 채팅에 그대로 남겨둠 (카드 뽑기 UI 등)
     // firedEventTypesRef는 리셋해서 새 턴의 이벤트는 추가 가능
     firedEventTypesRef.current = new Set();
+    // 🆕 ACE v4: 이벤트 버퍼링 — ||| 분리 후에 이벤트를 마지막에 삽입
+    const pendingEventsBuffer: PhaseEvent[] = [];
 
     // AI 응답 플레이스홀더
     const aiMsgId = crypto.randomUUID();
@@ -137,28 +222,35 @@ export function useChat(sessionId: string): UseChatReturn {
       },
     ]);
 
-    // 타이핑 딜레이 — AI가 생각하는 자연스러운 느낌 (500ms)
-    await new Promise((r) => setTimeout(r, MIN_DELAY_MS));
+    // 🆕 v31: 타이핑 딜레이와 fetch를 동시 시작 (딜레이 동안 네트워크 요청 진행)
+    const minDelayPromise = new Promise((r) => setTimeout(r, MIN_DELAY_MS));
 
     try {
       abortRef.current = new AbortController();
 
-      const response = await fetch('/api/chat/stream', {
+      const fetchPromise = fetch('/api/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId,
           message: content,
           suggestionMeta: meta || { source: 'typed' },
+          ...(depthOverride && { depthOverride }),
         }),
         signal: abortRef.current.signal,
       });
+
+      // 딜레이와 fetch 둘 다 완료될 때까지 대기 (fetch가 먼저 끝나도 MIN_DELAY까지 대기)
+      const [response] = await Promise.all([fetchPromise, minDelayPromise]) as [Response, unknown];
 
       if (!response.ok) throw new Error('Stream failed');
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      // 🆕 v29: 전체 응답을 별도 버퍼에 누적 (||| 구분자 포함)
+      // 화면에는 첫 번째 ||| 앞부분만 보여줘서 "한 풍선 → 쪼개짐" 방지
+      let fullResponseBuffer = '';
 
       while (reader) {
         const { done, value } = await reader.read();
@@ -174,15 +266,33 @@ export function useChat(sessionId: string): UseChatReturn {
             const event: StreamEvent = JSON.parse(line.slice(6));
 
             switch (event.type) {
-              case 'text':
+              // 🆕 v29: HLRE 응답 교체 (서버에서 별도 이벤트로 전송)
+              case 'hlre_replace': {
+                fullResponseBuffer = event.data as string;
                 setMessages((prev) =>
                   prev.map((m) =>
                     m.id === aiMsgId
-                      ? { ...m, content: m.content + event.data }
+                      ? { ...m, content: fullResponseBuffer.split('|||')[0], _fullContent: fullResponseBuffer }
                       : m
                   )
                 );
                 break;
+              }
+
+              case 'text': {
+                // 전체 텍스트는 버퍼에 누적
+                fullResponseBuffer += event.data;
+                // 화면에는 첫 번째 ||| 이전 부분만 표시
+                const visibleContent = fullResponseBuffer.split('|||')[0];
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === aiMsgId
+                      ? { ...m, content: visibleContent, _fullContent: fullResponseBuffer }
+                      : m
+                  )
+                );
+                break;
+              }
 
               case 'state':
                 setStateResult(event.data as unknown as StateResult);
@@ -191,6 +301,22 @@ export function useChat(sessionId: string): UseChatReturn {
               case 'nudge':
                 setNudges(event.data as unknown as NudgeAction[]);
                 break;
+
+              case 'context_log': {
+                const ctx = event.data as any;
+                console.groupCollapsed(
+                  `%c🧠 [AI Context] 턴${ctx.turnCount} | ${ctx.pipelineMeta?.phase} | ${ctx.responseTimeMs}ms | prompt=${ctx.systemPrompt?.length}자`,
+                  'color: #00bcd4; font-weight: bold; font-size: 12px;'
+                );
+                console.log('%c📋 System Prompt', 'color: #ff9800; font-weight: bold;');
+                console.log(ctx.systemPrompt);
+                console.log('%c💬 Chat Messages', 'color: #4caf50; font-weight: bold;', ctx.chatMessages);
+                console.log('%c⚙️ Pipeline Meta', 'color: #9c27b0; font-weight: bold;', ctx.pipelineMeta);
+                console.log('%c🤖 AI Response', 'color: #2196f3; font-weight: bold;');
+                console.log(ctx.aiResponse);
+                console.groupEnd();
+                break;
+              }
 
               case 'done':
                 break;
@@ -215,24 +341,52 @@ export function useChat(sessionId: string): UseChatReturn {
                   break;
                 }
                 firedEventTypesRef.current.add(newEvent.type);
-                console.log('[useChat] 🎯 턴 이벤트 수신:', newEvent.type);
+                console.log('[useChat] 🎯 턴 이벤트 수신 (버퍼링):', newEvent.type);
                 setPhaseEvents((prev) => [...prev, newEvent]);
-                // 🆕 v25: 이벤트를 메시지 리스트에도 삽입 (인라인 렌더링용)
-                setMessages((prev) => [...prev, {
-                  id: `event-${newEvent.type}-${Date.now()}`,
-                  sessionId,
-                  senderType: 'event' as any,
-                  content: JSON.stringify(newEvent),
-                  createdAt: new Date().toISOString(),
-                }]);
+                // 🆕 ACE v4: 즉시 메시지에 추가하지 않고 버퍼에 저장
+                // ||| 분리 처리 후 마지막에 삽입하여 이벤트가 항상 대화 끝에 오도록
+                pendingEventsBuffer.push(newEvent);
                 break;
               }
 
               case 'phase_change': {
                 const phaseData = event.data as any;
-                console.log('[useChat] 🔄 단계 변경 수신:', phaseData.phase, phaseData.progress);
+                console.log('[useChat] 🔄 단계 변경 수신:', phaseData.phase, phaseData.progress, phaseData.concernDepth);
                 setCurrentPhase(phaseData.phase as ConversationPhaseV2);
                 setPhaseProgress(phaseData.progress ?? 0);
+                if (phaseData.concernDepth) setConcernDepth(phaseData.concernDepth);
+                if (phaseData.lunaThinking) setLunaThinking(phaseData.lunaThinking);
+                if (phaseData.understandingLevel !== undefined) setUnderstandingLevel(phaseData.understandingLevel);
+                break;
+              }
+
+              // 🆕 v41: 친밀도 레벨업 — 축하 팝업 트리거
+              case 'intimacy_level_up': {
+                const levelUp = event.data as any;
+                console.log('[useChat] 🎉 친밀도 레벨업:', levelUp);
+                setIntimacyLevelUp({
+                  oldLevel: levelUp.oldLevel,
+                  newLevel: levelUp.newLevel,
+                  newLevelName: levelUp.newLevelName,
+                });
+                break;
+              }
+
+              // 🆕 v40: 루나 딥리서치 — "진짜 생각하는 중" UI 이벤트
+              case 'luna_thinking_deep': {
+                const deepData = event.data as any;
+                if (deepData.status === 'started') {
+                  console.log('[useChat] 🧠 루나 딥리서치 시작:', deepData.keyword, deepData.phrases);
+                  setThinkingDeep({
+                    active: true,
+                    phrases: deepData.phrases ?? ['잠깐만, 좀 생각해볼게'],
+                    keyword: deepData.keyword,
+                  });
+                } else if (deepData.status === 'done') {
+                  console.log('[useChat] 🧠 루나 딥리서치 완료:', deepData.durationMs, 'ms');
+                  // fade out 애니메이션 시간 (400ms) 여유 후 제거
+                  setTimeout(() => setThinkingDeep(null), 500);
+                }
                 break;
               }
 
@@ -263,7 +417,7 @@ export function useChat(sessionId: string): UseChatReturn {
         );
       }
     } finally {
-      // 빈 AI 메시지 방어: 스트림은 끝났지만 content가 비어있으면 에러 표시
+      // 빈 AI 메시지 방어
       setMessages((prev) =>
         prev.map((m) =>
           m.id === aiMsgId && !m.content.trim()
@@ -271,13 +425,97 @@ export function useChat(sessionId: string): UseChatReturn {
             : m
         )
       );
+
+      // 🆕 v26 + v29: 카톡 스타일 — ||| 구분자로 여러 말풍선 분리
+      // v29: _fullContent에서 전체 원본을 가져와 분리 (스트리밍 중 content에는 첫 청크만 보임)
+      const currentMessages = await new Promise<typeof messages>((resolve) => {
+        setMessages((prev) => { resolve(prev); return prev; });
+      });
+      const aiMsg = currentMessages.find((m) => m.id === aiMsgId);
+      // _fullContent가 있으면 우선 사용 (v29), 없으면 기존 content fallback
+      const rawContent = aiMsg?._fullContent || aiMsg?.content || '';
+
+      if (rawContent.includes('|||')) {
+        const chunks = rawContent
+          .split('|||')
+          .map((c: string) => c.trim())
+          .filter((c: string) => c.length > 0);
+
+        if (chunks.length > 1) {
+          // 첫 번째 말풍선으로 교체 (이미 content에 있지만, _fullContent 정리)
+          setMessages((prev) =>
+            prev.map((m) => m.id === aiMsgId ? { ...m, content: chunks[0], _fullContent: undefined } : m)
+          );
+
+          // 🆕 v28.2: Adaptive Typing — 루나 감정 기반 타이핑 속도
+          const lunaEmo: LunaEmotion = 'calm'; // TODO: SSE에서 루나 감정 수신 시 교체
+          for (let i = 1; i < chunks.length; i++) {
+            const typingId = `${aiMsgId}-typing-${i}`;
+
+            // 1. 말풍선 간 갭 딜레이 (감정에 따라 변동)
+            const gapDelay = calcBubbleGapDelay(i, lunaEmo);
+            await new Promise((r) => setTimeout(r, gapDelay));
+
+            // 2. 타이핑 인디케이터 표시
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: typingId,
+                sessionId,
+                senderType: 'ai' as const,
+                content: '',  // 빈 content = isTyping 표시
+                createdAt: new Date().toISOString(),
+              },
+            ]);
+
+            // 3. 타이핑 딜레이 (감정+글자수 기반)
+            const typeDelay = calcTypingDelay(chunks[i], lunaEmo, chunks[0].length);
+            await new Promise((r) => setTimeout(r, typeDelay));
+
+            // 4. 타이핑 인디케이터를 실제 메시지로 교체
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === typingId
+                  ? { ...m, id: `${aiMsgId}-split-${i}`, content: chunks[i] }
+                  : m
+              )
+            );
+          }
+        }
+      }
+
+      // 🆕 ACE v4: ||| 분리 완료 후 버퍼된 이벤트를 마지막에 삽입
+      // 이렇게 하면 이벤트가 항상 루나 말풍선들 뒤에 나옴
+      if (pendingEventsBuffer.length > 0) {
+        setMessages((prev) => [
+          ...prev,
+          ...pendingEventsBuffer.map((evt) => ({
+            id: `event-${evt.type}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            sessionId,
+            senderType: 'event' as any,
+            content: JSON.stringify(evt),
+            createdAt: new Date().toISOString(),
+          })),
+        ]);
+        // 🆕 ACE v4: 이벤트 잠금 — 유저가 이벤트에 응답할 때까지 채팅 입력 잠금
+        // isLoading은 false로 풀어서 이벤트 버튼은 클릭 가능하게 유지
+        setPendingEventLock(true);
+        console.log(`[useChat] 🔒 이벤트 대기 중 — 채팅 입력 잠금 (${pendingEventsBuffer.map(e => e.type).join(', ')})`);
+      }
       setIsLoading(false);
     }
-  }, [sessionId, isLoading]);
+  }, [sessionId, isLoading, depthOverride]);
 
-  return { 
-    messages, isLoading, nudges, stateResult, suggestions, panelData, 
-    axesProgress, phaseEvents, currentPhase, phaseProgress, 
-    sessionStatus, sessionSummary, sendMessage 
+  return {
+    messages, isLoading, nudges, stateResult, suggestions, panelData,
+    axesProgress, phaseEvents, currentPhase, phaseProgress, concernDepth,
+    depthOverride, setDepthOverride,
+    sessionStatus, sessionSummary, sendMessage, pendingEventLock,
+    lunaThinking, understandingLevel,
+    // 🆕 v40: 루나 딥리서치 상태
+    thinkingDeep,
+    // 🆕 v41: 친밀도 레벨업 팝업 상태
+    intimacyLevelUp,
+    dismissIntimacyLevelUp: () => setIntimacyLevelUp(null),
   };
 }

@@ -114,13 +114,15 @@ export class PromptGenerator {
     userMessageLength: number = 50,
     /** 🆕 v22: 마지막 스티커 사용 턴 (빈도 제어) */
     lastStickerTurn: number = -99,
+    /** 🆕 v29: HLRE 프롬프트 (있으면 구 phasePrompt/치료기법 대체) */
+    hlrePrompt: string = '',
   ): string {
     // 패널 모드
     if (persona === 'panel') {
       return this.buildPanelPrompt(state, strategy, ragContext);
     }
 
-    const role = getPersonaRole(persona);
+    const role = getPersonaRole(persona, !!hlrePrompt);
     const isFriend = persona === 'friend';
     const isLuna = persona === 'luna';
 
@@ -290,6 +292,25 @@ ${socraticQuestions.join('\n')}
       ? `\n\n## ⚠️ 절대 규칙\n반드시 반말로. 존댓말 사용 절대 금지. 카톡 친구한테 말하듯 짧게.`
       : '';
 
+    // 🆕 v29: HLRE 활성 시 — 구 치료 기법 블록 제거, HLRE를 상단 배치
+    if (hlrePrompt) {
+      return `${role}
+${personaReminder}
+
+${hlrePrompt}
+
+${solutionPrompt}
+
+## 현재 사용자 상태
+${stateContext}
+${memorySection}
+
+${guardrails}
+${suggestions}
+${stickerPromptSection}`;
+    }
+
+    // HLRE 비활성 (타로냥 등) — 기존 전체 프롬프트
     return `${role}
 ${personaReminder}
 ${lengthGuide}

@@ -151,11 +151,16 @@ export class StateAnalysisEngine {
     const isFlooding = FloodingUtil.detect(userMessage, recentUserMessages);
 
     // 2차 분석: Claude Haiku structured output
+    // 🆕 v33 (H2): 키워드 사전으로 시나리오 사전 감지 → LLM 프롬프트 조건부 축약
+    const preDetectedScenario = getScenarioOverride(userMessage, RelationshipScenario.GENERAL);
+    const scenarioHint = preDetectedScenario?.scenario ?? undefined;
+
     try {
       const haikuResponse = await analyzeStateWithHaiku(
         userMessage,
         recentUserMessages.slice(-5),
-        context
+        context,
+        scenarioHint,  // 🆕 v33: 시나리오 힌트 전달
       );
 
       const parsed = safeParseLLMJson(haikuResponse, null as any);

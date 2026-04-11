@@ -55,10 +55,25 @@ export default function MessageBubble({ message, isTyping, onSpeak, isSpeaking, 
   // 🆕 v22: [STICKER:xxx] 태그 파싱
   const stickerMatch = !isUser ? message.content?.match(/\[STICKER:(\w+)\]/) : null;
   const stickerId = stickerMatch?.[1] ?? null;
-  const textContent = stickerMatch
-    ? message.content.replace(/\[STICKER:\w+\]/, '').trim()
-    : message.content;
-  const isStickerOnly = stickerId && !textContent;
+  // 🆕 v25: 유효/무효 관계없이 태그는 항상 텍스트에서 제거
+  // 🆕 v35: 선택지 배열이 텍스트에 남는 버그 수정 — 버튼으로 이미 표시되므로 텍스트에서 제거
+  const textContent = message.content
+    .replace(/\[STICKER:\w+\]/g, '')
+    .replace(/\|\|\|/g, ' ')
+    // 선택지 태그 제거: [SUGGESTIONS: "옵션1", "옵션2", "옵션3"]
+    .replace(/\[?SUGGESTIONS:?\]?\s*\[[^\]]*\]/gi, '')
+    .replace(/SUGGESTIONS:\s*"[^"]*"(,\s*"[^"]*")*/gi, '')
+    .replace(/\bSUGGESTIONS\b[^\n]*/gi, '')
+    // 한글 선택지 배열 제거: ["응 진짜 지쳐", "서운하긴 해", "잘 모르겠어"]
+    .replace(/\[\s*"[^"]{1,20}"\s*(,\s*"[^"]{1,20}"\s*){1,5}\]/g, '')
+    // 🆕 v36: 루나 인사이트 태그 방어 제거
+    .replace(/\[SITUATION_READ:[^\]]*\]/g, '')
+    .replace(/\[LUNA_THOUGHT:[^\]]*\]/g, '')
+    // 🆕 v42: 빈 대괄호 [] 제거 (선택지 제거 후 남은 잔해)
+    .replace(/\[\s*\]/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  const isStickerOnly = stickerId && isValidSticker(stickerId) && !textContent;
 
   return (
     <motion.div

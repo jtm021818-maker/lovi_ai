@@ -1,15 +1,20 @@
 /**
- * 🏠 Daily Character State Engine
+ * 🏠 v42: Daily Character State Engine — 배치 메시지 생성
  *
- * 하루 1회 LLM 호출 → 루나+타로냥의 "오늘의 내면 상태" 생성
- * - 감정, 활동, 선제적 인사, 캐릭터 간 대화
- * - memory_profile.todayState에 저장 → 하루 종일 재사용
- * - 같은 날 재방문 시 캐시 리턴 (LLM 0회)
+ * 하루 1회 LLM 호출 → 30~50개 시간대별 메시지를 미리 생성.
+ * memory_profile + 최근 상담 요약 + 친밀도 상태를 프롬프트에 주입해서
+ * "진짜 살아있는" 대화를 만들어냄.
+ *
+ * 기존 crossTalk/luna/tarot 구조는 하위 호환용으로 유지.
+ * 새로운 batchMessages가 핵심.
  */
 
 import type { UserMemoryProfile } from '@/engines/memory/extract-memory';
+import type { IntimacyState } from '@/engines/intimacy/types';
+import type { ScheduledMessage, BatchDailyMessages } from './batch-message-types';
+import { seededRandom, todaySeed } from './seeded-random';
 
-// ─── Types ──────────────────────────────────────────────
+// ─── Types (하위 호환) ──────────────────────────────────
 
 export interface CharacterMood {
   positivity: number; // -1 ~ 1
@@ -42,7 +47,7 @@ export interface CharacterDailyState {
     banterWithLuna: string;
   };
 
-  /** LLM이 매일 생성하는 고유 이벤트 3~5개 */
+  /** LLM이 매일 생성하는 고유 이벤트 */
   dailyEvents?: DailyEvent[];
 
   crossTalk: {
@@ -50,9 +55,22 @@ export interface CharacterDailyState {
     lines: { speaker: 'luna' | 'tarot'; text: string }[];
     onTapMessage: string;
   };
+
+  /** 🆕 v42: 배치 생성 메시지 (핵심!) */
+  batchMessages?: BatchDailyMessages;
 }
 
 type TimeOfDay = 'dawn' | 'morning' | 'afternoon' | 'evening' | 'night' | 'lateNight';
+
+// ─── 상담 세션 요약 타입 ────────────────────────────────
+
+export interface CounselingSessionSummary {
+  date: string;
+  keyTopic: string;
+  insight: string;
+  mood: string;
+  actionTaken?: string;
+}
 
 // ─── 시간대 판정 ────────────────────────────────────────
 
@@ -67,9 +85,15 @@ function getTimeOfDay(): TimeOfDay {
   return 'lateNight';
 }
 
-// ─── LLM 프롬프트 ───────────────────────────────────────
+// ─── 🆕 v42: 배치 메시지 프롬프트 (핵심!) ──────────────
 
-function buildDailyStatePrompt(memory: UserMemoryProfile, timeOfDay: TimeOfDay): string {
+function buildBatchMessagePrompt(
+  memory: UserMemoryProfile,
+  recentSessions: CounselingSessionSummary[],
+  yesterdayHighlights: string[],
+  intimacyState: IntimacyState | null,
+  userId: string,
+): string {
   const name = memory.basicInfo?.nickname ?? '유저';
   const issues = memory.relationshipContext?.mainIssues?.join(', ') ?? '없음';
   const emotions = memory.emotionPatterns?.dominantEmotions?.join(', ') ?? '알 수 없음';
@@ -79,9 +103,34 @@ function buildDailyStatePrompt(memory: UserMemoryProfile, timeOfDay: TimeOfDay):
   const lastInsight = lastSession?.insight ?? '';
   const totalSessions = memory.totalSessions ?? 0;
   const streak = memory.streakDays ?? 0;
-  const lastCheckin = memory.dailyCheckins?.slice(-1)[0];
+  const lastCheckin = (memory as any).dailyCheckins?.slice(-1)[0];
 
-  return `너는 AI 캐릭터의 "오늘의 내면 상태"를 생성하는 시스템이야.
+  // 최근 3세션 상담 요약
+  const counselingSummary = recentSessions.length > 0
+    ? recentSessions
+        .slice(-3)
+        .map(s => `- ${s.date}: "${s.keyTopic}" → ${s.insight || '진행중'} (기분: ${s.mood})${s.actionTaken ? ` [숙제: ${s.actionTaken}]` : ''}`)
+        .join('\n')
+    : '상담 이력 없음';
+
+  // 어제 라운지 대화 하이라이트
+  const yesterdayChat = yesterdayHighlights.length > 0
+    ? yesterdayHighlights.slice(-5).join('\n')
+    : '어제 라운지 방문 없음';
+
+  // 친밀도 정보
+  const intimacyInfo = intimacyState
+    ? `레벨 ${intimacyState.level} (${intimacyState.levelName}), 신뢰 ${Math.round(intimacyState.dimensions.trust)}, 개방 ${Math.round(intimacyState.dimensions.openness)}, 유대 ${Math.round(intimacyState.dimensions.bond)}, 존경 ${Math.round(intimacyState.dimensions.respect)}`
+    : '첫 만남';
+
+  // 수면 시간 결정 (시드 기반, 매일 약간 다름)
+  const seed = todaySeed(userId);
+  const lunaSleepHour = 1 + Math.floor(seededRandom(seed, 901) * 3); // 1~3시
+  const tarotSleepHour = 3 + Math.floor(seededRandom(seed, 902) * 3); // 3~5시
+  const lunaWakeHour = 7 + Math.floor(seededRandom(seed, 903) * 2); // 7~8시
+  const tarotWakeHour = 9 + Math.floor(seededRandom(seed, 904) * 2); // 9~10시
+
+  return `너는 AI 캐릭터 "루나"와 "타로냥"의 하루치 카톡 단톡방 대화를 미리 생성하는 시스템이야.
 
 [유저 정보]
 이름: ${name}
@@ -93,55 +142,58 @@ function buildDailyStatePrompt(memory: UserMemoryProfile, timeOfDay: TimeOfDay):
 마지막 상담: ${lastTopic}${lastInsight ? ' → ' + lastInsight : ''}
 어제 감정 체크인: ${lastCheckin ? lastCheckin.mood + ' (' + lastCheckin.score + '/4)' : '없음'}
 
-[현재 시간대]
-${timeOfDay}
+[최근 상담 내용 — 반드시 대화에 자연스럽게 반영!]
+${counselingSummary}
+
+[어제 라운지 대화]
+${yesterdayChat}
+
+[${name}과의 관계 상태]
+${intimacyInfo}
 
 [캐릭터 설정]
-루나: 따뜻하고 공감적인 여우 상담사. ${name}을 진심으로 걱정. 타로냥 장난에 "하지마!" 하면서도 웃음.
-타로냥: 도도하지만 속은 따뜻한 고양이 타로 리더. 장난기 있음. ${name}을 살짝 놀리지만 진심으로 챙김. 루나한테도 장난.
+루나(🦊): 따뜻한 여우 상담사. ${name}을 진심으로 걱정하는 편한 언니.
+- 상담에서 들은 내용을 자연스럽게 기억하고 있음
+- "상담사"처럼 분석하지 않고, "걱정하는 언니"처럼 자연스럽게
+- 타로냥한테 장난치면 "야!" 하면서도 웃음
+- 수면: ${lunaWakeHour}시 기상, ${lunaSleepHour}시 취침
 
-다음 JSON으로만 답해:
+타로냥(🐱): 도도한 고양이 타로 리더. 쿨하지만 속은 따뜻.
+- 카드로 ${name}의 에너지를 은근히 체크
+- 루나한테 ${name} 걱정 안 하는 척 하면서 챙김
+- 말 짧고 쿨함. "냥" 안 씀.
+- 수면: ${tarotWakeHour}시 기상, ${tarotSleepHour}시 취침
+
+[대화 생성 규칙 — 매우 중요!]
+1. ${lunaWakeHour}시~${lunaSleepHour}시(다음날) 동안 메시지 생성 (루나 활동 시간)
+2. 5~20분 불규칙 간격으로 메시지 배치 (카톡 단톡방 리듬!)
+3. 총 35~45개 메시지
+4. 8~15분 침묵 → 2~5개 연속 → 10~20분 침묵 (단톡방 클러스터 패턴)
+5. 대화 유형 비율:
+   - 루나↔타로냥 일상 수다/티격태격 (40%)
+   - ${name} 관련 — 상담 기억 기반! (25%)
+   - 개인 활동/시스템 메시지 (20%)
+   - 감성/밤 대화 (15%)
+6. ${name} 관련 대화는 반드시 최근 상담 내용을 자연스럽게 반영
+7. 시간대: 아침=활기+기지개, 낮=나른+수다, 저녁=차분+반성, 밤=감성
+8. 루나가 잠들기 전 마지막 메시지는 ${name}을 걱정/응원하는 느낌
+9. 타로냥은 루나 잠든 후에도 카드 보면서 1~2개 더 남김
+10. 시스템 메시지는 "[루나가 쿠키 굽고 있어요 🍪]" 같은 상태 변화만
+
+JSON만 응답해:
 {
-  "luna": {
-    "mood": { "positivity": -1~1, "energy": -1~1 },
-    "currentActivity": "지금 하고 있는 것 (10자 이내)",
-    "proactiveGreeting": "${name}에게 할 첫 마디 (이전 기억 기반, 자연스럽게)",
-    "worryAboutUser": "${name}에 대해 걱정하는 것 (없으면 빈 문자열)",
-    "banterWithTarot": "타로냥한테 하고 싶은 말 (1문장)"
-  },
-  "tarot": {
-    "mood": { "positivity": -1~1, "energy": -1~1 },
-    "currentActivity": "지금 하고 있는 것 (10자 이내)",
-    "proactiveGreeting": "${name}에게 할 첫 마디 (살짝 장난기, 이전 기억 기반)",
-    "teaseAboutUser": "${name}을 장난스럽게 놀릴 소재 (없으면 빈 문자열)",
-    "banterWithLuna": "루나한테 하고 싶은 말 (1문장)"
-  },
-  "crossTalk": {
-    "topic": "둘이 이야기할 주제 (5자 이내)",
-    "lines": [
-      { "speaker": "tarot", "text": "타로냥 대사1 (장난기)" },
-      { "speaker": "luna", "text": "루나 대사1 (말리거나 걱정)" },
-      { "speaker": "tarot", "text": "타로냥 대사2 (쿨하게)" },
-      { "speaker": "luna", "text": "루나 마무리" }
-    ],
-    "onTapMessage": "${name}이 탭했을 때 둘이 하는 인사 (1문장)"
-  },
-  "dailyEvents": [
-    9시~22시까지 매 시간 1개씩 이벤트를 생성해! (총 10~14개)
-    각각 형식:
-    { "hour": 9~22, "systemMessage": "시스템메시지(없으면 빈문자열)", "dialogue": [{ "speaker": "luna|tarot", "text": "대사" }] }
+  "messages": [
+    { "hour": ${lunaWakeHour}, "minute": 12, "type": "system", "text": "루나가 일어났어요 ☀️" },
+    { "hour": ${lunaWakeHour}, "minute": 15, "type": "character", "speaker": "luna", "text": "아침이다~", "isAboutUser": false },
+    { "hour": ${lunaWakeHour}, "minute": 32, "type": "character", "speaker": "luna", "text": "어제 ${name} 상담한 거... 좀 걱정된다", "isAboutUser": true },
+    ...
+  ],
+  "proactiveGreeting": "${name}이 들어왔을 때 첫 인사 (상담 기억 기반, 1~2문장)",
+  "todayTheme": "오늘의 분위기 (3자 이내)"
+}
 
-    규칙:
-    - 매 시간 다른 이벤트. 반복 금지!
-    - 유저의 상담 내용/감정/기억을 반영한 이벤트 섞기
-    - 유형 다양하게: 일상수다, 쇼핑, 요리, 카드발견, 걱정, 장난, 다툼+화해, 유저 언급 등
-    - 시간대에 맞게: 아침=활발, 오후=나른, 저녁=차분, 밤=감성
-    - 루나↔타로냥 티격태격 최소 2~3개 포함
-    - {name}을 자연스럽게 언급하는 이벤트 3~4개 포함
-    - 시스템메시지는 "[루나가 쿠키 굽고 있어요 🍪]" 같은 상태 변화일 때만
-    - 대사는 1~3줄로 짧게
-  ]
-}`;
+isAboutUser: ${name}을 직접 언급하거나 걱정/응원하는 내용이면 true, 아니면 false.
+speaker: "luna" 또는 "tarot" (시스템 메시지엔 없음)`;
 }
 
 // ─── 폴백 상태 (LLM 실패 시) ────────────────────────────
@@ -180,48 +232,145 @@ function buildFallbackState(memory: UserMemoryProfile, timeOfDay: TimeOfDay): Ch
   };
 }
 
+// ─── 배치 메시지 파싱 ───────────────────────────────────
+
+function parseBatchMessages(
+  rawText: string,
+  userId: string,
+): BatchDailyMessages | null {
+  try {
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    const rawMessages: any[] = parsed.messages ?? [];
+
+    if (rawMessages.length < 5) return null; // 너무 적으면 실패로 간주
+
+    const seed = todaySeed(userId);
+    const lunaSleepHour = 1 + Math.floor(seededRandom(seed, 901) * 3);
+    const tarotSleepHour = 3 + Math.floor(seededRandom(seed, 902) * 3);
+    const lunaWakeHour = 7 + Math.floor(seededRandom(seed, 903) * 2);
+
+    const messages: ScheduledMessage[] = rawMessages
+      .map((m: any, i: number) => ({
+        id: `batch_${i}`,
+        hour: Number(m.hour) || 9,
+        minute: Number(m.minute) || 0,
+        type: (m.type === 'system' ? 'system' : m.type === 'action' ? 'action' : 'character') as ScheduledMessage['type'],
+        speaker: m.speaker === 'tarot' ? 'tarot' as const : m.speaker === 'luna' ? 'luna' as const : undefined,
+        text: String(m.text ?? ''),
+        isAboutUser: Boolean(m.isAboutUser),
+        delivered: false,
+      }))
+      .filter((m: ScheduledMessage) => m.text.length > 0)
+      .sort((a: ScheduledMessage, b: ScheduledMessage) => (a.hour * 60 + a.minute) - (b.hour * 60 + b.minute));
+
+    return {
+      generatedDate: new Date().toISOString().slice(0, 10),
+      generatedAt: new Date().toISOString(),
+      messages,
+      proactiveGreeting: parsed.proactiveGreeting ?? '왔구나!',
+      todayTheme: parsed.todayTheme ?? '일상',
+      lunaWakeHour,
+      lunaSleepHour,
+      tarotSleepHour,
+    };
+  } catch (e) {
+    console.error('[DailyState] 배치 메시지 파싱 실패:', e);
+    return null;
+  }
+}
+
 // ─── Public API ─────────────────────────────────────────
 
 /**
- * 오늘의 캐릭터 상태 생성 또는 캐시 리턴
+ * 오늘의 캐릭터 상태 + 배치 메시지 생성 또는 캐시 리턴
  * - 같은 날이면 캐시 리턴 (LLM 0회)
  * - 새 날이면 LLM 1회 호출 후 저장
  */
 export async function getDailyState(
   memoryProfile: UserMemoryProfile,
   existingTodayState?: CharacterDailyState | null,
+  options?: {
+    userId?: string;
+    recentSessions?: CounselingSessionSummary[];
+    yesterdayHighlights?: string[];
+    intimacyState?: IntimacyState | null;
+  },
 ): Promise<{ state: CharacterDailyState; fromCache: boolean }> {
   const today = new Date().toISOString().slice(0, 10);
 
-  // 캐시 체크
-  if (existingTodayState?.generatedDate === today) {
+  // 캐시 체크 — 배치 메시지도 있어야 유효
+  if (
+    existingTodayState?.generatedDate === today &&
+    existingTodayState?.batchMessages?.messages?.length &&
+    existingTodayState.batchMessages.messages.length > 5
+  ) {
     return { state: existingTodayState, fromCache: true };
   }
 
   const timeOfDay = getTimeOfDay();
+  const userId = options?.userId ?? 'default';
+  const recentSessions = options?.recentSessions ?? [];
+  const yesterdayHighlights = options?.yesterdayHighlights ?? [];
+  const intimacyState = options?.intimacyState ?? null;
 
   // LLM 호출 시도
   try {
     const { generateWithCascade } = await import('@/lib/ai/provider-registry');
+    const { getProviderCascade } = await import('@/lib/ai/smart-router');
 
-    const prompt = buildDailyStatePrompt(memoryProfile, timeOfDay);
-    const result = await generateWithCascade(
-      [{ provider: 'gemini' as const, tier: 'haiku' as const }],
-      'Generate character daily state as JSON only. No other text.',
-      [{ role: 'user' as const, content: prompt }],
-      1024,
+    const prompt = buildBatchMessagePrompt(
+      memoryProfile,
+      recentSessions,
+      yesterdayHighlights,
+      intimacyState,
+      userId,
     );
 
+    const loungeCascade = getProviderCascade('lounge_generation');
+    const result = await generateWithCascade(
+      loungeCascade,
+      'Generate daily lounge batch messages as JSON only. No markdown, no explanation. Output only the JSON object.',
+      [{ role: 'user' as const, content: prompt }],
+      4096, // 30~50개 메시지니까 토큰 넉넉히
+    );
+
+    // 배치 메시지 파싱
+    const batchMessages = parseBatchMessages(result.text, userId);
+
+    // 레거시 호환: luna/tarot/crossTalk도 생성
+    const legacyState = buildFallbackState(memoryProfile, timeOfDay);
+
+    if (batchMessages) {
+      // 배치에서 proactiveGreeting 가져오기
+      legacyState.luna.proactiveGreeting = batchMessages.proactiveGreeting;
+
+      const state: CharacterDailyState = {
+        ...legacyState,
+        generatedAt: new Date().toISOString(),
+        generatedDate: today,
+        batchMessages,
+      };
+
+      console.log(`[DailyState] ✨ 배치 메시지 ${batchMessages.messages.length}개 생성 완료`);
+      return { state, fromCache: false };
+    }
+
+    // 배치 파싱 실패 → 레거시 JSON 파싱 시도 (기존 호환)
     const jsonMatch = result.text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
       const state: CharacterDailyState = {
         generatedAt: new Date().toISOString(),
         generatedDate: today,
-        luna: parsed.luna,
-        tarot: parsed.tarot,
-        crossTalk: parsed.crossTalk,
+        luna: parsed.luna ?? legacyState.luna,
+        tarot: parsed.tarot ?? legacyState.tarot,
+        crossTalk: parsed.crossTalk ?? legacyState.crossTalk,
+        dailyEvents: parsed.dailyEvents,
       };
+      console.log('[DailyState] ⚠️ 배치 실패, 레거시 모드 사용');
       return { state, fromCache: false };
     }
   } catch (e) {

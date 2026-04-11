@@ -78,6 +78,44 @@ export function checkRateLimit(
 }
 
 /**
+ * 🆕 v33: DB 기반 Rate Limit 체크 (Serverless 환경 호환)
+ * - Supabase RPC로 atomic check + increment
+ * - RPC 실패 시 인메모리 폴백 (graceful degradation)
+ * - Vercel Serverless에서도 요청간 rate limit 유지
+ */
+export async function checkRateLimitFromDb(
+  supabase: any,
+  userId: string,
+  tier: 'free' | 'premium' = 'free'
+): Promise<RateLimitResult> {
+  const config = TIERS[tier];
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+  try {
+    const { data, error } = await supabase.rpc('check_and_increment_rate_limit', {
+      p_user_id: userId,
+      p_date: today,
+      p_max_requests: config.maxRequests,
+    });
+
+    if (error || !data) {
+      console.warn('[RateLimit] RPC 실패, 인메모리 폴백:', error?.message);
+      return checkRateLimit(userId, tier);
+    }
+
+    return {
+      allowed: data.allowed,
+      remaining: data.remaining,
+      resetAt: new Date(today + 'T23:59:59Z').getTime(),
+      tier,
+    };
+  } catch (err) {
+    console.warn('[RateLimit] RPC 오류, 인메모리 폴백:', err);
+    return checkRateLimit(userId, tier);
+  }
+}
+
+/**
  * 사용량을 Supabase에 동기화 (fire-and-forget)
  * route.ts의 savePostProcessing에서 호출하여 DB에 영속화
  */

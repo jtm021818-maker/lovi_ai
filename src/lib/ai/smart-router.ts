@@ -1,12 +1,12 @@
 /**
  * 스마트 라우터 — 태스크×전략별 프로바이더 캐스케이드 체인 결정
  *
- * [v24 원칙 — 무료 100명/일 설계]
- * 1. 매 턴 대화: Qwen3-32B → Cerebras 70B (한도 큰 모델)
- * 2. 이벤트(거울/패턴): Gemini 2.5 Flash-Lite (Stable, 무료 한도 최대)
- * 3. 위기/감정거울: Gemini 2.5 Flash-Lite
+ * [v25 원칙 — 무료 100명/일 설계]
+ * 1. 상담 메인: Gemini 2.5 Flash (한국어 최강) → Qwen3-32B → Cerebras 70B
+ * 2. 라운지: Groq Qwen3-32B (한도 절약) → Cerebras 70B → Gemini Flash-Lite
+ * 3. 이벤트(거울/패턴): Gemini 2.5 Flash (임팩트 순간 집중)
  * 4. 상태분석/검증: 8B 모델 (15,000+/일)
- * 5. Gemini는 임팩트 큰 순간에만 집중 사용
+ * 5. 위기/감정거울: Gemini 2.5 Flash
  */
 
 import type { Provider, ModelTier } from './provider-registry';
@@ -24,9 +24,10 @@ export interface CascadeItem {
 export type TaskType =
   | 'state_analysis'     // 상태 분석 (JSON)
   | 'main_response'      // 메인 상담 응답 (매 턴)
-  | 'event_generation'   // 이벤트 생성 — 감정거울, 패턴분석 등 (Gemini 전용)
+  | 'event_generation'   // 이벤트 생성 — 감정거울, 패턴분석 등
   | 'session_summary'    // 세션 요약
-  | 'response_validation'; // 응답 검증
+  | 'response_validation' // 응답 검증
+  | 'lounge_generation'; // 🆕 v25: 라운지 (캐릭터 데일리 상태 등)
 
 /**
  * 태스크 + 전략 + 위기수준에 따라 최적 프로바이더 캐스케이드 반환
@@ -48,14 +49,14 @@ export function getProviderCascade(
       ];
 
     // ──────────────────────────────────────────
-    // 메인 응답: Qwen3 → Cerebras 70B (매 턴, 4,000+/일)
+    // 🆕 v25: 메인 상담 응답: Gemini Flash → Qwen3 → Cerebras 70B
+    // 한국어 감정 표현 품질 우선!
     // ──────────────────────────────────────────
     case 'main_response':
       return getMainResponseCascade(strategy, riskLevel);
 
     // ──────────────────────────────────────────
-    // 이벤트 생성: Gemini 전용 (감정거울, 패턴분석 등)
-    // 하루 350회를 임팩트 순간에 집중 사용
+    // 이벤트 생성: Gemini Flash (감정거울, 패턴분석 등)
     // ──────────────────────────────────────────
     case 'event_generation':
       return getEventCascade(riskLevel);
@@ -79,8 +80,20 @@ export function getProviderCascade(
         { provider: 'groq', tier: 'haiku' },         // 2순위: Groq 8B
       ];
 
+    // ──────────────────────────────────────────
+    // 🆕 v25: 라운지 생성: Qwen3 → Cerebras 70B → Gemini Flash-Lite
+    // 라운지는 서브니까 Gemini 한도 절약
+    // ──────────────────────────────────────────
+    case 'lounge_generation':
+      return [
+        { provider: 'groq', tier: 'haiku', modelOverride: GROQ_EXTRA_MODELS.qwen3 }, // Qwen3-32B
+        { provider: 'cerebras', tier: 'sonnet' },        // Cerebras 70B
+        { provider: 'gemini', tier: 'haiku' },            // Gemini Flash-Lite (최후)
+      ];
+
     default:
       return [
+        { provider: 'gemini', tier: 'sonnet' },           // Gemini Flash
         { provider: 'groq', tier: 'haiku', modelOverride: GROQ_EXTRA_MODELS.qwen3 },
         { provider: 'cerebras', tier: 'sonnet' },
       ];
@@ -88,51 +101,49 @@ export function getProviderCascade(
 }
 
 /**
- * 메인 응답 캐스케이드 — v22
- * 모든 전략에서 Qwen3 → Cerebras 70B 사용 (매 턴, 4,000+/일)
- * 위기만 Gemini 2.5 Flash-Lite 사용 (Stable, 무료 한도 최대)
+ * 메인 상담 응답 캐스케이드 — v25
+ * 🆕 Gemini Flash 메인 (한국어 감정 표현 최강)
+ * 위기도 Gemini Flash 우선
  */
 function getMainResponseCascade(
   strategy?: StrategyType,
   riskLevel?: RiskLevel
 ): CascadeItem[] {
-  // ① CRITICAL 위기 → Gemini 2.5 Flash-Lite (감정 깊이 필요)
+  // ① CRITICAL 위기 → Gemini 2.5 Flash (감정 깊이 필요)
   if (riskLevel === 'CRITICAL' || riskLevel === 'HIGH' || strategy === 'CRISIS_SUPPORT') {
     return [
-      { provider: 'gemini', tier: 'sonnet' },         // Gemini 2.5 Flash-Lite (Stable)
+      { provider: 'gemini', tier: 'sonnet' },         // Gemini 2.5 Flash (한국어 최강)
       { provider: 'groq', tier: 'haiku', modelOverride: GROQ_EXTRA_MODELS.qwen3 }, // Qwen3 폴백
       { provider: 'cerebras', tier: 'sonnet' },        // Cerebras 70B 최후 폴백
     ];
   }
 
-  // ② 모든 일반 전략 → Qwen3 → Cerebras 70B
-  // CBT/ACT/MI/SUPPORT/CALMING 모두 동일 체인
+  // ② 🆕 모든 일반 상담 → Gemini Flash → Qwen3 → Cerebras 70B
   return [
-    { provider: 'groq', tier: 'haiku', modelOverride: GROQ_EXTRA_MODELS.qwen3 }, // Qwen3-32B (3,000 RPD)
-    { provider: 'cerebras', tier: 'sonnet' },          // Cerebras 70B (1M 토큰/일)
-    { provider: 'gemini', tier: 'haiku' },              // Gemini 2.5 Flash-Lite (Stable, 최후 폴백)
+    { provider: 'gemini', tier: 'sonnet' },            // Gemini 2.5 Flash (한국어 최강, ~1,000 RPD)
+    { provider: 'groq', tier: 'haiku', modelOverride: GROQ_EXTRA_MODELS.qwen3 }, // Qwen3-32B 폴백 (3,000 RPD)
+    { provider: 'cerebras', tier: 'sonnet' },          // Cerebras 70B 최종 폴백 (1M 토큰/일)
   ];
 }
 
 /**
- * 이벤트 생성 캐스케이드 — v24
- * Gemini 2.5 Flash-Lite (Stable, 무료 한도 최대)
- * 감정거울, 패턴분석, 성장리포트 등 임팩트 순간
+ * 이벤트 생성 캐스케이드 — v25
+ * Gemini 2.5 Flash (임팩트 순간 품질 집중)
  */
 function getEventCascade(
   riskLevel?: RiskLevel
 ): CascadeItem[] {
-  // 위기 상황의 이벤트 → Gemini 2.5 Flash-Lite
+  // 위기 상황의 이벤트 → Gemini 2.5 Flash
   if (riskLevel === 'CRITICAL' || riskLevel === 'HIGH') {
     return [
-      { provider: 'gemini', tier: 'sonnet' },         // Gemini 2.5 Flash-Lite (Stable)
+      { provider: 'gemini', tier: 'sonnet' },         // Gemini 2.5 Flash
       { provider: 'groq', tier: 'haiku', modelOverride: GROQ_EXTRA_MODELS.qwen3 }, // Qwen3 폴백
     ];
   }
 
-  // 일반 이벤트 → Gemini 2.5 Flash-Lite
+  // 일반 이벤트 → Gemini 2.5 Flash
   return [
-    { provider: 'gemini', tier: 'sonnet' },            // Gemini 2.5 Flash-Lite (Stable, 이벤트 전용)
+    { provider: 'gemini', tier: 'sonnet' },            // Gemini 2.5 Flash (이벤트 전용)
     { provider: 'groq', tier: 'haiku', modelOverride: GROQ_EXTRA_MODELS.qwen3 }, // Qwen3 폴백
     { provider: 'cerebras', tier: 'sonnet' },          // Cerebras 70B 최후 폴백
   ];
@@ -152,6 +163,8 @@ export function getMaxTokensForTask(
       return 64;
     case 'event_generation':
       return 1024;   // 이벤트(감정거울, 패턴분석 등)는 충분한 토큰 필요
+    case 'lounge_generation':
+      return 1024;   // 🆕 v25: 라운지 (캐릭터 데일리 상태)
     case 'main_response':
       if (strategy === 'CBT' || strategy === 'ACT' || strategy === 'MI') return 1024;
       if (strategy === 'CRISIS_SUPPORT') return 512;

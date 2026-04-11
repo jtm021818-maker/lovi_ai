@@ -8,13 +8,13 @@ const geist = Geist({
 });
 
 export const metadata: Metadata = {
-  title: 'Love AI - 마음이',
+  title: '루나 연애상담 - AI 심리코치',
   description: '연애 고민, 편하게 얘기해도 괜찮아요. AI 관계 상담 서비스',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Love AI',
+    title: '루나 연애상담',
   },
 };
 
@@ -23,7 +23,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#0B0A1D',
+  themeColor: '#9333ea',
 };
 
 export default function RootLayout({
@@ -35,6 +35,20 @@ export default function RootLayout({
     <html lang="ko" className={`${geist.variable} h-full`}>
       <body className="h-full bg-[#0B0A1D] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-mystic-700/60 via-mystic-900 to-[#05040B] font-[family-name:var(--font-geist)] antialiased text-white overflow-hidden">
         {children}
+        {/* 서비스 워커 등록 - TWA (APK) 필수 요건 */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js')
+                    .then(function(reg) { console.log('[SW] registered:', reg.scope); })
+                    .catch(function(err) { console.log('[SW] failed:', err); });
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   );

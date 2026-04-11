@@ -9,6 +9,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { createClient } from '@/lib/supabase/client';
 import { useLunaVoice } from '@/hooks/useLunaVoice';
 import type { PersonaMode } from '@/types/persona.types';
+// 🆕 v41: 친밀도 카드
+import IntimacyCard from '@/components/intimacy/IntimacyCard';
+import type { IntimacyDerivedInfo } from '@/engines/intimacy';
 
 // ============================================================
 // Types & Constants
@@ -83,6 +86,9 @@ export default function SettingsPage() {
   const { settings: voiceSettings, updateSettings: updateVoice } = useLunaVoice();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  // 🆕 v41.1: 페르소나별 친밀도 상태 (루나 + 타로냥 독립)
+  const [intimacyLuna, setIntimacyLuna] = useState<IntimacyDerivedInfo | null>(null);
+  const [intimacyTarot, setIntimacyTarot] = useState<IntimacyDerivedInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingNick, setEditingNick] = useState(false);
   const [nickInput, setNickInput] = useState('');
@@ -113,30 +119,43 @@ export default function SettingsPage() {
 
   const [latestScenario, setLatestScenario] = useState<string | null>(null);
 
-  // 프로필 로드 + 최근 상담 시나리오
+  // 🆕 v33 (M1): 프로필 + 최근 시나리오 병렬 로드 (~100-200ms 절감)
   useEffect(() => {
-    fetch('/api/user/profile')
-      .then(r => r.json())
-      .then(d => { setProfile(d); setNickInput(d.nickname || ''); setLoading(false); })
-      .catch(() => setLoading(false));
-
-    // 최근 상담의 locked_scenario 가져오기
     const supabase = createClient();
-    supabase.auth.getUser().then((res) => {
-      const user = res.data?.user;
-      if (!user) return;
-      supabase
-        .from('counseling_sessions')
-        .select('locked_scenario')
-        .eq('user_id', user.id)
-        .not('locked_scenario', 'is', null)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single()
-        .then((result) => {
-          if (result.data?.locked_scenario) setLatestScenario(result.data.locked_scenario);
-        });
-    });
+
+    Promise.all([
+      // ① 프로필 API
+      fetch('/api/user/profile').then(r => r.json()).catch(() => null),
+      // ② 최근 시나리오 (Supabase 직접)
+      supabase.auth.getUser().then(({ data }: { data: any }) => {
+        if (!data?.user) return null;
+        return supabase
+          .from('counseling_sessions')
+          .select('locked_scenario')
+          .eq('user_id', data.user.id)
+          .not('locked_scenario', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+          .then((r: any) => r.data?.locked_scenario ?? null);
+      }),
+      // ③ 🆕 v41: 친밀도 상태
+      fetch('/api/user/intimacy').then(r => r.json()).catch(() => null),
+    ]).then(([profileData, scenario, intimacyData]) => {
+      if (profileData) {
+        setProfile(profileData);
+        setNickInput(profileData.nickname || '');
+      }
+      if (scenario) setLatestScenario(scenario);
+      // 🆕 v41.1: 둘 다 반환 응답 처리 ({ luna: {raw, derived}, tarot: {raw, derived} })
+      if (intimacyData?.luna?.derived) {
+        setIntimacyLuna(intimacyData.luna.derived as IntimacyDerivedInfo);
+      }
+      if (intimacyData?.tarot?.derived) {
+        setIntimacyTarot(intimacyData.tarot.derived as IntimacyDerivedInfo);
+      }
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
 
   const showToast = useCallback((msg: string) => {
@@ -463,6 +482,64 @@ export default function SettingsPage() {
             })}
           </div>
         </div>
+
+        {/* 🆕 v41.1: 친밀도 카드 — 루나/타로냥 각각 독립 */}
+        {(intimacyLuna || intimacyTarot) && (
+          <div className="settings-section">
+            <h2 className="settings-section-title">관계 상태</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              {intimacyLuna && (
+                <div>
+                  <IntimacyCard
+                    level={intimacyLuna.level}
+                    levelEmoji={intimacyLuna.levelEmoji}
+                    levelName={intimacyLuna.levelName}
+                    levelLabel={intimacyLuna.levelLabel}
+                    trust={intimacyLuna.dimensions.trust}
+                    openness={intimacyLuna.dimensions.openness}
+                    bond={intimacyLuna.dimensions.bond}
+                    respect={intimacyLuna.dimensions.respect}
+                    avgScore={intimacyLuna.avgScore}
+                    progressPercent={intimacyLuna.progressPercent}
+                    daysSinceFirst={intimacyLuna.daysSinceFirst}
+                    totalSessions={intimacyLuna.totalSessions}
+                    consecutiveDays={intimacyLuna.consecutiveDays}
+                    persona="luna"
+                  />
+                  <p style={{ fontSize: 9, color: '#9ca3af', marginTop: 6, textAlign: 'center', fontStyle: 'italic', lineHeight: 1.4 }}>
+                    💭 {intimacyLuna.depthHint}
+                  </p>
+                </div>
+              )}
+              {intimacyTarot && (
+                <div>
+                  <IntimacyCard
+                    level={intimacyTarot.level}
+                    levelEmoji={intimacyTarot.levelEmoji}
+                    levelName={intimacyTarot.levelName}
+                    levelLabel={intimacyTarot.levelLabel}
+                    trust={intimacyTarot.dimensions.trust}
+                    openness={intimacyTarot.dimensions.openness}
+                    bond={intimacyTarot.dimensions.bond}
+                    respect={intimacyTarot.dimensions.respect}
+                    avgScore={intimacyTarot.avgScore}
+                    progressPercent={intimacyTarot.progressPercent}
+                    daysSinceFirst={intimacyTarot.daysSinceFirst}
+                    totalSessions={intimacyTarot.totalSessions}
+                    consecutiveDays={intimacyTarot.consecutiveDays}
+                    persona="tarot"
+                  />
+                  <p style={{ fontSize: 9, color: '#9ca3af', marginTop: 6, textAlign: 'center', fontStyle: 'italic', lineHeight: 1.4 }}>
+                    💭 {intimacyTarot.depthHint}
+                  </p>
+                </div>
+              )}
+            </div>
+            <p style={{ fontSize: 10, color: '#a855f7', marginTop: 12, textAlign: 'center', fontWeight: 600 }}>
+              💜 루나와 타로냥은 각자 독립된 관계로 발전해
+            </p>
+          </div>
+        )}
 
         {/* ⑤ 자동 음성 읽기 + 음성 활성화 */}
         <div className="settings-toggles-row">

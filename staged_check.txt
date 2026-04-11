@@ -1,0 +1,279 @@
+﻿ .gitignore                                         |   41 +
+ package-lock.json                                  | 1030 +++++++++++++-
+ package.json                                       |    4 +
+ pnpm-lock.yaml                                     |  722 ++++++++++
+ public/Chibi_fox_Luna.png                          |  Bin 0 -> 1127009 bytes
+ public/card_transparent.png                        |  Bin 0 -> 85705 bytes
+ public/char_img/kakaoXray_bg.png                   |  Bin 0 -> 904935 bytes
+ public/char_img/taronaang_1_Evt.png                |  Bin 0 -> 1038107 bytes
+ public/char_img/taronaang_xray.png                 |  Bin 0 -> 731979 bytes
+ public/consultation_dashboard_redesign_v3.png      |  Bin 0 -> 254220 bytes
+ public/consultation_dashboard_redesign_v3_ref.png  |  Bin 0 -> 988131 bytes
+ public/full_ui_transparent.png                     |  Bin 0 -> 467906 bytes
+ public/icons/icon-192.png                          |  Bin 0 -> 3307 bytes
+ public/icons/icon-512.png                          |  Bin 0 -> 12654 bytes
+ public/kakao_bg.jpeg                               |  Bin 0 -> 93271 bytes
+ public/luna_fox.png                                |  Bin 0 -> 101572 bytes
+ public/luna_fox_transparent.png                    |  Bin 0 -> 421144 bytes
+ public/luna_kakaotalk.jpeg                         |  Bin 0 -> 572219 bytes
+ public/luna_login.png                              |  Bin 0 -> 456315 bytes
+ public/opening.mp4                                 |  Bin 0 -> 2563828 bytes
+ public/opening_taronaang.mp4                       |  Bin 0 -> 1497202 bytes
+ public/personas/counselor_cushion.png              |  Bin 0 -> 42600 bytes
+ public/personas/friend_cushion.png                 |  Bin 0 -> 39198 bytes
+ public/personas/luna_cushion.png                   |  Bin 0 -> 21523 bytes
+ public/personas/panel_cushion.png                  |  Bin 0 -> 40499 bytes
+ public/settings_screen_redesign_with_mascot.png    |  Bin 0 -> 1446412 bytes
+ public/start_btn_transparent.png                   |  Bin 0 -> 81556 bytes
+ public/stickers/luna-angry.png                     |  Bin 0 -> 146615 bytes
+ public/stickers/luna-celebrate.png                 |  Bin 0 -> 153131 bytes
+ public/stickers/luna-comfort.png                   |  Bin 0 -> 159122 bytes
+ public/stickers/luna-cry.png                       |  Bin 0 -> 115555 bytes
+ public/stickers/luna-fighting.png                  |  Bin 0 -> 159056 bytes
+ public/stickers/luna-heart.png                     |  Bin 0 -> 142316 bytes
+ public/stickers/luna-proud.png                     |  Bin 0 -> 145224 bytes
+ public/stickers/luna-think.png                     |  Bin 0 -> 160020 bytes
+ public/stitch_luna_landing.png                     |  Bin 0 -> 467204 bytes
+ public/tab_transparent.png                         |  Bin 0 -> 120992 bytes
+ public/taronaong_kakao.png                         |  Bin 0 -> 1335901 bytes
+ public/tarot-cards/cups/cups_1.jpg                 |  Bin 0 -> 90041 bytes
+ public/tarot-cards/cups/cups_10.jpg                |  Bin 0 -> 99435 bytes
+ public/tarot-cards/cups/cups_2.jpg                 |  Bin 0 -> 100746 bytes
+ public/tarot-cards/cups/cups_3.jpg                 |  Bin 0 -> 109969 bytes
+ public/tarot-cards/cups/cups_4.jpg                 |  Bin 0 -> 111112 bytes
+ public/tarot-cards/cups/cups_5.jpg                 |  Bin 0 -> 80769 bytes
+ public/tarot-cards/cups/cups_6.jpg                 |  Bin 0 -> 111130 bytes
+ public/tarot-cards/cups/cups_7.jpg                 |  Bin 0 -> 105736 bytes
+ public/tarot-cards/cups/cups_8.jpg                 |  Bin 0 -> 95570 bytes
+ public/tarot-cards/cups/cups_9.jpg                 |  Bin 0 -> 96297 bytes
+ public/tarot-cards/cups/cups_king.jpg              |  Bin 0 -> 102180 bytes
+ public/tarot-cards/cups/cups_knight.jpg            |  Bin 0 -> 89221 bytes
+ public/tarot-cards/cups/cups_page.jpg              |  Bin 0 -> 89143 bytes
+ public/tarot-cards/cups/cups_queen.jpg             |  Bin 0 -> 110511 bytes
+ public/tarot-cards/major/major_0.jpg               |  Bin 0 -> 96447 bytes
+ public/tarot-cards/major/major_1.jpg               |  Bin 0 -> 97765 bytes
+ public/tarot-cards/major/major_10.jpg              |  Bin 0 -> 110700 bytes
+ public/tarot-cards/major/major_11.jpg              |  Bin 0 -> 114347 bytes
+ public/tarot-cards/major/major_12.jpg              |  Bin 0 -> 79252 bytes
+ public/tarot-cards/major/major_13.jpg              |  Bin 0 -> 110960 bytes
+ public/tarot-cards/major/major_14.jpg              |  Bin 0 -> 117330 bytes
+ public/tarot-cards/major/major_15.jpg              |  Bin 0 -> 96944 bytes
+ public/tarot-cards/major/major_16.jpg              |  Bin 0 -> 97055 bytes
+ public/tarot-cards/major/major_17.jpg              |  Bin 0 -> 107577 bytes
+ public/tarot-cards/major/major_18.jpg              |  Bin 0 -> 103995 bytes
+ public/tarot-cards/major/major_19.jpg              |  Bin 0 -> 122055 bytes
+ public/tarot-cards/major/major_2.jpg               |  Bin 0 -> 105951 bytes
+ public/tarot-cards/major/major_20.jpg              |  Bin 0 -> 114540 bytes
+ public/tarot-cards/major/major_21.jpg              |  Bin 0 -> 111887 bytes
+ public/tarot-cards/major/major_3.jpg               |  Bin 0 -> 117392 bytes
+ public/tarot-cards/major/major_4.jpg               |  Bin 0 -> 117343 bytes
+ public/tarot-cards/major/major_5.jpg               |  Bin 0 -> 113709 bytes
+ public/tarot-cards/major/major_6.jpg               |  Bin 0 -> 115390 bytes
+ public/tarot-cards/major/major_7.jpg               |  Bin 0 -> 106536 bytes
+ public/tarot-cards/major/major_8.jpg               |  Bin 0 -> 86688 bytes
+ public/tarot-cards/major/major_9.jpg               |  Bin 0 -> 79432 bytes
+ public/tarot-cards/pentacles/pentacles_1.jpg       |  Bin 0 -> 78918 bytes
+ public/tarot-cards/pentacles/pentacles_10.jpg      |  Bin 0 -> 121959 bytes
+ public/tarot-cards/pentacles/pentacles_2.jpg       |  Bin 0 -> 75615 bytes
+ public/tarot-cards/pentacles/pentacles_3.jpg       |  Bin 0 -> 108407 bytes
+ public/tarot-cards/pentacles/pentacles_4.jpg       |  Bin 0 -> 74337 bytes
+ public/tarot-cards/pentacles/pentacles_5.jpg       |  Bin 0 -> 117000 bytes
+ public/tarot-cards/pentacles/pentacles_6.jpg       |  Bin 0 -> 93541 bytes
+ public/tarot-cards/pentacles/pentacles_7.jpg       |  Bin 0 -> 99180 bytes
+ public/tarot-cards/pentacles/pentacles_8.jpg       |  Bin 0 -> 80896 bytes
+ public/tarot-cards/pentacles/pentacles_9.jpg       |  Bin 0 -> 103993 bytes
+ public/tarot-cards/pentacles/pentacles_king.jpg    |  Bin 0 -> 106536 bytes
+ public/tarot-cards/pentacles/pentacles_knight.jpg  |  Bin 0 -> 81346 bytes
+ public/tarot-cards/pentacles/pentacles_page.jpg    |  Bin 0 -> 75276 bytes
+ public/tarot-cards/pentacles/pentacles_queen.jpg   |  Bin 0 -> 127022 bytes
+ public/tarot-cards/swords/swords_1.jpg             |  Bin 0 -> 73958 bytes
+ public/tarot-cards/swords/swords_10.jpg            |  Bin 0 -> 90018 bytes
+ public/tarot-cards/swords/swords_2.jpg             |  Bin 0 -> 89948 bytes
+ public/tarot-cards/swords/swords_3.jpg             |  Bin 0 -> 73778 bytes
+ public/tarot-cards/swords/swords_4.jpg             |  Bin 0 -> 87381 bytes
+ public/tarot-cards/swords/swords_5.jpg             |  Bin 0 -> 101996 bytes
+ public/tarot-cards/swords/swords_6.jpg             |  Bin 0 -> 91399 bytes
+ public/tarot-cards/swords/swords_7.jpg             |  Bin 0 -> 76688 bytes
+ public/tarot-cards/swords/swords_8.jpg             |  Bin 0 -> 99623 bytes
+ public/tarot-cards/swords/swords_9.jpg             |  Bin 0 -> 95260 bytes
+ public/tarot-cards/swords/swords_king.jpg          |  Bin 0 -> 101978 bytes
+ public/tarot-cards/swords/swords_knight.jpg        |  Bin 0 -> 101532 bytes
+ public/tarot-cards/swords/swords_page.jpg          |  Bin 0 -> 97554 bytes
+ public/tarot-cards/swords/swords_queen.jpg         |  Bin 0 -> 90509 bytes
+ public/tarot-cards/wands/wands_1.jpg               |  Bin 0 -> 77665 bytes
+ public/tarot-cards/wands/wands_10.jpg              |  Bin 0 -> 107662 bytes
+ public/tarot-cards/wands/wands_2.jpg               |  Bin 0 -> 84105 bytes
+ public/tarot-cards/wands/wands_3.jpg               |  Bin 0 -> 94229 bytes
+ public/tarot-cards/wands/wands_4.jpg               |  Bin 0 -> 91746 bytes
+ public/tarot-cards/wands/wands_5.jpg               |  Bin 0 -> 102700 bytes
+ public/tarot-cards/wands/wands_6.jpg               |  Bin 0 -> 105662 bytes
+ public/tarot-cards/wands/wands_7.jpg               |  Bin 0 -> 102920 bytes
+ public/tarot-cards/wands/wands_8.jpg               |  Bin 0 -> 94505 bytes
+ public/tarot-cards/wands/wands_9.jpg               |  Bin 0 -> 114040 bytes
+ public/tarot-cards/wands/wands_king.jpg            |  Bin 0 -> 112676 bytes
+ public/tarot-cards/wands/wands_knight.jpg          |  Bin 0 -> 104533 bytes
+ public/tarot-cards/wands/wands_page.jpg            |  Bin 0 -> 90836 bytes
+ public/tarot-cards/wands/wands_queen.jpg           |  Bin 0 -> 113798 bytes
+ public/ui/bottom_menu_1.png                        |  Bin 0 -> 269049 bytes
+ public/ui/bottom_menu_2.png                        |  Bin 0 -> 382990 bytes
+ public/ui/bottom_menu_3.png                        |  Bin 0 -> 405060 bytes
+ public/ui/bottom_menu_4.png                        |  Bin 0 -> 864324 bytes
+ public/ui/card_back_img.png                        |  Bin 0 -> 1835136 bytes
+ public/ui/list_1.jpeg                              |  Bin 0 -> 411282 bytes
+ public/ui/list_1_transparent.png                   |  Bin 0 -> 317168 bytes
+ public/ui/list_1_transparent_backup.png            |  Bin 0 -> 322105 bytes
+ public/ui/list_2.jpeg                              |  Bin 0 -> 488492 bytes
+ public/ui/list_2_transparent.png                   |  Bin 0 -> 497530 bytes
+ public/ui/list_2_transparent_backup.png            |  Bin 0 -> 502451 bytes
+ public/ui/list_3.jpeg                              |  Bin 0 -> 503843 bytes
+ public/ui/list_3_transparent.png                   |  Bin 0 -> 474523 bytes
+ public/ui/list_3_transparent_backup.png            |  Bin 0 -> 479381 bytes
+ public/ui/mystical_cat_tarot_selection_v2 (1).png  |  Bin 0 -> 1216667 bytes
+ public/ui/sangdam_luna.png                         |  Bin 0 -> 962285 bytes
+ public/ui/sangdam_taromiao.png                     |  Bin 0 -> 988894 bytes
+ public/ui_list_bg.jpeg                             |  Bin 0 -> 364155 bytes
+ ...203\201\355\231\251_202603302110-Photoroom.png" |  Bin 0 -> 897697 bytes
+ src/app/(app)/chat/[sessionId]/page.tsx            |    2 +-
+ src/app/(app)/chat/page.tsx                        |  694 ++++++---
+ src/app/(app)/insights/page.tsx                    |  562 +++++---
+ src/app/(app)/journal/page.tsx                     |  110 --
+ src/app/(app)/lounge/page.tsx                      |  406 ++++++
+ src/app/(app)/settings/page.tsx                    |  575 +++++++-
+ src/app/(app)/settings/settings.css                |  503 +++++++
+ src/app/(app)/subscription/page.tsx                |  134 ++
+ src/app/(app)/xray/page.tsx                        |  477 +++++++
+ src/app/(app)/xray/simulate/page.tsx               |  198 +++
+ src/app/(auth)/login/page.tsx                      |  113 +-
+ src/app/api/analysis/route.ts                      |  266 +++-
+ src/app/api/chat/stream/route.ts                   |  350 ++++-
+ src/app/api/journal/route.ts                       |   42 -
+ src/app/api/lounge/chat/route.ts                   |  107 ++
+ src/app/api/lounge/history/route.ts                |   41 +
+ src/app/api/lounge/state/route.ts                  |   80 ++
+ src/app/api/sessions/[sessionId]/complete/route.ts |   61 +-
+ src/app/api/sessions/route.ts                      |   58 +-
+ src/app/api/tarot/daily/route.ts                   |   38 +
+ src/app/api/tarot/reading/route.ts                 |   74 +
+ src/app/api/tts/route.ts                           |   87 ++
+ src/app/api/user/data/route.ts                     |   33 +
+ src/app/api/user/persona/current/route.ts          |    2 +-
+ src/app/api/user/persona/route.ts                  |    2 +-
+ src/app/api/user/profile/route.ts                  |   46 +
+ src/app/api/xray/analyze/route.ts                  |  168 +++
+ src/app/api/xray/simulate/route.ts                 |  118 ++
+ src/app/welcome/page.tsx                           |   98 +-
+ src/components/chat-list/DateGroup.tsx             |    6 +-
+ src/components/chat-list/EmptyState.tsx            |   14 +-
+ src/components/chat-list/SessionCard.tsx           |  118 +-
+ src/components/chat-list/SessionFilters.tsx        |   78 +-
+ src/components/chat/ChatContainer.tsx              |  499 ++++---
+ src/components/chat/ChatInput.tsx                  |  230 ++-
+ src/components/chat/LunaSticker.tsx                |   38 +
+ src/components/chat/MessageBubble.tsx              |  105 +-
+ src/components/chat/events/EmotionMirror.tsx       |  159 +++
+ src/components/chat/events/EmotionThermometer.tsx  |  374 +++--
+ src/components/chat/events/GrowthReport.tsx        |    8 +-
+ src/components/chat/events/HomeworkCard.tsx        |   84 ++
+ src/components/chat/events/InsightCard.tsx         |  197 +--
+ src/components/chat/events/PatternMirrorCard.tsx   |  182 +++
+ src/components/chat/events/PhaseProgress.tsx       |  433 +++++-
+ src/components/chat/events/ScalingQuestion.tsx     |  131 --
+ src/components/chat/events/SessionSummary.tsx      |   59 +
+ src/components/chat/events/TarotAxisCollect.tsx    |  622 ++++++++
+ src/components/chat/events/TarotDraw.tsx           |  585 ++++++++
+ src/components/chat/events/TarotInsight.tsx        |  136 ++
+ src/components/chat/events/XRayInlineCard.tsx      |   75 +
+ src/components/chat/tarot/SpreadSelector.tsx       |  178 +++
+ src/components/chat/tarot/TarotStartScreen.tsx     |  226 +++
+ src/components/common/PremiumBadge.tsx             |   60 +
+ src/components/layout/Navigation.tsx               |   15 +-
+ src/components/lounge/CharacterDialogue.tsx        |   75 +
+ src/components/lounge/CharacterScene.tsx           |   81 ++
+ src/components/lounge/LoungeBackground.tsx         |  107 ++
+ src/components/lounge/LoungeInput.tsx              |   47 +
+ src/components/lounge/LoungeMessage.tsx            |  103 ++
+ src/components/lounge/MoodCheckIn.tsx              |   88 ++
+ src/components/xray/XRayHeatmap.tsx                |  101 ++
+ src/components/xray/XRayResultCard.tsx             |   85 ++
+ src/engines/emotion-accumulator/index.ts           |  150 ++
+ .../emotion-accumulator/mirror-generator.ts        |  121 ++
+ .../emotion-accumulator/pattern-generator.ts       |  124 ++
+ src/engines/lounge/conversation-player.ts          |  128 ++
+ src/engines/lounge/daily-state-engine.ts           |  245 ++++
+ src/engines/lounge/dialogue-engine.ts              |  190 +++
+ src/engines/lounge/emotion-fsm.ts                  |   74 +
+ src/engines/lounge/event-pool.ts                   |  177 +++
+ src/engines/lounge/mini-stories.ts                 |  175 +++
+ src/engines/lounge/npc-life-engine.ts              |  168 +++
+ src/engines/lounge/seeded-random.ts                |   39 +
+ src/engines/memory/extract-memory.ts               |  308 ++++
+ src/engines/phase-manager/events.ts                |  679 ++++++++-
+ src/engines/phase-manager/index.ts                 |  290 ++--
+ src/engines/phase-manager/pattern-detector.ts      |  482 +++++++
+ src/engines/phase-manager/phase-prompts.ts         |  409 ++++--
+ src/engines/pipeline/index.ts                      |  573 +++++++-
+ src/engines/prompt-generator/index.ts              |  145 +-
+ src/engines/prompt-generator/persona-prompts.ts    |  963 ++++++++++++-
+ .../relationship-diagnosis/diagnosis-prompts.ts    |  187 +++
+ src/engines/relationship-diagnosis/index.ts        |  546 +++++++
+ src/engines/relationship-diagnosis/types.ts        |  392 +++++
+ src/engines/response-type/index.ts                 |   21 +-
+ .../solution-dictionary/boredom-solutions.ts       |  415 ++++++
+ .../solution-dictionary/breakup-solutions.ts       |  477 +++++++
+ src/engines/solution-dictionary/dictionary-data.ts |  447 +++---
+ .../solution-dictionary/general-solutions.ts       |  417 ++++++
+ .../solution-dictionary/ghosting-solutions.ts      |  724 ++++++++++
+ src/engines/solution-dictionary/index.ts           |  294 +++-
+ .../solution-dictionary/infidelity-solutions.ts    |  551 +++++++
+ .../solution-dictionary/jealousy-solutions.ts      |  695 +++++++++
+ .../solution-dictionary/long-distance-solutions.ts |  416 ++++++
+ .../solution-dictionary/read-ignored-solutions.ts  |  512 ++++++-
+ src/engines/solution-dictionary/tarot-solutions.ts |  336 +++++
+ src/engines/solution-dictionary/types.ts           |   26 +-
+ src/engines/state-analysis/index.ts                |  128 +-
+ .../state-analysis/scenario-keywords.test.ts       |  142 ++
+ src/engines/state-analysis/scenario-keywords.ts    | 1501 ++++++++++++++++++++
+ src/engines/suggestion-gate.ts                     |    4 +-
+ src/engines/tarot/__test__/tarot-engine.test.ts    |  227 +++
+ src/engines/tarot/card-images.ts                   |   60 +
+ src/engines/tarot/cards.ts                         | 1183 +++++++++++++++
+ src/engines/tarot/consultation/closing-ritual.ts   |  176 +++
+ src/engines/tarot/consultation/grounding.ts        |  157 ++
+ src/engines/tarot/consultation/index.ts            |   46 +
+ src/engines/tarot/consultation/intake.ts           |  297 ++++
+ .../tarot/consultation/turn-orchestrator.ts        |  459 ++++++
+ src/engines/tarot/emotion-card-mapper.ts           |  195 +++
+ src/engines/tarot/engagement/action-library.ts     |  243 ++++
+ src/engines/tarot/engagement/index.ts              |   12 +
+ src/engines/tarot/history-engine.ts                |  264 ++++
+ src/engines/tarot/index.ts                         |  365 +++++
+ src/engines/tarot/interpretation-engine.ts         |  115 ++
+ src/engines/tarot/prompts/index.ts                 |    7 +
+ src/engines/tarot/prompts/system-prompt.ts         |  130 ++
+ src/engines/tarot/prompts/turn-prompts.ts          |  604 ++++++++
+ src/engines/tarot/psychology/archetype-mapper.ts   |  198 +++
+ src/engines/tarot/psychology/barnum-generator.ts   |  183 +++
+ src/engines/tarot/psychology/empathy-library.ts    |  234 +++
+ src/engines/tarot/psychology/index.ts              |   33 +
+ src/engines/tarot/psychology/mirroring-engine.ts   |  135 ++
+ src/engines/tarot/psychology/reframing-engine.ts   |  292 ++++
+ src/engines/tarot/reading-engine.ts                |  204 +++
+ src/engines/tarot/reading-prompts.ts               |  106 ++
+ src/engines/tarot/spread-recommender.ts            |   91 ++
+ src/hooks/useChat.ts                               |   40 +-
+ src/hooks/useLunaVoice.ts                          |  162 +++
+ src/lib/ai/claude.ts                               |   48 +-
+ src/lib/ai/model-router.ts                         |   83 +-
+ src/lib/ai/provider-registry.ts                    |   73 +-
+ src/lib/ai/smart-router.ts                         |  117 +-
+ src/lib/rag/ingestor.ts                            |   23 +
+ src/lib/subscription-plans.ts                      |   55 +
+ src/lib/subscription.ts                            |   60 +
+ src/lib/utils/korean-nlp.ts                        |  143 +-
+ src/lib/utils/rate-limit.ts                        |   12 +-
+ src/proxy.ts                                       |    2 +-
+ src/types/chat.types.ts                            |   10 -
+ src/types/engine.types.ts                          |  236 ++-
+ src/types/persona.types.ts                         |   14 +-
+ supabase/migrations/009_user_memory_profile.sql    |   20 +
+ 278 files changed, 31064 insertions(+), 2262 deletions(-)

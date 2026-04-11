@@ -1,6 +1,9 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { extractSessionMemory, mergeMemory, createEmptyProfile, type UserMemoryProfile } from '@/engines/memory/extract-memory';
+import { saveMemory, decayMemories, extractKeywordsForMemory } from '@/engines/human-like/memory-engine';
+import { getIntimacyLevel } from '@/engines/human-like/user-model';
+import { loadUserModel, learnFromSession, saveUserModel } from '@/engines/human-like/user-model';
 
 /**
  * PATCH /api/sessions/[sessionId]/complete
@@ -139,8 +142,90 @@ export async function PATCH(
         .eq('id', user.id);
 
       console.log(`[Memory] ✅ 메모리 추출 완료: ${extraction.newFacts.length}개 새 사실, hook="${extraction.nextSessionHook}"`);
+
+      // 🆕 v29: user_memories 테이블에도 저장
+      for (const fact of extraction.newFacts) {
+        await saveMemory(supabase, user.id, {
+          content: fact,
+          memoryType: 'episodic',
+          category: 'session_highlight',
+          source: 'counseling',
+          keywordTags: extractKeywordsForMemory(fact),
+          emotionTag: session.locked_scenario === 'BREAKUP_CONTEMPLATION' ? 'sad' : undefined,
+          emotionalWeight: 0.5,
+          sessionId,
+        });
+      }
+      // 핵심 감정 발견도 저장
+      if (extraction.nextSessionHook) {
+        await saveMemory(supabase, user.id, {
+          content: extraction.nextSessionHook,
+          summary: extraction.nextSessionHook.slice(0, 50),
+          memoryType: 'semantic',
+          category: 'core_emotion',
+          source: 'counseling',
+          keywordTags: extractKeywordsForMemory(extraction.nextSessionHook),
+          emotionalWeight: 0.7,
+          sessionId,
+        });
+      }
+      console.log(`[Memory] ✅ user_memories 저장 완료: ${extraction.newFacts.length + 1}개`);
     } catch (e) {
       console.error('[Memory] 메모리 추출 실패 (무시):', e);
+    }
+
+    // 🆕 v29: 기억 감쇠 (에빙하우스 망각곡선)
+    try {
+      await decayMemories(supabase, user.id);
+      console.log(`[Memory] ✅ 기억 감쇠 처리 완료`);
+    } catch (e) {
+      console.warn('[Memory] 감쇠 처리 실패 (무시):', e);
+    }
+
+    // 🆕 v29: 친밀도 업데이트
+    try {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('luna_session_count')
+        .eq('id', user.id)
+        .single();
+      const newCount = (profile?.luna_session_count ?? 0) + 1;
+      const newLevel = getIntimacyLevel(newCount);
+      await supabase
+        .from('user_profiles')
+        .update({
+          luna_session_count: newCount,
+          luna_intimacy_level: newLevel,
+        })
+        .eq('id', user.id);
+      console.log(`[Memory] ✅ 친밀도 업데이트: 세션 ${newCount}회, 레벨 ${newLevel}`);
+    } catch (e) {
+      console.warn('[Memory] 친밀도 업데이트 실패 (무시):', e);
+    }
+
+    // 🆕 v31: 유저 모델 학습 (대화 스타일/감정 패턴 업데이트)
+    try {
+      const { data: allMsgsForModel } = await supabase
+        .from('messages')
+        .select('sender_type, content')
+        .eq('session_id', sessionId)
+        .eq('sender_type', 'user')
+        .order('created_at', { ascending: true })
+        .limit(20);
+      const userMsgs = (allMsgsForModel ?? []).map((m: any) => m.content as string);
+      if (userMsgs.length >= 2) {
+        const currentModel = await loadUserModel(supabase, user.id);
+        const { data: profileForCount } = await supabase
+          .from('user_profiles')
+          .select('luna_session_count')
+          .eq('id', user.id)
+          .single();
+        const updatedModel = learnFromSession(currentModel, userMsgs, profileForCount?.luna_session_count ?? 1);
+        await saveUserModel(supabase, user.id, updatedModel);
+        console.log(`[Memory] ✅ 유저 모델 학습 완료: 직설=${updatedModel.communicationStyle.prefersDirect.toFixed(2)}, 친밀도=${updatedModel.lunaRelationship.intimacyScore}`);
+      }
+    } catch (e) {
+      console.warn('[Memory] 유저 모델 학습 실패 (무시):', e);
     }
   })();
 

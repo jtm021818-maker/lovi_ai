@@ -345,6 +345,37 @@ export async function GET() {
     streakDays,
   );
 
+  // 🆕 v33 (M4): 무료 유저는 프리미엄 전용 데이터 제거 (대역폭 절약 + 데이터 노출 방지)
+  if (!isPremium) {
+    return NextResponse.json({
+      emotionTrend,           // 무료: 감정 추이 (기본)
+      distortions,            // 무료: 인지 왜곡 (기본)
+      attachment: null,       // 🔒 프리미엄 전용
+      emotionalBank: null,    // 🔒 프리미엄 전용
+      strategyFrequency: null, // 🔒 프리미엄 전용
+      summary: {
+        totalSessions,
+        totalMessages: messages.length,
+        avgEmotionScore,
+        prevAvgEmotionScore,
+        emotionDirection,
+        topDistortion: topDistortion ? (DISTORTION_LABELS[topDistortion]?.name ?? topDistortion) : null,
+        topDistortionCount,
+        dominantAttachment: null,  // 🔒 프리미엄 전용
+        streakDays,
+        lastSessionDate,
+      },
+      lunaMessages: {
+        greeting: lunaMessages.greeting,
+        emotionInsight: lunaMessages.emotionInsight,
+        patternInsight: null,    // 🔒 프리미엄 전용
+        growthInsight: null,     // 🔒 프리미엄 전용
+        weeklyTip: lunaMessages.weeklyTip,
+      },
+      isPremium,
+    });
+  }
+
   return NextResponse.json({
     emotionTrend,
     distortions,

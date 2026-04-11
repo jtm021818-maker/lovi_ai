@@ -7,6 +7,8 @@ export interface ChatMessage {
   sentimentScore?: number;
   strategyUsed?: string;
   createdAt: string;
+  /** @internal 스트리밍 중 ||| 구분자를 포함한 전체 원본 (v29) */
+  _fullContent?: string;
 }
 
 /** 상담 세션 */
@@ -36,7 +38,7 @@ export interface UserProfile {
 
 /** 스트리밍 이벤트 */
 export interface StreamEvent {
-  type: 'text' | 'state' | 'nudge' | 'done' | 'error' | 'suggestions' | 'panel' | 'strategy' | 'axes_progress' | 'axis_choices' | 'phase_event' | 'phase_change';
+  type: 'text' | 'state' | 'nudge' | 'done' | 'error' | 'suggestions' | 'panel' | 'strategy' | 'axes_progress' | 'axis_choices' | 'phase_event' | 'phase_change' | 'hlre_replace' | 'context_log' | 'luna_thinking_deep' | 'intimacy_level_up';
   data: string | string[] | Record<string, unknown> | Record<string, unknown>[];
 }
 

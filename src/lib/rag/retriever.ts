@@ -32,6 +32,8 @@ export interface RetrieverOptions {
   threshold?: number;
   /** 반환할 최대 결과 수 (기본: 5) */
   topK?: number;
+  /** 🆕 ACE v4: 짧은 쿼리 보강용 세션 주제 */
+  sessionTheme?: string;
 }
 
 /**
@@ -51,8 +53,14 @@ export async function retrieveMemories(
   const threshold = options.threshold ?? RAG_SIMILARITY_THRESHOLD;
   const topK = options.topK ?? RAG_TOP_K;
 
+  // 🆕 ACE v4: 짧은 쿼리 보강 — 세션 주제와 합쳐서 검색
+  let enrichedQuery = query;
+  if (query.trim().length < 15 && options.sessionTheme) {
+    enrichedQuery = `${options.sessionTheme} ${query}`;
+  }
+
   // 쿼리 텍스트 임베딩 생성
-  const embeddingResult = await embedText(query);
+  const embeddingResult = await embedText(enrichedQuery);
   if (!embeddingResult) {
     // 10자 미만 쿼리 → 빈 결과 반환
     return [];

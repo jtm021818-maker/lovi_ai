@@ -25,10 +25,16 @@ export async function POST(req: NextRequest) {
 
   const profile = (data?.memory_profile ?? {}) as any;
 
-  // 오늘치만 저장 (최대 50개 메시지)
+  // 🆕 v27: 7일간 누적 저장 (카톡 백업 기준 참고), 최대 150개
+  // 각 메시지에 날짜 태그가 있으면 7일 지난 건 자동 정리
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const filtered = (messages ?? []).filter((m: any) => {
+    if (!m.date) return true; // 날짜 없으면 유지
+    return m.date >= sevenDaysAgo;
+  });
   profile.loungeHistory = {
     date: today,
-    messages: (messages ?? []).slice(-50),
+    messages: filtered.slice(-150),
     crossTalkPlayed: crossTalkPlayed ?? false,
   };
 

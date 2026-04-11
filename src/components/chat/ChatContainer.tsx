@@ -18,8 +18,26 @@ import { BreathingGuide } from '@/components/nudge/BreathingGuide';
 // 🆕 v8: 7종 이벤트 및 상태 시각화 컴포넌트 임포트
 import PhaseProgress from './events/PhaseProgress';
 import EmotionThermometer from './events/EmotionThermometer';
+import MindReading from './events/MindReading';
 import InsightCard from './events/InsightCard';
 import EmotionMirror from './events/EmotionMirror';
+import LunaStory from './events/LunaStory';
+import LunaStrategy from './events/LunaStrategy';
+import LunaThoughtHistory from './LunaThoughtHistory';
+import SituationTimeline from './SituationTimeline';
+// 🆕 v40: 루나 딥리서치 "진짜 고민 중" 로딩 UI
+import LunaThinkingDeep from './LunaThinkingDeep';
+// 🆕 v41: 친밀도 레벨업 축하 팝업
+import IntimacyLevelUp from '@/components/intimacy/IntimacyLevelUp';
+// 🆕 v35: 모드별 SOLVE 이벤트 UI
+import ToneSelector from './events/ToneSelector';
+import DraftWorkshop from './events/DraftWorkshop';
+import RoleplayFeedback from './events/RoleplayFeedback';
+import PanelReport from './events/PanelReport';
+import IdeaRefine from './events/IdeaRefine';
+// 🆕 v39: SOLVE/EMPOWER 재설계 이벤트 UI
+import ActionPlan from './events/ActionPlan';
+import WarmWrap from './events/WarmWrap';
 import PatternMirrorCard from './events/PatternMirrorCard';
 import SolutionPreview from './events/SolutionPreview';
 import SolutionCard from './events/SolutionCard';
@@ -87,7 +105,7 @@ const SCENARIO_LABELS: Record<RelationshipScenario, { icon: string; label: strin
 };
 
 export default function ChatContainer({ sessionId }: ChatContainerProps) {
-  const { messages, isLoading, nudges, stateResult, suggestions, panelData, axesProgress, phaseEvents, currentPhase, phaseProgress, sessionStatus, sessionSummary, sendMessage } = useChat(sessionId);
+  const { messages, isLoading, nudges, stateResult, suggestions, panelData, axesProgress, phaseEvents, currentPhase, phaseProgress, sessionStatus, sessionSummary, sendMessage, pendingEventLock, lunaThinking, understandingLevel, thinkingDeep, intimacyLevelUp, dismissIntimacyLevelUp } = useChat(sessionId);
   const { toggle: toggleSpeak, isSpeaking, speak, isSupported: ttsSupported, settings: voiceSettings, updateSettings: updateVoiceSettings } = useLunaVoice();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activePersona, setActivePersona] = useState<PersonaMode>('luna');
@@ -114,7 +132,9 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
   }, []);
   const [isScenarioPanelOpen, setIsScenarioPanelOpen] = useState(false);
   const [userOverrideScenario, setUserOverrideScenario] = useState<RelationshipScenario | null>(null);
+  const [isThoughtHistoryOpen, setIsThoughtHistoryOpen] = useState(false);
   const [openingVideoEnded, setOpeningVideoEnded] = useState(false);
+  const [isListenSkipOpen, setIsListenSkipOpen] = useState(false);
   const [xrayResult, setXrayResult] = useState<XRayResult | null>(null);
   const [xrayLoading, setXrayLoading] = useState(false);
   const personaRef = useRef<HTMLDivElement>(null);
@@ -164,7 +184,8 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
   // 시나리오: 유저 오버라이드 > AI 분류
   const detectedScenario = stateResult?.scenario ?? null;
   const activeScenario = userOverrideScenario ?? detectedScenario;
-  const showScenarioTag = activeScenario && activeScenario !== RelationshipScenario.GENERAL;
+  // 🆕 v38: situationRead 우선 — 시나리오 분류가 없어도 대화 시작되면 상황 태그 영역 표시
+  const showScenarioTag = !!stateResult?.situationRead || (activeScenario && activeScenario !== RelationshipScenario.GENERAL) || userMsgCount >= 1;
 
   /** 페르소나 변경 시 DB 업데이트 */
   function handlePersonaChange(mode: PersonaMode) {
@@ -243,8 +264,20 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
     console.log(`[ChatContainer] 렌더링 시도 이벤트:`, event.type);
     switch (event.type) {
       case 'EMOTION_THERMOMETER': return <EmotionThermometer key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
+      case 'MIND_READING': return <MindReading key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
       case 'INSIGHT_CARD': return <InsightCard key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
       case 'EMOTION_MIRROR': return <EmotionMirror key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
+      case 'LUNA_STORY': return <LunaStory key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
+      case 'LUNA_STRATEGY': return <LunaStrategy key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
+      // 🆕 v35: 모드별 SOLVE 이벤트 렌더링
+      case 'TONE_SELECT': return <ToneSelector key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
+      case 'DRAFT_WORKSHOP': return <DraftWorkshop key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
+      case 'ROLEPLAY_FEEDBACK': return <RoleplayFeedback key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
+      case 'PANEL_REPORT': return <PanelReport key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
+      case 'IDEA_REFINE': return <IdeaRefine key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
+      // 🆕 v39: SOLVE 마무리 + EMPOWER 재설계 이벤트
+      case 'ACTION_PLAN': return <ActionPlan key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
+      case 'WARM_WRAP': return <WarmWrap key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
       case 'PATTERN_MIRROR': return <PatternMirrorCard key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
       case 'SOLUTION_PREVIEW': return <SolutionPreview key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
       case 'SOLUTION_CARD': return <SolutionCard key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
@@ -283,177 +316,266 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
             <span className="text-2xl drop-shadow-sm">{activePersona === 'tarot' ? '🔮' : '☕️'}</span>
           </div>
 
-          {/* emotion indicator */}
-          {emotionScore !== null && (
-            <div className="flex items-center bg-white/70 backdrop-blur-sm px-2.5 py-1.5 rounded-full border border-white/50 ml-2 shadow-sm">
-              <motion.div
-                key={gradient}
-                initial={{ scale: 0.6, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="w-1.5 h-1.5 rounded-full mr-1.5 shadow-sm"
-                style={{
-                  background:
-                    emotionScore >= 3  ? '#f472b6' :
-                    emotionScore >= 0  ? '#c084fc' :
-                    emotionScore >= -3 ? '#60a5fa' :
-                                         '#6366f1',
-                }}
-              />
-              <span className="text-[10px] font-bold text-gray-500">
-                {emotionScore >= 3  ? '긍정적' :
-                 emotionScore >= 0  ? '중립' :
-                 emotionScore >= -3 ? '힘든 중' :
-                                      '많이 힘들어요'}
-              </span>
-            </div>
-          )}
         </div>
 
-        {/* 🆕 시나리오 태그 (항상 표시 — 미분석 시 "분석 중…") */}
-        <div className="flex items-center px-4 pb-2 gap-2">
-          {showScenarioTag ? (
-            <>
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setIsScenarioPanelOpen(true)}
-                className="flex items-center gap-1.5 bg-white/80 backdrop-blur-sm border border-[#D5C2A5] px-3 py-1.5 rounded-full shadow-sm"
-              >
-                <span className="text-sm">{SCENARIO_LABELS[activeScenario!].icon}</span>
-                <span className="text-[11px] font-semibold text-[#5D4037]">
-                  {SCENARIO_LABELS[activeScenario!].label}
-                </span>
-                <span className="text-[9px] text-[#8D6E63] font-medium">으로 분석됨</span>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#795548" strokeWidth="3" strokeLinecap="round">
-                  <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                </svg>
-              </motion.button>
-              
-              {/* 🆕 축 수집 진행률 표시 (읽씹이고 progress 데이터가 있을 때) */}
-              {activeScenario === RelationshipScenario.READ_AND_IGNORED && axesProgress && (
-                <motion.div 
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="flex items-center gap-1.5 bg-white/80 backdrop-blur-sm border border-[#D5C2A5] px-2.5 py-1 rounded-full shadow-sm ml-0.5"
+        {/* 🆕 v28.6: 시나리오 + 감정 + 깊이 (왼쪽) / 루나 사고 상태 (오른쪽) */}
+        <div className="flex items-start justify-between px-4 pb-2 gap-2">
+          {/* 🆕 v36: 동적 인사이트 위젯 (왼쪽) - 루나의 상황 인식 & 속마음 */}
+          <div className="flex flex-col items-start gap-1 flex-1 min-w-0 pr-1">
+            {showScenarioTag ? (
+              <>
+                {/* 1. 상황 인식 (SITUATION_READ) - 시나리오 대체 */}
+                <motion.button
+                  whileTap={{ scale: 0.96 }}
+                  onClick={() => setIsScenarioPanelOpen(true)}
+                  className="flex items-center gap-1.5 bg-white/70 backdrop-blur-md border border-white/60 px-2.5 py-1.5 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] w-fit max-w-full"
                 >
-                  {axesProgress.isComplete ? (
-                    <>
-                      <span className="text-[10px] font-bold text-[#5D4037]">진단 완료</span>
-                      <motion.span 
-                        animate={{ scale: [1, 1.2, 1] }} 
-                        transition={{ duration: 1, repeat: Infinity }} 
-                        className="text-[10px] text-[#A1887F]"
-                      >
-                        ✔
-                      </motion.span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-[9px] font-bold text-[#8D6E63]">분석 중</span>
-                      {/* 프로그레스 바 영역 */}
-                      <div className="w-12 h-1.5 bg-[#EAE1D0] rounded-full overflow-hidden border border-[#D5C2A5]/50">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${(axesProgress.filledCount / axesProgress.totalCount) * 100}%` }}
-                          transition={{ type: 'spring', damping: 20, stiffness: 100 }}
-                          className="h-full bg-gradient-to-r from-[#D7CCC8] to-[#8D6E63] rounded-full relative overflow-hidden"
-                        >
-                          <motion.div 
-                            animate={{ x: ['-100%', '100%'] }}
-                            transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-                            className="absolute inset-0 bg-white/30 w-1/2 skew-x-12"
-                          />
-                        </motion.div>
-                      </div>
-                    </>
-                  )}
-                </motion.div>
-              )}
+                  <div className="flex items-center justify-center bg-violet-50/80 rounded-full w-[18px] h-[18px] shadow-inner shrink-0">
+                    <span className="text-[10px]">🔍</span>
+                  </div>
+                  <span className="text-[11px] font-bold text-[#6D4C41] truncate tracking-tight">
+                    {stateResult?.situationRead || '상황 듣는 중...'}
+                  </span>
+                  <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#A1887F" strokeWidth="3" strokeLinecap="round" className="opacity-80 shrink-0">
+                    <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                  </svg>
+                </motion.button>
 
-              {userOverrideScenario && (
-                <button
-                  onClick={() => setUserOverrideScenario(null)}
-                  className="text-[10px] text-gray-400 hover:text-gray-600"
+                {/* 2. 루나의 속마음 (LUNA_THOUGHT) — 클릭 시 히스토리 */}
+                <AnimatePresence>
+                  {stateResult?.lunaThought && (
+                    <motion.button
+                      initial={{ opacity: 0, height: 0, marginTop: -4, scale: 0.95 }}
+                      animate={{ opacity: 1, height: 'auto', marginTop: 0, scale: 1 }}
+                      exit={{ opacity: 0, height: 0, marginTop: -4, scale: 0.95 }}
+                      transition={{ type: 'spring', damping: 22, stiffness: 200 }}
+                      whileTap={{ scale: 0.96 }}
+                      onClick={() => setIsThoughtHistoryOpen(true)}
+                      className="flex items-center gap-1.5 bg-gradient-to-r from-pink-50/90 to-purple-50/90 backdrop-blur-md border border-pink-100/60 px-2.5 py-1.5 rounded-2xl shadow-[0_2px_12px_rgba(236,72,153,0.05)] w-fit max-w-full overflow-hidden text-left"
+                    >
+                      <motion.div 
+                        animate={{ opacity: [0.5, 1, 0.5] }} 
+                        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                        className="shrink-0 flex items-center justify-center"
+                      >
+                        <span className="text-[11px]">💭</span>
+                      </motion.div>
+                      <span className="text-[10.5px] font-semibold text-pink-500/90 truncate tracking-tight">
+                        {stateResult.lunaThought}
+                      </span>
+                      {(stateResult.lunaThoughtHistory?.length ?? 0) > 1 && (
+                        <span className="text-[8px] text-pink-300 shrink-0 ml-0.5">
+                          +{(stateResult.lunaThoughtHistory?.length ?? 1) - 1}
+                        </span>
+                      )}
+                    </motion.button>
+                  )}
+                </AnimatePresence>
+              </>
+            ) : (
+              <div className="flex items-center gap-1.5 bg-white/70 backdrop-blur-md border border-white/60 px-2.5 py-1.5 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] w-fit max-w-full">
+                {messages.length === 0 ? (
+                  <>
+                    <div className="flex items-center justify-center bg-gray-50/80 rounded-full w-[18px] h-[18px] shadow-inner shrink-0">
+                      <span className="text-[10px]">💬</span>
+                    </div>
+                    <span className="text-[11px] font-bold text-[#8D6E63] tracking-tight">첫 마디를 기다려요 ✨</span>
+                  </>
+                ) : (
+                  <>
+                    <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.5, repeat: Infinity }} className="shrink-0">
+                      <div className="flex items-center justify-center bg-violet-50/80 rounded-full w-[18px] h-[18px] shadow-inner">
+                        <span className="text-[10px]">🔍</span>
+                      </div>
+                    </motion.div>
+                    <span className="text-[11px] font-bold text-[#8D6E63] tracking-tight">상황을 분석하고 있어요...</span>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 🆕 v28.8: 루나 상태 카드 (HOOK + MIRROR) — Phase 전환 시 내용 변경 */}
+          {activePersona !== 'tarot' && (currentPhase === 'HOOK' || currentPhase === 'MIRROR') && userMsgCount >= 1 && (() => {
+            // 카드를 시나리오 태그와 같은 줄 높이로 맞추기
+            const isHook = currentPhase === 'HOOK';
+            const cardGradient = isHook
+              ? 'from-pink-50 to-purple-50'
+              : 'from-violet-50 to-indigo-50';
+            const borderColor = isHook ? 'border-pink-100/80' : 'border-violet-100/80';
+            const titleColor = isHook ? 'text-pink-600' : 'text-violet-600';
+            const subColor = isHook ? 'text-pink-400' : 'text-violet-400';
+            const barFrom = isHook ? 'from-pink-300' : 'from-violet-300';
+            const barTo = isHook ? 'to-purple-300' : 'to-indigo-300';
+            const barBg = isHook ? 'bg-pink-100' : 'bg-violet-100';
+            const dotColor = isHook ? 'bg-pink-300' : 'bg-violet-300';
+
+            const title = isHook ? '이야기 듣는 중' : '마음 들여다보는 중';
+            const subtitle = isHook ? '이야기 더 들어볼게...' : '진짜 감정을 찾고 있어...';
+            const labelLeft = isHook ? '듣기' : '겉감정';
+            const labelRight = isHook ? '정리' : '속감정';
+            const gaugeProgress = isHook
+              ? Math.min(90, (userMsgCount / 5) * 100)
+              : Math.min(90, (userMsgCount / 8) * 100);
+
+            // 스킵 팝업 내용
+            const skipTitle = isHook ? '할 말 다 했어!' : '감정 정리 됐어!';
+            const skipDesc = isHook ? '바로 다음 단계로 넘어갈게' : '이제 방법을 찾아보자';
+            const stayTitle = isHook ? '아직 더 얘기할래' : '좀 더 생각해볼래';
+            const popupTitle = isHook ? '이야기 듣는 중' : '마음 탐색 중';
+            const popupDesc = isHook
+              ? '루나가 충분히 들었는지 판단해요. 할 말 다 했으면 넘어갈 수 있어요.'
+              : '루나가 진짜 감정을 찾고 있어요. 정리됐으면 넘어갈 수 있어요.';
+
+            // 루나 귀 이미지 아이콘
+            const svgIcon = (
+              <img
+                src="/char_img/luna_ear.png"
+                alt="루나"
+                width={26}
+                height={26}
+                className="rounded-full object-cover"
+                style={{ width: 26, height: 26 }}
+              />
+            );
+
+            return (
+              <motion.div
+                key={currentPhase}
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="flex-shrink-0 relative -mt-8"
+              >
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => setIsListenSkipOpen(prev => !prev)}
+                  className={`bg-gradient-to-br ${cardGradient} border ${borderColor} rounded-2xl px-3 py-2 shadow-sm min-w-[110px] text-left`}
                 >
-                  AI 분류로 되돌리기
-                </button>
-              )}
-            </>
-          ) : (
-            <div className="flex items-center gap-1.5 bg-white/80 backdrop-blur-sm border border-[#D5C2A5] shadow-sm px-3 py-1.5 rounded-full">
-              {messages.length === 0 ? (
-                <>
-                  <span className="text-sm">💬</span>
-                  <span className="text-[11px] font-semibold text-[#8D6E63]">대화를 시작하면 상황을 분석해요</span>
-                </>
-              ) : (
-                <>
-                  <motion.span
-                    animate={{ opacity: [0.4, 1, 0.4] }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                    className="text-sm"
-                  >🔍</motion.span>
-                  <span className="text-[11px] font-semibold text-[#8D6E63]">상황 분석 중...</span>
-                </>
-              )}
-            </div>
-          )}
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <div className="relative flex-shrink-0">
+                      {svgIcon}
+                      <motion.div
+                        animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1, 0.8] }}
+                        transition={{ duration: 1.5, repeat: Infinity }}
+                        className={`absolute -right-0.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full ${dotColor}`}
+                      />
+                    </div>
+                    <div>
+                      <div className={`text-[10px] font-bold ${titleColor}`}>{title}</div>
+                      <motion.div
+                        animate={{ opacity: [0.5, 1, 0.5] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                        className={`text-[8px] ${subColor}`}
+                      >
+                        {subtitle}
+                      </motion.div>
+                    </div>
+                  </div>
+                  <div className={`relative h-1.5 ${barBg} rounded-full overflow-hidden`}>
+                    <motion.div
+                      className={`h-full rounded-full bg-gradient-to-r ${barFrom} ${barTo}`}
+                      initial={{ width: '10%' }}
+                      animate={{ width: `${gaugeProgress}%` }}
+                      transition={{ type: 'spring', damping: 20 }}
+                    />
+                    <motion.div
+                      animate={{ x: ['-100%', '200%'] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                      className="absolute inset-y-0 w-4 bg-white/40 skew-x-12"
+                    />
+                  </div>
+                  <div className="flex justify-between mt-0.5">
+                    <span className={`text-[7px] ${subColor}`}>{labelLeft}</span>
+                    <span className={`text-[7px] ${subColor}`}>{labelRight}</span>
+                  </div>
+                </motion.button>
+
+                {/* 클릭 시 팝업 */}
+                <AnimatePresence>
+                  {isListenSkipOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -4, scale: 0.95 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 top-full mt-1.5 z-[60] w-48 bg-white/98 backdrop-blur-xl rounded-2xl border border-pink-100 shadow-lg overflow-hidden"
+                    >
+                      <div className="px-3.5 pt-3 pb-2">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke={isHook ? '#F48FB1' : '#CE93D8'} strokeWidth="1.5" fill={isHook ? '#FFF0F5' : '#F3E5F5'}/>
+                            <path d="M12 7v6M12 16h.01" stroke={isHook ? '#EC407A' : '#AB47BC'} strokeWidth="2" strokeLinecap="round"/>
+                          </svg>
+                          <span className="text-[11px] font-bold text-gray-700">{popupTitle}</span>
+                        </div>
+                        <p className="text-[9px] text-gray-400 leading-relaxed">{popupDesc}</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setIsListenSkipOpen(false);
+                          sendMessage(' ', { source: 'skip_phase' as any, context: { skipToNextPhase: true } });
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3.5 py-3 border-t border-pink-50 hover:bg-pink-50/50 transition-colors"
+                      >
+                        <div className={`w-7 h-7 rounded-full bg-gradient-to-br ${cardGradient} flex items-center justify-center flex-shrink-0`}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={isHook ? '#EC407A' : '#AB47BC'} strokeWidth="2.5" strokeLinecap="round">
+                            <path d="M5 12h14M12 5l7 7-7 7"/>
+                          </svg>
+                        </div>
+                        <div>
+                          <div className={`text-[11px] font-bold ${titleColor}`}>{skipTitle}</div>
+                          <div className="text-[8px] text-gray-400">{skipDesc}</div>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => setIsListenSkipOpen(false)}
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2.5 border-t border-pink-50 hover:bg-gray-50/50 transition-colors"
+                      >
+                        <div className="w-7 h-7 rounded-full bg-gray-50 flex items-center justify-center flex-shrink-0">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9E9E9E" strokeWidth="2.5" strokeLinecap="round">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                          </svg>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-semibold text-gray-500">{stayTitle}</div>
+                        </div>
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            );
+          })()}
         </div>
       </div>
 
       {/* 🆕 구간 진행률 바 (HOOK부터 마지막 EMPOWER까지 상태 시각화) */}
-      <PhaseProgress currentPhase={currentPhase} progress={phaseProgress} persona={activePersona} />
+      <PhaseProgress currentPhase={currentPhase} progress={phaseProgress} persona={activePersona} lunaThinking={lunaThinking} understandingLevel={understandingLevel} />
 
-      {/* 🆕 시나리오 수정 바텀시트 */}
-      <AnimatePresence>
-        {isScenarioPanelOpen && (
-          <>
-            {/* 배경 딩 */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsScenarioPanelOpen(false)}
-              className="fixed inset-0 bg-black/30 z-40"
-            />
-            {/* 바텀시트 */}
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl z-50 max-h-[60vh] overflow-y-auto"
-            >
-              <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mt-3 mb-2" />
-              <div className="px-5 pb-2">
-                <h3 className="text-[15px] font-bold text-gray-800">상황 수정하기</h3>
-                <p className="text-[11px] text-gray-400 mt-0.5">AI가 잘못 분류했다면 직접 선택해주세요</p>
-              </div>
-              <div className="px-3 pb-6 grid grid-cols-2 gap-2">
-                {Object.entries(SCENARIO_LABELS).map(([key, { icon, label }]) => {
-                  const scenario = key as RelationshipScenario;
-                  const isActive = activeScenario === scenario;
-                  return (
-                    <motion.button
-                      key={key}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => handleScenarioOverride(scenario)}
-                      className={`flex items-center gap-2 px-3.5 py-3 rounded-2xl text-[13px] font-medium transition-all border ${
-                        isActive
-                          ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm'
-                          : 'bg-gray-50 border-gray-100 text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      <span className="text-lg">{icon}</span>
-                      <span>{label}</span>
-                      {isActive && <span className="ml-auto text-blue-500 text-xs">✓</span>}
-                    </motion.button>
-                  );
-                })}
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      {/* v28.7: 깊이 조정 패널 제거 — AI 자체 판단(PHASE_SIGNAL)으로 대체 */}
+
+      {/* 🆕 v37: 루나의 속마음 타임라인 모달 */}
+      <LunaThoughtHistory
+        open={isThoughtHistoryOpen}
+        onClose={() => setIsThoughtHistoryOpen(false)}
+        history={stateResult?.lunaThoughtHistory ?? []}
+      />
+
+      {/* 🆕 v37: 루나의 상황 인식 패널 (현재 이해 + 타임라인 + 수정 입력) */}
+      <SituationTimeline
+        open={isScenarioPanelOpen}
+        onClose={() => setIsScenarioPanelOpen(false)}
+        history={stateResult?.situationReadHistory ?? []}
+        current={stateResult?.situationRead ?? null}
+        onCorrect={(correction) => {
+          // 유저가 "루나가 잘못 이해했으면" 입력창에 쓴 내용을 대화로 전송
+          // → 루나가 다음 턴에 이해를 업데이트
+          sendMessage(`아 참, 내 상황을 다시 알려줄게: ${correction}`, {
+            source: 'typed',
+            context: { situationCorrection: true },
+          });
+        }}
+      />
 
       {/* 메시지 영역 */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 scroll-smooth">
@@ -560,6 +682,24 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
 
           {/* 🆕 v25: 이벤트는 메시지 리스트 안에 인라인으로 렌더됨 — 별도 렌더 제거 */}
 
+          {/* 🆕 v40: 루나 딥리서치 — "진짜 고민 중" 로딩 UI (Gemini Grounding) */}
+          {thinkingDeep && (
+            <LunaThinkingDeep
+              phrases={thinkingDeep.phrases}
+              done={!thinkingDeep.active}
+            />
+          )}
+
+          {/* 🆕 v41: 친밀도 레벨업 축하 팝업 (전체 화면 오버레이) */}
+          {intimacyLevelUp && (
+            <IntimacyLevelUp
+              oldLevel={intimacyLevelUp.oldLevel}
+              newLevel={intimacyLevelUp.newLevel}
+              newLevelName={intimacyLevelUp.newLevelName}
+              onDismiss={dismissIntimacyLevelUp}
+            />
+          )}
+
           {/* XRay 인라인 분석 결과 */}
           {xrayLoading && (
             <div className="flex justify-start mb-3 ml-12">
@@ -642,8 +782,12 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
               <ChatInput
                 onSend={sendMessage}
                 onImageAttach={activePersona !== 'tarot' ? handleImageAttach : undefined}
-                disabled={isLoading}
-                placeholder="마음 편하게 다 말해봐..."
+                disabled={isLoading || pendingEventLock}
+                placeholder={pendingEventLock
+                  ? '위 질문에 답해줘 ↑'
+                  : isLoading
+                  ? (activePersona === 'tarot' ? '타로냥이 카드 보는 중...' : '루나가 생각하고 있어...')
+                  : '마음 편하게 다 말해봐...'}
                 typingPlaceholder={activePersona !== 'tarot' && openingVideoEnded && messages.length === 0 ? '무슨 고민이야? 연애 얘긴 나한테 다 말해!' : undefined}
               />
             </div>

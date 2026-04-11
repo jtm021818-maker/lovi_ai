@@ -51,25 +51,57 @@ const HeartLensIcon = ({ active, past }: { active: boolean; past: boolean }) => 
   </svg>
 );
 
-/** 수정구슬 아이콘 (BRIDGE: 원인 발견) */
-const CrystalBallIcon = ({ active, past }: { active: boolean; past: boolean }) => (
+/** 🆕 v38: 작전 보드 + 불꽃 아이콘 (BRIDGE: 같이 준비)
+ * 메시지 초안/롤플레이/연참 모드 실행 단계를 상징
+ * 클립보드(체크리스트) + 상단 불꽃 = "같이 준비하는 느낌" */
+const StrategyBoardIcon = ({ active, past }: { active: boolean; past: boolean }) => (
   <svg viewBox="0 0 40 40" className="w-full h-full">
-    {/* 구슬 */}
-    <circle cx="20" cy="18" r="13"
-      fill={active ? '#eff6ff' : past ? '#f0f9ff' : '#f8fafc'}
-      stroke={active ? '#3b82f6' : past ? '#93c5fd' : '#cbd5e1'}
+    {/* 상단 불꽃 (작전 에너지) */}
+    <path d="M20 3 C18 6 16 8 17 11 C15 10 14 11 15 13 C16 12 18 13 18 15 C18 12 21 11 20 8 C22 9 23 7 22 5 C20 7 20 5 20 3 Z"
+      fill={active ? '#fb923c' : past ? '#fed7aa' : '#e2e8f0'}
+      stroke={active ? '#ea580c' : past ? '#fb923c' : '#cbd5e1'}
+      strokeWidth="1" strokeLinejoin="round" />
+    {/* 클립보드 상단 집게 */}
+    <rect x="16" y="11" width="8" height="3" rx="0.8"
+      fill={active ? '#fb923c' : past ? '#fed7aa' : '#cbd5e1'}
+      stroke={active ? '#c2410c' : past ? '#ea580c' : '#94a3b8'}
+      strokeWidth="0.8" />
+    {/* 클립보드 본체 */}
+    <rect x="9" y="13" width="22" height="23" rx="2.5"
+      fill={active ? '#fff7ed' : past ? '#fffbeb' : '#f8fafc'}
+      stroke={active ? '#ea580c' : past ? '#fb923c' : '#cbd5e1'}
       strokeWidth="1.5" />
-    {/* 구슬 반짝임 */}
-    <ellipse cx="14" cy="13" rx="3" ry="2" fill={active ? '#bfdbfe' : past ? '#dbeafe' : '#e2e8f0'} opacity="0.7" />
-    {/* 별 */}
-    <path d="M20 14 L21 17 L24 17 L22 19 L23 22 L20 20 L17 22 L18 19 L16 17 L19 17 Z"
-      fill={active ? '#60a5fa' : past ? '#93c5fd' : '#cbd5e1'}
-      stroke="none" />
-    {/* 받침대 */}
-    <path d="M13 32 L27 32 L24 28 L16 28 Z"
-      fill={active ? '#dbeafe' : past ? '#e0f2fe' : '#f1f5f9'}
-      stroke={active ? '#3b82f6' : past ? '#93c5fd' : '#cbd5e1'}
-      strokeWidth="1.2" strokeLinejoin="round" />
+    {/* 작전 체크리스트 라인 1 (큰 점 + 선) */}
+    <circle cx="13.5" cy="19" r="1.3"
+      fill={active ? '#fb923c' : past ? '#fed7aa' : '#e2e8f0'}
+      stroke={active ? '#ea580c' : past ? '#fb923c' : '#cbd5e1'}
+      strokeWidth="0.6" />
+    <line x1="16" y1="19" x2="27" y2="19"
+      stroke={active ? '#fb923c' : past ? '#fed7aa' : '#e2e8f0'}
+      strokeWidth="1.3" strokeLinecap="round" />
+    {/* 체크리스트 라인 2 */}
+    <circle cx="13.5" cy="24" r="1.3"
+      fill={active ? '#f97316' : past ? '#fdba74' : '#e2e8f0'}
+      stroke={active ? '#c2410c' : past ? '#ea580c' : '#cbd5e1'}
+      strokeWidth="0.6" />
+    <line x1="16" y1="24" x2="25" y2="24"
+      stroke={active ? '#fdba74' : past ? '#fed7aa' : '#e2e8f0'}
+      strokeWidth="1.3" strokeLinecap="round" />
+    {/* 체크리스트 라인 3 (완료 체크) */}
+    <path d="M12.5 29 L14 30.5 L16 28"
+      fill="none"
+      stroke={active ? '#ea580c' : past ? '#fb923c' : '#cbd5e1'}
+      strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    <line x1="18" y1="29" x2="27" y2="29"
+      stroke={active ? '#fdba74' : past ? '#fed7aa' : '#e2e8f0'}
+      strokeWidth="1.3" strokeLinecap="round" />
+    {/* 작은 반짝이 (활성화 시 에너지 효과) */}
+    <circle cx="32" cy="16" r="0.8"
+      fill={active ? '#fbbf24' : 'transparent'}
+      opacity={active ? 0.9 : 0} />
+    <circle cx="7" cy="22" r="0.6"
+      fill={active ? '#fbbf24' : 'transparent'}
+      opacity={active ? 0.8 : 0} />
   </svg>
 );
 
@@ -198,11 +230,13 @@ interface PhaseStep {
   Icon: React.FC<{ active: boolean; past: boolean }>;
 }
 
+// 🆕 v38: BRIDGE는 모드 실행 단계 (메시지 초안/롤플레이/연참/커스텀)
+//          SOLVE는 "실행 계획 확정" (모드 끝난 후 최종 커밋)
 const LUNA_STEPS: PhaseStep[] = [
-  { id: 'HOOK',    label: '이야기 듣기',  statusText: '루나가 듣고 있어 🦊',      Icon: FoxEarIcon },
-  { id: 'MIRROR',  label: '마음 읽기',    statusText: '마음을 읽는 중 💕',        Icon: HeartLensIcon },
-  { id: 'BRIDGE',  label: '원인 발견',    statusText: '원인을 찾고 있어 🔮',      Icon: CrystalBallIcon },
-  { id: 'SOLVE',   label: '처방전 준비',  statusText: '처방전 쓰는 중 🌿',        Icon: SproutIcon },
+  { id: 'HOOK',    label: '이야기 듣기',  statusText: '이야기 듣는 중 🦊',         Icon: FoxEarIcon },
+  { id: 'MIRROR',  label: '마음 읽기',    statusText: '마음을 읽는 중 💕',         Icon: HeartLensIcon },
+  { id: 'BRIDGE',  label: '같이 준비',    statusText: '같이 준비하는 중 🔥',       Icon: StrategyBoardIcon },
+  { id: 'SOLVE',   label: '실행 계획',    statusText: '실행 계획 정리 중 🌿',      Icon: SproutIcon },
   { id: 'EMPOWER', label: '변화 응원',    statusText: '응원 메시지 준비 중 ✨',    Icon: SparkleIcon }
 ];
 
@@ -239,9 +273,11 @@ interface PhaseProgressProps {
   currentPhase: ConversationPhaseV2 | null;
   progress: number;
   persona?: PersonaMode;
+  lunaThinking?: string;
+  understandingLevel?: number;
 }
 
-export default function PhaseProgress({ currentPhase, progress, persona = 'luna' }: PhaseProgressProps) {
+export default function PhaseProgress({ currentPhase, progress, persona = 'luna', lunaThinking, understandingLevel }: PhaseProgressProps) {
   if (!currentPhase) return null;
 
   const steps = persona === 'tarot' ? TAROT_STEPS : LUNA_STEPS;
@@ -253,12 +289,16 @@ export default function PhaseProgress({ currentPhase, progress, persona = 'luna'
   const idx = adjustedIndex === -1 ? 0 : adjustedIndex;
 
   const currentStep = steps[idx];
-  const typedStatus = useTypewriter(currentStep.statusText, 70);
+  // 🆕 ACE v4: lunaThinking이 있으면 AI 생각을 표시, 없으면 기존 statusText
+  const displayText = (persona !== 'tarot' && lunaThinking) ? lunaThinking : currentStep.statusText;
+  const typedStatus = useTypewriter(displayText, 70);
 
-  // 전체 진행도 계산 (N phase × 등분)
+  // 🆕 ACE v4: understandingLevel이 있으면 루나 이해도 기반 진행바, 없으면 기존
   const stepSize = 100 / steps.length;
   const basePercent = idx * stepSize;
-  const phasePercent = (progress / 100) * stepSize;
+  const phasePercent = (persona !== 'tarot' && understandingLevel !== undefined)
+    ? (understandingLevel / 100) * stepSize  // 이해도 기반
+    : (progress / 100) * stepSize;           // 기존 턴 기반
   const totalPercent = Math.min(100, Math.max(0, basePercent + phasePercent));
 
   return (

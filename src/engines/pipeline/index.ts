@@ -5,7 +5,7 @@ import { BehavioralInductionEngine } from '@/engines/behavioral-induction';
 import { shouldShowSuggestions } from '@/engines/suggestion-gate';
 import { mapTherapeuticResponse, determineRelationshipPhase, shouldAskPermission } from '@/engines/response-type';
 import { RiskLevel, ResponseMode, ClientIntent, RelationshipScenario, STRATEGY_TO_CATEGORY, CATEGORY_INTENT_MAP } from '@/types/engine.types';
-import type { PipelineResult, NudgeAction, StateResult, StrategyResult, SuggestionMeta, SuggestionItem, SuggestionCategory, ConversationPhaseV2, PhaseEvent, PhaseEventType, EmotionAccumulatorState, EmotionMirrorData } from '@/types/engine.types';
+import type { PipelineResult, NudgeAction, StateResult, StrategyResult, SuggestionMeta, SuggestionItem, SuggestionCategory, ConversationPhaseV2, PhaseEvent, PhaseEventType, EmotionAccumulatorState, EmotionMirrorData, StrategyMode } from '@/types/engine.types';
 import { accumulateSignal, setSurfaceFromThermometer, isReadyForMirror } from '@/engines/emotion-accumulator';
 import { generateDynamicMirror } from '@/engines/emotion-accumulator/mirror-generator';
 import { generateDynamicPatterns } from '@/engines/emotion-accumulator/pattern-generator';
@@ -13,11 +13,14 @@ import { matchSolutions, calculateReadiness, getSolutionDictionaryPrompt, parseA
 import type { ReadIgnoredAxes, AxisChoice } from '@/engines/solution-dictionary';
 import type { PersonaMode, PanelResponse } from '@/types/persona.types';
 import { generateWithCascade, streamWithCascade } from '@/lib/ai/provider-registry';
+import { runDeepResearch, generateThinkingPhrases, extractKeyword } from '@/lib/ai/deep-research';
+import { saveMemory } from '@/engines/human-like/memory-engine';
 import { routeModel } from '@/lib/ai/model-router';
 import { validateResponse } from '@/lib/ai/response-validator';
 import { retrieveMemories, formatMemoriesAsContext } from '@/lib/rag/retriever';
 import { PhaseManager, type PhaseContext } from '@/engines/phase-manager';
-import { createEmotionThermometer, createEmotionMirror, createPatternMirror, createSolutionPreview, createSolutionCard, createMessageDraft, createGrowthReport, createSessionSummary, createHomeworkCard, createTarotAxisCollect, createTarotDraw, createTarotInsight, createTarotSessionSummary, createTarotHomework } from '@/engines/phase-manager/events';
+import { HumanLikeEngine } from '@/engines/human-like';
+import { createEmotionThermometer, createMindReading, createEmotionMirror, createPatternMirror, createSolutionPreview, createSolutionCard, createMessageDraft, createGrowthReport, createSessionSummary, createHomeworkCard, createTarotAxisCollect, createTarotDraw, createTarotInsight, createTarotSessionSummary, createTarotHomework, createLunaStory, createLunaStrategy, createToneSelect, createDraftWorkshop, createRoleplayFeedback, createPanelReport, createIdeaRefine, createActionPlan, createWarmWrap } from '@/engines/phase-manager/events';
 import { generateDynamicTarotInsight } from '@/engines/tarot/interpretation-engine';
 import { matchTarotSolutions, getTarotSolutionPrompt } from '@/engines/solution-dictionary/tarot-solutions';
 import { mapEmotionToCardEnergy, getEnergyPromptHint } from '@/engines/tarot/emotion-card-mapper';
@@ -42,6 +45,109 @@ const CRISIS_MESSAGE = `지금 많이 힘드시죠. 혼자가 아니에요. 💙
 /**
  * 6단계 파이프라인 오케스트레이터 (인간화 고도화)
  */
+// 🆕 ACE v4: 루나의 현재 생각 + 이해도 계산
+function computeLunaThinking(
+  phase: ConversationPhaseV2,
+  turnsInPhase: number,
+  stateResult: StateResult,
+  completedEvents: string[],
+): { lunaThinking: string; understandingLevel: number } {
+  const hasEmotion = stateResult.emotionReason && stateResult.emotionReason.length > 5;
+  const emotionScore = Math.abs(stateResult.emotionScore ?? 0);
+
+  switch (phase) {
+    case 'HOOK': {
+      // 이해도: 감정 파악 정도에 따라
+      let level = Math.min(30, turnsInPhase * 10); // 기본: 턴당 10%
+      if (hasEmotion) level += 25; // 감정 이유 파악됨
+      if (emotionScore >= 3) level += 15; // 강한 감정 감지
+      if (completedEvents.includes('EMOTION_THERMOMETER')) level = 95;
+      level = Math.min(95, level);
+
+      // 생각 텍스트: 이해도에 따라 변화
+      const thoughts = level < 20
+        ? '이야기 더 들어볼게...'
+        : level < 40
+        ? '음... 좀 더 들어봐야겠어'
+        : level < 60
+        ? '감정이 좀 보이기 시작해...'
+        : level < 80
+        ? '아... 이 사람 마음이 읽히기 시작해'
+        : '거의 파악했어, 마음 읽어볼게';
+
+      return { lunaThinking: thoughts, understandingLevel: level };
+    }
+    case 'MIRROR': {
+      let level = Math.min(40, turnsInPhase * 15);
+      if (hasEmotion) level += 30;
+      if (completedEvents.includes('EMOTION_MIRROR')) level = 95;
+      level = Math.min(95, level);
+      const thoughts = level < 40
+        ? '겉감정 말고 진짜 감정을 찾는 중...'
+        : level < 70
+        ? '이 감정 밑에 뭐가 있는 것 같은데...'
+        : '진짜 감정이 보여... 확인해볼게';
+      return { lunaThinking: thoughts, understandingLevel: level };
+    }
+    case 'BRIDGE': {
+      // 🆕 v38: BRIDGE = 같이 준비 (모드별 실행)
+      // 모드 완료 이벤트(DRAFT_WORKSHOP/ROLEPLAY_FEEDBACK/PANEL_REPORT/IDEA_REFINE)로 진행률 계산
+      const modeCompleteEvents = ['DRAFT_WORKSHOP', 'ROLEPLAY_FEEDBACK', 'PANEL_REPORT', 'IDEA_REFINE'];
+      const modeCompleted = modeCompleteEvents.some(e => completedEvents.includes(e));
+
+      let level = Math.min(40, turnsInPhase * 20);
+      if (completedEvents.includes('TONE_SELECT')) level = Math.max(level, 55);
+      if (modeCompleted) level = 95;
+      level = Math.min(95, level);
+
+      // 현재 어떤 모드인지 판단해서 적절한 사고 문구
+      let thoughts: string;
+      if (modeCompleted) {
+        thoughts = '준비 됐어! 정리해볼게';
+      } else if (completedEvents.includes('TONE_SELECT')) {
+        thoughts = '카톡 초안 만드는 중... ✍️';
+      } else if (level < 40) {
+        thoughts = '어떻게 할지 같이 생각 중 🔥';
+      } else {
+        thoughts = '같이 준비하는 중...';
+      }
+      return { lunaThinking: thoughts, understandingLevel: level };
+    }
+    case 'SOLVE': {
+      // 🆕 v39: SOLVE = "같이 해보기" (S1 실전제안 → S2 같이만들기 → S3 시뮬레이션)
+      // ACTION_PLAN 카드 발동 시 100%
+      let level = Math.min(50, 30 + turnsInPhase * 18);
+      if (completedEvents.includes('ACTION_PLAN')) level = 95;
+      level = Math.min(95, level);
+
+      let thoughts: string;
+      if (completedEvents.includes('ACTION_PLAN')) {
+        thoughts = '오늘의 작전 완성! 🔥';
+      } else if (turnsInPhase <= 1) {
+        thoughts = '실전에서 해볼 방법 떠올리는 중... 💡';
+      } else if (turnsInPhase === 2) {
+        thoughts = '너 스타일로 다듬는 중 🛠️';
+      } else {
+        thoughts = '머릿속으로 한번 돌려보자 🎯';
+      }
+      return { lunaThinking: thoughts, understandingLevel: level };
+    }
+    case 'EMPOWER': {
+      // 🆕 v39: EMPOWER = 다독이기 + 재방문 약속
+      let level = Math.min(80, 60 + turnsInPhase * 15);
+      if (completedEvents.includes('WARM_WRAP')) level = 100;
+      level = Math.min(100, level);
+
+      const thoughts = completedEvents.includes('WARM_WRAP')
+        ? '오늘 정말 잘했어 💜'
+        : '따뜻하게 마무리 중... 🤗';
+      return { lunaThinking: thoughts, understandingLevel: level };
+    }
+    default:
+      return { lunaThinking: '듣고 있어...', understandingLevel: 10 };
+  }
+}
+
 export class CounselingPipeline {
   private stateEngine = StateAnalysisEngine.getInstance();
   private strategyEngine = StrategySelectionEngine.getInstance();
@@ -89,6 +195,20 @@ export class CounselingPipeline {
     phaseStartTurn: number = 0,
     /** 🆕 v23: 타로 세션 메타 (스프레드 선택, 뽑은 카드 등) */
     tarotMeta?: { chosenSpreadType?: string; cards?: any[] },
+    /** 🆕 v29: 루나 감정 상태 (세션간 유지) */
+    savedLunaEmotionState?: string | null,
+    /** 🆕 v30: 세션 스토리 상태 (대화 흐름 누적) */
+    savedSessionStory?: string | null,
+    /** 🆕 ACE v4: 메모리 프로필 (유저 장기 기억) */
+    memoryProfile?: any,
+    /** 🆕 ACE v4: 유저 이름 */
+    userName?: string,
+    /** 🆕 v35: 저장된 작전 모드 (BRIDGE 모드 실행 단계 지속) */
+    savedStrategyMode?: StrategyMode | null,
+    /** 🆕 v37: 저장된 상황 인식 히스토리 (세션간 유지) */
+    savedSituationReadHistory?: string[],
+    /** 🆕 v37: 저장된 속마음 히스토리 (세션간 유지) */
+    savedLunaThoughtHistory?: string[],
   ): AsyncGenerator<
     | { type: 'state'; data: StateResult }
     | { type: 'strategy'; data: StrategyResult }
@@ -99,11 +219,24 @@ export class CounselingPipeline {
     | { type: 'axis_choices'; data: { axis: 'duration' | 'stage'; choices: AxisChoice[] } }
     | { type: 'axes_progress'; data: { filledCount: number; totalCount: number; isComplete: boolean; axes?: Partial<ReadIgnoredAxes> } }
     | { type: 'phase_event'; data: PhaseEvent }
-    | { type: 'phase_change'; data: { phase: ConversationPhaseV2; progress: number } }
-    | { type: 'done'; data: { stateResult: StateResult; strategyResult: StrategyResult; suggestionShown: boolean; responseMode?: ResponseMode; updatedAxes?: Partial<ReadIgnoredAxes>; phaseV2?: ConversationPhaseV2; completedEvents?: PhaseEventType[]; lastEventTurn?: number; confirmedEmotionScore?: number; emotionHistory?: number[]; promptStyle?: string; emotionAccumulatorState?: EmotionAccumulatorState; phaseStartTurn?: number } }
+    | { type: 'phase_change'; data: { phase: ConversationPhaseV2; progress: number; lunaThinking?: string; understandingLevel?: number } }
+    // 🆕 v40: 루나가 "진짜 생각하는 중" UI 이벤트 (Gemini Grounding DeepResearch)
+    | { type: 'luna_thinking_deep'; data: { status: 'started' | 'done'; keyword?: string; phrases?: string[]; durationMs?: number; hasInsight?: boolean } }
+    | { type: 'done'; data: { stateResult: StateResult; strategyResult: StrategyResult; suggestionShown: boolean; responseMode?: ResponseMode; updatedAxes?: Partial<ReadIgnoredAxes>; phaseV2?: ConversationPhaseV2; completedEvents?: PhaseEventType[]; lastEventTurn?: number; confirmedEmotionScore?: number; emotionHistory?: number[]; promptStyle?: string; emotionAccumulatorState?: EmotionAccumulatorState; phaseStartTurn?: number; lunaEmotionState?: string; sessionStoryState?: string; strategyMode?: StrategyMode | null; intimacyState?: import('@/engines/intimacy').IntimacyState | null; intimacyPersonaKey?: 'luna' | 'tarot'; intimacyAll?: { luna: import('@/engines/intimacy').IntimacyState; tarot: import('@/engines/intimacy').IntimacyState } | null; intimacyLevelUp?: { oldLevel: number; newLevel: number; newLevelName: string } | null; _contextLog?: any } }
   > {
-    // Step 1: 상태 분석
-    const stateResult = await this.stateEngine.analyze(userMessage, chatHistory, context);
+    // 🆕 v31: Step 1 + Step 4를 병렬 실행 (상태분석과 RAG는 독립적 — ~200~500ms 절약)
+    const tPipeStart = Date.now();
+    const ragPromise = ragContext
+      ? retrieveMemories(ragContext.supabase, ragContext.userId, userMessage)
+          .then(formatMemoriesAsContext)
+          .catch(() => '')
+      : Promise.resolve('');
+
+    const [stateResult, ragText] = await Promise.all([
+      this.stateEngine.analyze(userMessage, chatHistory, context),
+      ragPromise,
+    ]);
+    console.log(`[Perf] ⏱️ state+RAG 병렬: ${Date.now() - tPipeStart}ms`);
 
     // 🆕 v9: 시나리오 sticky — 세션에 고정된 시나리오가 있으면 LLM 재감지 결과를 무시
     if (lockedScenario && lockedScenario !== RelationshipScenario.GENERAL) {
@@ -194,14 +327,8 @@ export class CounselingPipeline {
 
     yield { type: 'strategy', data: strategyResult };
 
-    // Step 4: RAG 검색 (병렬)
-    const ragPromise = ragContext
-      ? retrieveMemories(ragContext.supabase, ragContext.userId, userMessage)
-          .then(formatMemoriesAsContext)
-          .catch(() => '')
-      : Promise.resolve('');
 
-    const ragText = await ragPromise;
+    // 🆕 v31: RAG는 상단에서 상태분석과 병렬 실행 완료 (ragText 사용 가능)
 
     // 🆕 선택지 컨텍스트 주입 (프롬프트에 사용자 의도 전달)
     let suggestionContext = '';
@@ -248,8 +375,12 @@ export class CounselingPipeline {
     let axesState = analyzeAxesState(updatedAxes);
     let diagnosticPromptText = '';
 
-    if (currentScenario === RelationshipScenario.READ_AND_IGNORED) {
-      // ① 1차: 키워드 파서 (빠르고 결정적)
+    // 🆕 ACE v4: Luna 모드 — 축/솔루션 사전 우회. AI가 대화 맥락으로 직접 판단.
+    // 시나리오는 맥락 힌트로만 유지 (라우팅에 사용 안 함)
+    const isLunaACE = persona !== 'tarot' && persona !== 'panel';
+
+    if (!isLunaACE && currentScenario === RelationshipScenario.READ_AND_IGNORED) {
+      // 타로/패널만 축 분석 (Luna는 스킵)
       updatedAxes = parseAxesFromMessage(userMessage, updatedAxes);
 
       // ② 2차: LLM 축 추출 머지 (자연어 이해 기반)
@@ -314,7 +445,8 @@ export class CounselingPipeline {
 
     // 🆕 v6+v7+v12: 해결책 사전 매칭 (축 + 범용 진단 포함)
 
-    const solutionMatches = matchSolutions(
+    // 🆕 ACE v4: Luna → 솔루션 사전 우회, AI가 대화 맥락으로 직접 조언
+    const solutionMatches = isLunaACE ? [] : matchSolutions(
       currentScenario,
       userMessage,
       stateResult.attachmentType ?? null,
@@ -323,11 +455,10 @@ export class CounselingPipeline {
       diagnosisResultData,
     );
 
-    // 🆕 v6: ReadinessScore 계산
     const hasStorytelling = intentResult.primaryIntent === ClientIntent.STORYTELLING;
     const hasVenting = intentResult.primaryIntent === ClientIntent.VENTING;
 
-    const readinessScore = calculateReadiness({
+    const readinessScore = isLunaACE ? 50 : calculateReadiness({
       hasScenario: (stateResult.scenario ?? RelationshipScenario.GENERAL) !== RelationshipScenario.GENERAL,
       hasSolutionMatch: solutionMatches.length > 0,
       matchScore: solutionMatches[0]?.matchScore ?? 0,
@@ -361,6 +492,11 @@ export class CounselingPipeline {
       persona,
       // 🆕 v16: 감정 체크 준비도
       emotionCheckReadiness: stateResult.emotionCheckReadiness,
+      // 🆕 ACE v4: 루나 자율 판단용 — 유저 메시지 히스토리
+      userMessages: [
+        ...chatHistory.filter(m => m.role === 'user').map(m => m.content),
+        userMessage,
+      ],
     };
     const newPhaseV2 = PhaseManager.getCurrentPhase(phaseCtx);
     const phaseChanged = newPhaseV2 !== prevPhaseV2;
@@ -370,13 +506,29 @@ export class CounselingPipeline {
     if (phaseChanged) {
       updatedPhaseStartTurn = turnCount;
       console.log(`[Pipeline] 🔄 Phase전환: ${prevPhaseV2} → ${newPhaseV2} (턴 ${turnCount}, phaseStart=${updatedPhaseStartTurn})`);
+      // 🆕 ACE v4: Phase 전환 = 의미 있는 순간 → 에피소드 기억 저장
+      if (ragContext?.supabase && ragContext?.userId) {
+        saveMemory(ragContext.supabase, ragContext.userId, {
+          content: userMessage,
+          summary: `${prevPhaseV2}→${newPhaseV2}: ${userMessage.slice(0, 40)}`,
+          memoryType: 'episodic',
+          category: 'phase_transition',
+          emotionTag: stateResult.emotionSignal?.primaryEmotion ?? undefined,
+          emotionalWeight: 0.6,
+        }).catch(e => console.warn('[Pipeline] 기억 저장 실패 (무시):', e));
+      }
     }
     // 🆕 v9.1: 매 턴 phase+progress 전송 (변경 여부 무관)
     const phaseBaseProgress = PhaseManager.getProgress(newPhaseV2);
-    // Phase 내 세밀한 진행률: 턴 수 기반으로 약간의 보정
-    const intraPhaseBonus = Math.min(turnCount * 3, 15); // 최대 15% 보너스
+    const intraPhaseBonus = Math.min(turnCount * 3, 15);
     const adjustedProgress = Math.min(phaseBaseProgress + intraPhaseBonus, 100);
-    yield { type: 'phase_change', data: { phase: newPhaseV2, progress: adjustedProgress } };
+
+    // 🆕 ACE v4: 루나 이해도 + 현재 생각 (Phase별 동적)
+    const turnsInCurrentPhase = turnCount - (updatedPhaseStartTurn || 0);
+    const { lunaThinking, understandingLevel } = computeLunaThinking(
+      newPhaseV2, turnsInCurrentPhase, stateResult, completedEvents ?? [],
+    );
+    yield { type: 'phase_change', data: { phase: newPhaseV2, progress: adjustedProgress, lunaThinking, understandingLevel } };
 
     // v2→v1 매핑 (레거시 호환)
     let conversationPhase = PhaseManager.toLegacyPhase(newPhaseV2);
@@ -392,15 +544,39 @@ export class CounselingPipeline {
     // 🆕 v20: 한 턴에 최대 1개 이벤트만 허용 (동시 표시 방지)
     const canFireEvent = () => eventsToFire.length === 0;
 
+    // 🆕 v29: Phase 전환 시 이전 Phase의 졸업 이벤트 체크용 컨텍스트
+    // ABSOLUTE_MAX 강제 전환 시 newPhaseV2='MIRROR'가 되어 HOOK 이벤트가 누락됨
+    const makeCtxForOldPhase = (): PhaseContext => ({
+      ...phaseCtx,
+      completedEvents: updatedCompletedEvents,
+      lastEventTurn: updatedLastEventTurn,
+      phaseStartTurn: phaseStartTurn ?? 0,
+    });
+    const eventCheckPhase = phaseChanged ? prevPhaseV2 : newPhaseV2;
+
     // 감정 온도계 (HOOK 구간) — 턴 1+턴 2 평균으로 AI 판단
-    if (canFireEvent() && PhaseManager.shouldTriggerEvent(newPhaseV2, 'EMOTION_THERMOMETER', makeCtxForEvent())) {
-      // 턴 1(emotionBaseline) + 턴 2(current) 평균
+    // 🆕 v29: phaseChanged이면 prevPhaseV2로 체크하여 졸업 이벤트 보장
+    if (canFireEvent() && PhaseManager.shouldTriggerEvent(eventCheckPhase, 'EMOTION_THERMOMETER', phaseChanged ? makeCtxForOldPhase() : makeCtxForEvent())) {
       const avgScore = emotionBaseline !== undefined
         ? (emotionBaseline + stateResult.emotionScore) / 2
         : stateResult.emotionScore;
-      // 🆕 v10.2: AI의 실제 감정 분석 근거를 온도계에 전달
-      eventsToFire.push(createEmotionThermometer(avgScore, stateResult.emotionReason));
-      console.log(`[Pipeline] 🌡️ 온도계: 턴 1(${emotionBaseline}) + 턴 2(${stateResult.emotionScore}) 평균 = ${avgScore} | 근거: ${stateResult.emotionReason ?? '(기본값)'}`);
+
+      // 🆕 v31: 루나 모드 → 마음 읽기, 타로냥 → 기존 온도계
+      if (persona !== 'tarot') {
+        // 마음 읽기: 대화 맥락에서 겉/속 감정 추측 (코드 레벨)
+        // 🆕 GTC: 감정 누적기의 풍부한 데이터 활용 (하드코딩 3종 → 동적)
+        const surface = updatedAccumulator.surfaceEmotion?.label
+          ?? (avgScore <= -2 ? '많이 힘들고 불안한' : avgScore <= 0 ? '답답하고 서운한' : '복잡한');
+        const deep = updatedAccumulator.deepEmotionHypothesis?.primaryEmotion
+          ?? (stateResult.emotionReason
+            ? stateResult.emotionReason.replace(/느껴졌어요|보여요|것 같아요/g, '').trim()
+            : '');
+        eventsToFire.push(createMindReading(surface, deep, avgScore, stateResult.emotionReason));
+        console.log(`[Pipeline] 🦊 마음읽기(GTC): "${surface}" → "${deep}" (점수 ${avgScore})`);
+      } else {
+        eventsToFire.push(createEmotionThermometer(avgScore, stateResult.emotionReason));
+        console.log(`[Pipeline] 🌡️ 온도계: 평균 = ${avgScore}`);
+      }
       updatedCompletedEvents.push('EMOTION_THERMOMETER');
       updatedLastEventTurn = turnCount;
     }
@@ -418,6 +594,32 @@ export class CounselingPipeline {
       }
       eventsToFire.push(createEmotionMirror(stateResult, currentScenario, mirrorData));
       updatedCompletedEvents.push('EMOTION_MIRROR');
+      updatedLastEventTurn = turnCount;
+    }
+
+    // 🆕 v38: LUNA_STRATEGY 폴백 발동 — 2가지 케이스 커버
+    // Case 1: MIRROR→BRIDGE 강제 전환 턴 (ABSOLUTE_MAX로 AI 태그 없이 넘어옴)
+    // Case 2: 이미 BRIDGE에 와 있지만 LUNA_STRATEGY가 아직 미완료
+    //         (이전 턴에서 전환됐지만 canFireEvent() 때문에 못 발동한 경우)
+    const shouldFallbackStrategy = canFireEvent()
+      && newPhaseV2 === 'BRIDGE'
+      && !updatedCompletedEvents.includes('LUNA_STRATEGY')
+      && persona !== 'tarot';
+    if (shouldFallbackStrategy) {
+      console.log(`[Pipeline] 🔥 LUNA_STRATEGY 폴백 발동! (BRIDGE인데 작전회의 미완료, AI 태그 누락)`);
+      // 대화 맥락에서 상황 요약 생성
+      const lastUserMsgs = chatHistory.filter(m => m.role === 'user').map(m => m.content);
+      const situationHint = lastUserMsgs.length > 0
+        ? lastUserMsgs[lastUserMsgs.length - 1].slice(0, 50)
+        : '지금 상황';
+      eventsToFire.push(createLunaStrategy(
+        '자 이제 상황 파악 끝났으니까 작전 짜자 🔥',
+        `지금 ${situationHint}... 이런 상태인 거잖아`,
+        '걔한테 보낼 카톡 같이 만들어볼까? 버전 별로 짜줄게',
+        '내가 걔 역할 해줄게, 만나서 얘기할 거면 미리 연습해보자',
+        '너무 가까워서 안 보일 수도 있으니까 한 발 떨어져서 객관적으로 정리해줄까?',
+      ));
+      updatedCompletedEvents.push('LUNA_STRATEGY');
       updatedLastEventTurn = turnCount;
     }
 
@@ -668,6 +870,47 @@ export class CounselingPipeline {
     // 🆕 v24: 타로냥 전문 상담 시스템 — buildTurnPrompt로 동적 생성
     // 기존 TAROT_PHASE_PROMPTS 하드코딩 → AI가 매 턴 상황 맞춤 프롬프트 생성
     let phasePrompt = phasePromptResult.prompt;
+
+    // 🆕 v35: 작전 모드 activeMode 해석
+    // 이번 턴 유저가 LunaStrategy 카드에서 선택했으면 meta에서 추출, 아니면 저장된 값 사용
+    let activeStrategyMode: StrategyMode | null = savedStrategyMode ?? null;
+    if (suggestionMeta?.source === 'luna_strategy' && suggestionMeta?.context?.strategyType) {
+      activeStrategyMode = suggestionMeta.context.strategyType as StrategyMode;
+      console.log(`[Pipeline] 🔥 작전 모드 설정: ${activeStrategyMode} (LunaStrategy 카드에서 선택)`);
+    } else if (activeStrategyMode) {
+      console.log(`[Pipeline] 🔥 작전 모드 유지: ${activeStrategyMode} (이전 턴에서 선택)`);
+    }
+
+    // 🆕 v29: Human-Like Engine — 전체 Phase 커버 (루나 전용)
+    const hlre = new HumanLikeEngine(turnCount, savedLunaEmotionState, savedSessionStory);
+    let hlreActive = false;
+    if (persona !== 'tarot') {
+      try {
+        const hlrePhase = newPhaseV2 as 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER';
+        const hlreResult = await hlre.preProcess(
+          turnInPhase,
+          userMessage,
+          effectiveEmotionScore,
+          memoryProfile ?? null,     // 🆕 ACE v4: 장기 기억 프로필
+          userName,                   // 🆕 ACE v4: 유저 이름
+          hlrePhase,
+          ragContext?.supabase,
+          ragContext?.userId,
+          updatedCompletedEvents,
+          context,                    // 🆕 ACE v4: 이전 세션 컨텍스트
+          activeStrategyMode,         // 🆕 v35: 작전 모드 (BRIDGE/SOLVE 분기용)
+        );
+        // HLRE 프롬프트가 기존 phasePrompt를 완전 교체
+        phasePrompt = hlreResult.prompt;
+        hlreActive = true;
+        const emo = hlre.getLunaEmotionState();
+        const memInfo = hlreResult.memoryTriggered ? ` 💭${hlreResult.memoryTriggered.triggerType}` : '';
+        console.log(`[Pipeline] 🧑 HLRE: ${hlrePhase} 턴${turnInPhase} → ${hlreResult.turnContext.turnType}, 루나:${emo.currentEmotion}(${Math.round(emo.currentIntensity * 100)}%)${memInfo}`);
+      } catch (e) {
+        console.warn('[Pipeline] HLRE preProcess 실패 (기존 프롬프트 사용):', e);
+      }
+    }
+
     if (persona === 'tarot') {
       // Phase → ConsultationPhase 매핑 (기존 5Phase → 새 10턴 Phase)
       // 🆕 v25: 5~6턴으로 압축 (CARD_READING 합침, ACTION+CLOSING 합침)
@@ -752,10 +995,13 @@ export class CounselingPipeline {
     }
     const currentPromptStyle = phasePromptResult.style;
     const transitionPrompt = phaseChanged ? `\n${getTransitionPrompt(prevPhaseV2, newPhaseV2)}` : '';
-    const solutionPrompt = getSolutionDictionaryPrompt(solutionMatches, conversationPhase, (persona === 'luna' || persona === 'tarot') ? 'friend' : persona as 'counselor' | 'friend' | 'panel', diagnosisResultData)
-      + diagnosticPromptText
-      + '\n' + phasePrompt
-      + transitionPrompt;
+    // 🆕 ACE v4: Luna → 솔루션 사전 프롬프트 제거. HLRE cognition-prompt가 대체.
+    const solutionPrompt = isLunaACE
+      ? '\n' + phasePrompt + transitionPrompt
+      : getSolutionDictionaryPrompt(solutionMatches, conversationPhase, persona === 'tarot' ? 'friend' : persona as 'counselor' | 'friend' | 'panel', diagnosisResultData)
+        + diagnosticPromptText
+        + '\n' + phasePrompt
+        + transitionPrompt;
     console.log(`[Pipeline] 📋 Phase프롬프트: ${newPhaseV2} 턴${turnInPhase} (전체턴 ${turnCount})`);
 
     if (diagnosticPromptText) {
@@ -807,10 +1053,13 @@ export class CounselingPipeline {
     // 🆕 v22: 직전 스티커 ID를 stateForPrompt에 포함 (프롬프트 생성기에서 참조)
     (stateForPrompt as any).lastStickerId = updatedAccumulator?.lastStickerId;
 
-    const systemPrompt = this.promptGen.generate(
+    // 🆕 v29: HLRE 활성이면 phasePrompt(이미 HLRE로 교체됨)를 hlrePrompt로 전달
+    const hlrePromptForGen = hlreActive ? phasePrompt : '';
+
+    let systemPrompt = this.promptGen.generate(
       stateForPrompt,
       strategyResult,
-      ragText + suggestionContext + eventHintPrompt + tarotCardContext,
+      (context ? `\n\n[이전 세션 핵심 맥락]\n${context}\n` : '') + ragText + suggestionContext + eventHintPrompt + tarotCardContext,
       persona,
       turnCount,
       gateResult.show,
@@ -818,10 +1067,146 @@ export class CounselingPipeline {
       emotionalMemorySummary || undefined,
       conversationPhase,
       askPermission,
-      solutionPrompt,  // 🆕 v6
-      userMessage.length,  // 🆕 v16: 응답 길이 적응
-      lastStickerTurn,  // 🆕 v22: 스티커 빈도 제어
+      hlreActive ? '' : solutionPrompt,  // HLRE 활성이면 solutionPrompt 비움 (HLRE에 이미 포함)
+      userMessage.length,
+      lastStickerTurn,
+      hlrePromptForGen,  // 🆕 v29: HLRE 프롬프트 → generate() 상단 배치
     );
+
+    // ============================================================
+    // 🆕 v41: 친밀도 시스템 — 트리거 감지 + 프롬프트 힌트 주입
+    // ============================================================
+    //  1. 현재 턴 유저 메시지에서 트리거 감지 → 4축 업데이트
+    //  2. 업데이트된 친밀도 상태 → 프롬프트 힌트 블록으로 주입
+    //  3. 루나가 힌트 기반으로 감정 깊이 조절 (말투는 동일, 깊이만 변화)
+    // 🆕 v41.1: 친밀도 — 페르소나별 독립 처리 (루나/타로냥 완전 분리)
+    const intimacyPersonaKey: 'luna' | 'tarot' = persona === 'tarot' ? 'tarot' : 'luna';
+    let intimacyLevelUp: { oldLevel: number; newLevel: number; newLevelName: string } | null = null;
+    if (hlreActive && persona !== 'panel') {
+      try {
+        // 세션 시작 훅 (감쇠 + 재방문 트리거) — 첫 호출에서만 실행
+        hlre.runIntimacySessionStart(intimacyPersonaKey);
+
+        const recentUserMsgs = chatHistory
+          .filter((m) => m.role === 'user')
+          .slice(-5)
+          .map((m) => m.content);
+
+        const beforeState = hlre.getIntimacyState(intimacyPersonaKey);
+        const oldLevel = beforeState?.level ?? 1;
+
+        const intimacyResult = hlre.processIntimacyTurn(
+          userMessage,
+          recentUserMsgs,
+          Math.max(1, turnCount),
+          intimacyPersonaKey,
+        );
+
+        if (intimacyResult.detectedTriggers.length > 0) {
+          console.log(
+            `[Pipeline:${intimacyPersonaKey}] 🦊 친밀도 트리거: [${intimacyResult.detectedTriggers.join(', ')}]${intimacyResult.levelChanged ? ' ⬆️ LEVEL UP' : ''}`,
+          );
+        }
+
+        if (intimacyResult.levelChanged) {
+          const afterState = hlre.getIntimacyState(intimacyPersonaKey);
+          if (afterState) {
+            intimacyLevelUp = {
+              oldLevel,
+              newLevel: afterState.level,
+              newLevelName: afterState.levelName,
+            };
+          }
+        }
+
+        // 친밀도 힌트 블록 → systemPrompt 말미에 추가 (현재 페르소나만)
+        const intimacyHints = hlre.getIntimacyPromptBlock(intimacyPersonaKey);
+        if (intimacyHints) {
+          systemPrompt = systemPrompt + '\n\n' + intimacyHints;
+        }
+      } catch (e) {
+        console.warn('[Pipeline] 친밀도 처리 실패 (무시):', (e as Error).message);
+      }
+    }
+
+    // ============================================================
+    // 🆕 v40: 루나가 "진짜 생각하는" 순간 — Gemini Grounding Deep Research
+    // ============================================================
+    //  - SOLVE Phase 진입 시 자동 (ACTION_PLAN 전, 실전 코칭에 최신 연구 주입)
+    //  - luna persona만 (타로냥/패널 제외)
+    //  - 실패해도 앱 계속 동작 (빈 결과 반환)
+    //  - 캐시 히트 시 빠르게 통과
+    {
+      const isLunaPersona = persona !== 'tarot' && persona !== 'panel';
+      const shouldDeepResearch =
+        isLunaPersona &&
+        newPhaseV2 === 'SOLVE' &&
+        !updatedCompletedEvents.includes('ACTION_PLAN');
+
+      if (shouldDeepResearch) {
+        // 유저 핵심 키워드 추출 (로딩 UI 문구 맞춤용)
+        const keyword = extractKeyword(userMessage);
+        const phrases = generateThinkingPhrases(keyword, 3);
+
+        // 🎨 UI 로딩 이벤트 시작 — 클라이언트가 "루나 고민 중" 카드 표시
+        yield {
+          type: 'luna_thinking_deep',
+          data: {
+            status: 'started',
+            keyword,
+            phrases,
+          },
+        };
+        console.log(`[Pipeline] 🧠 DeepResearch 시작 (SOLVE 자동 트리거, keyword="${keyword}")`);
+
+        // 검색 실행 (실패해도 throw 안 됨)
+        const researchResult = await runDeepResearch({
+          userSituation: userMessage.slice(0, 200),
+          scenario: lockedScenario,
+          recentMessages: chatHistory.filter((m) => m.role === 'user').slice(-3).map((m) => m.content),
+          focusArea: 'action_plan',
+        });
+
+        // 검색 결과가 있으면 systemPrompt에 주입
+        if (researchResult.insight && researchResult.insight.length > 20) {
+          const researchBlock = `
+
+## 🧠 루나 내부 참고 (방금 머릿속에 떠오른 것 — 유저 눈엔 절대 드러내지 마)
+
+이건 루나가 "방금 생각해낸 척" 해야 하는 내부 참고 자료야.
+이걸 그대로 읽지 마. 학자/이론/논문 이름 절대 출력 금지.
+"내 경험상", "이게 진짜 먹히거든", "최근에 알게 된 건데" 같은 자연스러운 누나 말투로 녹여.
+
+${researchResult.insight}
+
+### 🚨 사용 규칙
+- 위 내용을 "지금 막 떠올린 것"처럼 말해
+- 학자/논문/이론/연구 이름 0% 출력
+- "심리학적으로" / "연구에 따르면" / "~기법" 이런 말 금지
+- 대신 "있잖아", "내 생각엔", "이게 왜 먹히냐면", "사람들 보통" 이런 말투
+- 이건 루나 머릿속에만 있는 거야 — 유저는 모름`;
+
+          systemPrompt = systemPrompt + researchBlock;
+          console.log(
+            `[Pipeline] 🧠 DeepResearch 주입 완료: ${researchResult.insight.length}자, 출처 ${researchResult.sources.length}개, ${researchResult.durationMs}ms${researchResult.fromCache ? ' (캐시)' : ''}`,
+          );
+        } else {
+          console.log(
+            `[Pipeline] 🧠 DeepResearch 결과 없음 (${researchResult.durationMs}ms) — 루나 기본 지식으로 진행`,
+          );
+        }
+
+        // 🎨 UI 로딩 이벤트 종료
+        yield {
+          type: 'luna_thinking_deep',
+          data: {
+            status: 'done',
+            durationMs: researchResult.durationMs,
+            hasInsight: researchResult.insight.length > 20,
+          },
+        };
+      }
+    }
 
     // 모델 라우팅
     const modelRoute = routeModel(strategyResult.strategyType, stateResult.riskLevel);
@@ -981,18 +1366,172 @@ export class CounselingPipeline {
         }
       }
 
-      // 🆕 응답 검증 (Groq 8B, ~50ms)
-      try {
-        const validation = await validateResponse(
-          fullText,
-          effectiveEmotionScore,
-          strategyResult.strategyType
-        );
-        if (!validation.passed) {
-          console.warn(`[Pipeline] 응답 검증 FAIL:`, validation.violations);
+      // 🆕 v30: 응답 검증 — fire-and-forget (스트리밍 완료 후 비동기, 0.5~1초 절약)
+      // 검증 결과는 로그에만 사용되므로 유저 응답 전달을 블로킹할 필요 없음
+      validateResponse(fullText, effectiveEmotionScore, strategyResult.strategyType)
+        .then(v => { if (!v.passed) console.warn(`[Pipeline] 응답 검증 FAIL:`, v.violations); })
+        .catch(() => {});
+
+      // 🆕 v29: HLRE 후처리 — 시그널 파싱 + 검증 + 기억
+      if (hlreActive) {
+        try {
+          const userMsgs = chatHistory.filter(m => m.role === 'user').map(m => m.content);
+          userMsgs.push(userMessage);
+          const hlrePost = await hlre.postProcess(fullText, userMsgs);
+          // 시그널 태그 제거된 클린 응답으로 교체
+          if (hlrePost.finalResponse !== fullText) {
+            yield { type: 'text', data: `\n__HLRE_REPLACE__${hlrePost.finalResponse}` };
+            fullText = hlrePost.finalResponse;
+          }
+          if (hlrePost.phaseSignal) {
+            console.log(`[Pipeline] 🏷️ Phase시그널: ${hlrePost.phaseSignal} (전환: ${hlrePost.shouldTransition ? 'YES' : 'NO'})`);
+          }
+          console.log(`[Pipeline] 🧑 HLRE 루나감정(후): ${hlrePost.emotionState.currentEmotion}(${Math.round(hlrePost.emotionState.currentIntensity * 100)}%)`);
+
+          // 🆕 ACE v4: AI가 [MIND_READ_READY] 태그를 출력했으면 → 마음읽기 이벤트 발동
+          if (hlrePost.mindReadReady && canFireEvent() && !updatedCompletedEvents.includes('EMOTION_THERMOMETER')) {
+            const avgScore = emotionBaseline !== undefined
+              ? (emotionBaseline + stateResult.emotionScore) / 2
+              : stateResult.emotionScore;
+            // 🆕 GTC: 감정 누적기 우선 활용
+            const surface = updatedAccumulator.surfaceEmotion?.label
+              ?? (avgScore <= -2 ? '많이 힘들고 불안한' : avgScore <= 0 ? '답답하고 서운한' : '복잡한');
+            const deep = updatedAccumulator.deepEmotionHypothesis?.primaryEmotion
+              ?? (stateResult.emotionReason
+                ? stateResult.emotionReason.replace(/느껴졌어요|보여요|것 같아요/g, '').trim()
+                : '');
+            eventsToFire.push(createMindReading(surface, deep, avgScore, stateResult.emotionReason));
+            updatedCompletedEvents.push('EMOTION_THERMOMETER');
+            updatedLastEventTurn = turnCount;
+            console.log(`[Pipeline] 🧠 AI 자율 마음읽기 발동! "${surface}" → "${deep}"`);
+          }
+
+          // 🆕 ACE v4: AI가 [STORY_READY:...] 태그를 출력했으면 → 루나의 이야기 이벤트 발동
+          if (hlrePost.storyData && canFireEvent() && !updatedCompletedEvents.includes('LUNA_STORY')) {
+            const { opener, situation, innerThought, cliffhanger } = hlrePost.storyData;
+            eventsToFire.push(createLunaStory(opener, situation, innerThought, cliffhanger));
+            updatedCompletedEvents.push('LUNA_STORY');
+            updatedLastEventTurn = turnCount;
+            console.log(`[Pipeline] 📖 AI 자율 루나이야기 발동! opener: "${opener.slice(0, 30)}..."`);
+          }
+
+          // 🆕 ACE v4: AI가 [STRATEGY_READY:...] 태그를 출력했으면 → 루나의 작전회의 이벤트 발동
+          if (hlrePost.strategyData && canFireEvent() && !updatedCompletedEvents.includes('LUNA_STRATEGY')) {
+            const { opener: stratOpener, situationSummary, draftHook, roleplayHook, panelHook } = hlrePost.strategyData;
+            eventsToFire.push(createLunaStrategy(stratOpener, situationSummary, draftHook, roleplayHook, panelHook));
+            updatedCompletedEvents.push('LUNA_STRATEGY');
+            updatedLastEventTurn = turnCount;
+            console.log(`[Pipeline] 🔥 AI 자율 작전회의 발동! opener: "${stratOpener.slice(0, 30)}..." | 상황: "${situationSummary.slice(0, 40)}..."`);
+          }
+
+          // 🆕 v35: 💬 메시지 초안 모드 — [TONE_SELECT:...] → TONE_SELECT 이벤트
+          if (hlrePost.toneSelectData && canFireEvent() && !updatedCompletedEvents.includes('TONE_SELECT')) {
+            const { soft, honest, direct } = hlrePost.toneSelectData;
+            eventsToFire.push(createToneSelect(soft, honest, direct));
+            updatedCompletedEvents.push('TONE_SELECT');
+            updatedLastEventTurn = turnCount;
+            console.log(`[Pipeline] 💬 TONE_SELECT 발동: ${soft} / ${honest} / ${direct}`);
+          }
+
+          // 🆕 v35: 💬 메시지 초안 모드 — [DRAFT_CARD:...] x3 → DRAFT_WORKSHOP 이벤트
+          if (hlrePost.draftCards && hlrePost.draftCards.length > 0 && canFireEvent() && !updatedCompletedEvents.includes('DRAFT_WORKSHOP')) {
+            eventsToFire.push(createDraftWorkshop(hlrePost.draftCards));
+            updatedCompletedEvents.push('DRAFT_WORKSHOP');
+            updatedLastEventTurn = turnCount;
+            console.log(`[Pipeline] 💬 DRAFT_WORKSHOP 발동: ${hlrePost.draftCards.length}개 초안`);
+          }
+
+          // 🆕 v35: 🎭 롤플레이 모드 — [ROLEPLAY_FEEDBACK:...] → ROLEPLAY_FEEDBACK 이벤트
+          if (hlrePost.roleplayFeedback && canFireEvent() && !updatedCompletedEvents.includes('ROLEPLAY_FEEDBACK')) {
+            const { strengths, improvements, tip } = hlrePost.roleplayFeedback;
+            eventsToFire.push(createRoleplayFeedback(strengths, improvements, tip));
+            updatedCompletedEvents.push('ROLEPLAY_FEEDBACK');
+            updatedLastEventTurn = turnCount;
+            console.log(`[Pipeline] 🎭 ROLEPLAY_FEEDBACK 발동`);
+          }
+
+          // 🆕 v35: 🍿 연참 모드 — [PANEL_REPORT]...[/PANEL_REPORT] → PANEL_REPORT 이벤트
+          if (hlrePost.panelReport && canFireEvent() && !updatedCompletedEvents.includes('PANEL_REPORT')) {
+            const { situationSummary: panelSituation, strengths, cautions, lunaVerdict } = hlrePost.panelReport;
+            eventsToFire.push(createPanelReport(panelSituation, strengths, cautions, lunaVerdict));
+            updatedCompletedEvents.push('PANEL_REPORT');
+            updatedLastEventTurn = turnCount;
+            console.log(`[Pipeline] 🍿 PANEL_REPORT 발동: 강점${strengths.length}개, 주의${cautions.length}개`);
+          }
+
+          // 🆕 v35: 🤔 커스텀 모드 — [IDEA_REFINE:...] → IDEA_REFINE 이벤트
+          if (hlrePost.ideaRefine && canFireEvent() && !updatedCompletedEvents.includes('IDEA_REFINE')) {
+            const { original, refined, reason } = hlrePost.ideaRefine;
+            eventsToFire.push(createIdeaRefine(original, refined, reason));
+            updatedCompletedEvents.push('IDEA_REFINE');
+            updatedLastEventTurn = turnCount;
+            console.log(`[Pipeline] 🤔 IDEA_REFINE 발동`);
+          }
+
+          // 🆕 v39: 🎯 SOLVE 마무리 — [ACTION_PLAN:...] → ACTION_PLAN 이벤트
+          // SOLVE S3 시뮬레이션 후 "오늘의 작전" 카드 발동 → SOLVE→EMPOWER 전환 게이트
+          if (hlrePost.actionPlan && canFireEvent() && !updatedCompletedEvents.includes('ACTION_PLAN')) {
+            const { planType, title, coreAction, sharedResult, planB, timingHint, lunaCheer } = hlrePost.actionPlan;
+            eventsToFire.push(createActionPlan(
+              planType as any,
+              title,
+              coreAction,
+              sharedResult,
+              planB,
+              timingHint,
+              lunaCheer,
+            ));
+            updatedCompletedEvents.push('ACTION_PLAN');
+            updatedLastEventTurn = turnCount;
+            console.log(`[Pipeline] 🎯 ACTION_PLAN 발동: "${title}" | ${planType}`);
+          }
+
+          // 🆕 v39: 💜 EMPOWER 마무리 — [WARM_WRAP:...] → WARM_WRAP 이벤트
+          // 학술 요약 대신 "언니의 다독임 + 재방문 약속" 카드
+          if (hlrePost.warmWrap && canFireEvent() && !updatedCompletedEvents.includes('WARM_WRAP')) {
+            const { strengthFound, emotionShift, nextStep, lunaMessage } = hlrePost.warmWrap;
+            eventsToFire.push(createWarmWrap(strengthFound, emotionShift, nextStep, lunaMessage));
+            updatedCompletedEvents.push('WARM_WRAP');
+            updatedLastEventTurn = turnCount;
+            console.log(`[Pipeline] 💜 WARM_WRAP 발동: "${strengthFound.slice(0, 30)}..."`);
+          }
+
+          // 🆕 v37: 이전 턴들의 히스토리 복원 (stateResult는 매 턴 새로 생성되므로 seed 필요)
+          if (savedSituationReadHistory && savedSituationReadHistory.length > 0) {
+            stateResult.situationReadHistory = [...savedSituationReadHistory];
+          }
+          if (savedLunaThoughtHistory && savedLunaThoughtHistory.length > 0) {
+            stateResult.lunaThoughtHistory = [...savedLunaThoughtHistory];
+          }
+
+          // 🆕 v36: AI가 [SITUATION_READ:...] / [LUNA_THOUGHT:...] 태그를 출력했으면 → stateResult에 주입
+          if (hlrePost.situationRead || hlrePost.lunaThought) {
+            if (hlrePost.situationRead) {
+              stateResult.situationRead = hlrePost.situationRead;
+              // 🆕 v37: 상황 인식 히스토리 누적 (중복 방지 — 직전과 같으면 추가 안 함)
+              if (!stateResult.situationReadHistory) {
+                stateResult.situationReadHistory = [];
+              }
+              const lastSituation = stateResult.situationReadHistory[stateResult.situationReadHistory.length - 1];
+              if (lastSituation !== hlrePost.situationRead) {
+                stateResult.situationReadHistory.push(hlrePost.situationRead);
+              }
+            }
+            if (hlrePost.lunaThought) {
+              stateResult.lunaThought = hlrePost.lunaThought;
+              // 히스토리 누적 (기존 히스토리 유지 — savedLunaThoughtHistory에서 복원된 것 포함)
+              if (!stateResult.lunaThoughtHistory) {
+                stateResult.lunaThoughtHistory = [];
+              }
+              stateResult.lunaThoughtHistory.push(hlrePost.lunaThought);
+            }
+            // 업데이트된 stateResult를 클라이언트에 재전송
+            yield { type: 'state', data: stateResult };
+            console.log(`[Pipeline] 🔍 루나 인사이트 업데이트: situation="${hlrePost.situationRead ?? '—'}" | thought="${hlrePost.lunaThought ?? '—'}" | 상황 히스토리=${stateResult.situationReadHistory?.length ?? 0}개, 속마음 히스토리=${stateResult.lunaThoughtHistory?.length ?? 0}개`);
+          }
+        } catch (e) {
+          console.warn('[Pipeline] HLRE 후처리 오류 (무시):', e);
         }
-      } catch {
-        // 검증 실패해도 응답은 전달 (안전 우선)
       }
 
       // 🆕 v15: 이벤트 전송 (AI 응답 완료 후)
@@ -1052,6 +1591,55 @@ export class CounselingPipeline {
     const nudges = this.behaviorEngine.selectNudges(strategyResult);
     yield { type: 'nudge', data: nudges };
 
-    yield { type: 'done', data: { stateResult, strategyResult, suggestionShown: gateResult.show, responseMode: therapeuticResponse.mode, updatedAxes: currentScenario === RelationshipScenario.READ_AND_IGNORED ? updatedAxes : undefined, phaseV2: newPhaseV2, completedEvents: updatedCompletedEvents, lastEventTurn: updatedLastEventTurn, confirmedEmotionScore, emotionHistory: updatedEmotionHistory, promptStyle: currentPromptStyle, emotionAccumulatorState: updatedAccumulator, phaseStartTurn: updatedPhaseStartTurn } };
+    // 🆕 v34: AI 동적 컨텍스트 로그 (디버깅/품질 분석용)
+    const _contextLog = {
+      systemPrompt,
+      recentMessages,
+      pipelineMeta: {
+        persona,
+        phase: newPhaseV2,
+        prevPhase: prevPhaseV2,
+        phaseChanged,
+        turnCount,
+        turnInPhase,
+        emotionScore: stateResult.emotionScore,
+        effectiveEmotionScore,
+        confirmedEmotionScore,
+        emotionHistory: updatedEmotionHistory,
+        strategy: strategyResult.strategyType,
+        strategyReason: strategyResult.reason,
+        responseMode: therapeuticResponse.mode,
+        scenario: currentScenario,
+        lockedScenario,
+        riskLevel: stateResult.riskLevel,
+        intent: intentResult.primaryIntent,
+        emotionalIntensity: intentResult.emotionalIntensity,
+        attachmentType: stateResult.attachmentType,
+        cognitiveDistortions: stateResult.cognitiveDistortions,
+        horsemenDetected: stateResult.horsemenDetected,
+        isFlooding: stateResult.isFlooding,
+        eventsToFire: eventsToFire.map(e => e.type),
+        completedEvents: updatedCompletedEvents,
+        gateResult,
+        modelRoute: { cascade: modelRoute.cascade, maxTokens: modelRoute.maxTokens },
+        hlreActive,
+        ragTextLength: ragText.length,
+        solutionMatchCount: solutionMatches.length,
+        readinessScore,
+        axesState: {
+          filledCount: axesState.filledCount,
+          needsDiagnostic: axesState.needsDiagnostic,
+          nextAxis: axesState.nextAxis,
+        },
+        emotionAccumulator: {
+          signalCount: updatedAccumulator.signals?.length ?? 0,
+          deepEmotion: updatedAccumulator.deepEmotionHypothesis?.primaryEmotion ?? null,
+          surfaceEmotion: updatedAccumulator.surfaceEmotion?.label ?? null,
+        },
+        phaseStartTurn: updatedPhaseStartTurn,
+      },
+    };
+
+    yield { type: 'done', data: { stateResult, strategyResult, suggestionShown: gateResult.show, responseMode: therapeuticResponse.mode, updatedAxes: currentScenario === RelationshipScenario.READ_AND_IGNORED ? updatedAxes : undefined, phaseV2: newPhaseV2, completedEvents: updatedCompletedEvents, lastEventTurn: updatedLastEventTurn, confirmedEmotionScore, emotionHistory: updatedEmotionHistory, promptStyle: currentPromptStyle, emotionAccumulatorState: updatedAccumulator, phaseStartTurn: updatedPhaseStartTurn, lunaEmotionState: hlreActive ? hlre.serializeEmotionState() : undefined, sessionStoryState: hlreActive ? hlre.serializeSessionStory() : undefined, strategyMode: activeStrategyMode, intimacyState: hlreActive ? hlre.getIntimacyState(intimacyPersonaKey) : null, intimacyPersonaKey: hlreActive ? intimacyPersonaKey : undefined, intimacyAll: hlreActive ? hlre.getIntimacyAll() : null, intimacyLevelUp, _contextLog } };
   }
 }
