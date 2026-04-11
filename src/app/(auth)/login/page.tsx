@@ -1,18 +1,30 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import Image from 'next/image';
 
+/** 카카오톡/인스타/네이버 등 인앱 브라우저(WebView) 감지 */
+function isInAppBrowser(): boolean {
+  if (typeof window === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  return /KAKAOTALK|NAVER|Instagram|FB_IAB|FBAN|Line|DaumApps|SamsungBrowser/i.test(ua);
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [inApp, setInApp] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    setInApp(isInAppBrowser());
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,6 +45,14 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
+    // 인앱 브라우저면 외부 브라우저로 열기
+    if (isInAppBrowser()) {
+      // 외부 브라우저 강제 열기 (intent:// for Android)
+      const url = window.location.href;
+      const intentUrl = `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end`;
+      window.location.href = intentUrl;
+      return;
+    }
     setLoading(true);
     const supabase = createClient();
     await supabase.auth.signInWithOAuth({
@@ -90,6 +110,34 @@ export default function LoginPage() {
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         className="w-full max-w-[340px] z-10 flex flex-col relative"
       >
+        {/* 📱 인앱 브라우저 감지 안내 배너 */}
+        <AnimatePresence>
+          {inApp && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="mb-4 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-center"
+            >
+              <p className="text-amber-800 text-[14px] font-bold mb-2">⚠️ 인앱 브라우저 감지</p>
+              <p className="text-amber-700 text-[13px] leading-relaxed">
+                카카오톡/인스타그램에서는 Google 로그인이 <br/>제한됩니다.
+              </p>
+              <button
+                onClick={() => {
+                  const url = window.location.href;
+                  // Android: Chrome으로 강제 열기
+                  const intentUrl = `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end`;
+                  window.location.href = intentUrl;
+                }}
+                className="mt-3 px-5 py-2.5 rounded-full bg-amber-500 text-white text-[14px] font-bold shadow-sm"
+              >
+                Chrome에서 열기 🚀
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Google 로그인 버튼 (이미지와 폼 사이 기준점 역할) */}
         <motion.button
           whileHover={{ scale: 1.02 }}
