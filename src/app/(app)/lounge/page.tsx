@@ -1,14 +1,14 @@
 'use client';
 
 /**
- * 🏠 v42: 라운지 — "가짜 실시간" 단톡방
+ * 🏠 v43: 라운지 — "살아있는 단톡방"
  *
- * 핵심 변경:
- * - 배치 메시지 점적 재생 (Drip Feed)
- * - 읽지 않은 메시지 구분선
- * - 카톡 스타일 시간 표시
- * - 유저 발화 시 LLM 호출 → 배치 재생 일시정지 → 응답 후 재개
- * - NPC Life Engine은 배치 실패 시 폴백으로만 유지
+ * v42→v43 핵심 변경:
+ * - 🌿 Ambient Life System: 캐릭터가 자동으로 행동 표시 (30초~2분 랜덤)
+ * - 💬 Proactive Nudge: 유저 2~3분 방치 시 먼저 말걸기
+ * - 😂 Message Reactions: 유저 메시지에 이모지 리액션
+ * - ⌨️ Enhanced Typing: 글자수 비례 딜레이 + 멈칫 효과
+ * - 🟢 Live Status Header: 온라인 펄스 dot + 입력 중 표시
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -21,9 +21,18 @@ import MoodCheckIn from '@/components/lounge/MoodCheckIn';
 import type { CharacterDailyState } from '@/engines/lounge/daily-state-engine';
 import { moodToEmoji } from '@/engines/lounge/daily-state-engine';
 import type { ScheduledMessage, BatchDailyMessages } from '@/engines/lounge/batch-message-types';
-import { splitByTime, buildPlaybackQueue, formatChatTime, shouldShowTime, messageMinute } from '@/engines/lounge/batch-message-types';
+import { splitByTime, buildPlaybackQueue, formatChatTime } from '@/engines/lounge/batch-message-types';
 import { crossTalkToQueue, generateDefaultSchedule, getCurrentStatus } from '@/engines/lounge/conversation-player';
 import { NpcLifeEngine, type CharacterLiveStatus } from '@/engines/lounge/npc-life-engine';
+import {
+  getRandomAmbientAction,
+  getProactiveNudge,
+  getMessageReaction,
+  calcTypingDelay,
+  getCharacterPresence,
+  nextAmbientInterval,
+  nudgeTimeout,
+} from '@/engines/lounge/ambient-actions';
 import { useLoungeStore } from '@/lib/stores/lounge-store';
 import { createClient } from '@/lib/supabase/client';
 
@@ -48,9 +57,18 @@ export default function LoungePage() {
 
   // 🆕 v42: 배치 관련 상태
   const [batchData, setBatchData] = useState<BatchDailyMessages | null>(null);
-  const [unreadLine, setUnreadLine] = useState(-1); // 읽지 않은 메시지 구분선 인덱스
+  const [unreadLine, setUnreadLine] = useState(-1);
   const activeTimersRef = useRef<NodeJS.Timeout[]>([]);
-  const [isPausedByUser, setIsPausedByUser] = useState(false); // 유저 발화로 배치 일시정지
+  const [isPausedByUser, setIsPausedByUser] = useState(false);
+
+  // 🆕 v43: Ambient Life 상태
+  const ambientTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const nudgeTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const usedActionsRef = useRef<Set<string>>(new Set());
+  const usedNudgesRef = useRef<Set<string>>(new Set());
+  const nudgeCountRef = useRef(0);
+  const lastUserActionRef = useRef(Date.now());
+  const [headerTyping, setHeaderTyping] = useState<'luna' | 'tarot' | null>(null);
 
   // Zustand 연동
   const setOnLounge = useLoungeStore(s => s.setOnLounge);
@@ -94,7 +112,42 @@ export default function LoungePage() {
     }, 2000);
   }, []);
 
-  // ─── 🆕 v42: 배치 메시지 → 화면에 표시 ──────────────
+  // ─── 🆕 v43: Enhanced Typing + Message Render ────────────
+
+  /** 향상된 캐릭터 메시지 표시 — 글자수 비례 타이핑 + 멈칫 */
+  const renderWithTyping = useCallback((
+    speaker: 'luna' | 'tarot',
+    text: string,
+    extraProps?: Partial<LoungeMessageType>,
+  ): Promise<void> => {
+    return new Promise(resolve => {
+      const { typingMs, hesitate } = calcTypingDelay(text);
+
+      // 헤더에 "입력 중" 표시
+      setHeaderTyping(speaker);
+
+      // 타이핑 인디케이터 표시
+      setMessages(prev => [...prev, { type: 'typing', speaker, hesitate }]);
+      scrollToBottom();
+
+      setTimeout(() => {
+        setMessages(prev => {
+          const clean = prev.filter(m => m.type !== 'typing');
+          return [...clean, {
+            type: 'character' as const,
+            speaker,
+            text,
+            ...extraProps,
+          } as LoungeMessageType];
+        });
+        setHeaderTyping(null);
+        scrollToBottom();
+        resolve();
+      }, typingMs);
+    });
+  }, [scrollToBottom]);
+
+  // ─── v42: 배치 메시지 → 화면에 표시 ──────────────
 
   const renderBatchMessage = useCallback((msg: ScheduledMessage) => {
     if (msg.type === 'system') {
@@ -102,27 +155,15 @@ export default function LoungePage() {
     } else if (msg.type === 'action') {
       addMsg({ type: 'action', speaker: msg.speaker ?? 'luna', text: msg.text });
     } else {
-      // character: typing → 1초 후 메시지
-      setMessages(prev => [...prev, { type: 'typing', speaker: msg.speaker ?? 'luna' }]);
-      scrollToBottom();
-      setTimeout(() => {
-        setMessages(prev => {
-          const clean = prev.filter(m => m.type !== 'typing');
-          return [...clean, {
-            type: 'character' as const,
-            speaker: msg.speaker ?? 'luna',
-            text: msg.text,
-            time: formatChatTime(msg.hour, msg.minute),
-          }];
-        });
-        scrollToBottom();
-      }, 800 + Math.min(msg.text.length * 20, 1500));
+      // 🆕 v43: 향상된 타이핑으로 캐릭터 메시지 표시
+      renderWithTyping(msg.speaker ?? 'luna', msg.text, {
+        timestamp: formatChatTime(msg.hour, msg.minute),
+      } as any);
     }
-  }, [addMsg, scrollToBottom]);
+  }, [addMsg, renderWithTyping]);
 
   // 미래 메시지 예약
   const scheduleFutureMessages = useCallback((futureMessages: ScheduledMessage[]) => {
-    // 기존 타이머 정리
     activeTimersRef.current.forEach(t => clearTimeout(t));
     activeTimersRef.current = [];
 
@@ -130,14 +171,74 @@ export default function LoungePage() {
 
     for (const item of queue) {
       const timer = setTimeout(() => {
-        if (isPausedByUser) return; // 유저 대화 중이면 스킵
+        if (isPausedByUser) return;
         renderBatchMessage(item.message);
-        // 히스토리 저장
         setMessages(prev => { saveHistory(prev, true); return prev; });
       }, item.delayMs);
       activeTimersRef.current.push(timer);
     }
   }, [renderBatchMessage, saveHistory, isPausedByUser]);
+
+  // ─── 🆕 v43: Ambient Life 루프 ────────────────────────
+
+  const startAmbientLoop = useCallback(() => {
+    // 기존 타이머 정리
+    if (ambientTimerRef.current) clearTimeout(ambientTimerRef.current);
+
+    function scheduleNext() {
+      ambientTimerRef.current = setTimeout(() => {
+        // 유저가 최근에 활동했으면 스킵 (10초 이내)
+        if (Date.now() - lastUserActionRef.current < 10000) {
+          scheduleNext();
+          return;
+        }
+
+        const action = getRandomAmbientAction(usedActionsRef.current);
+        if (action) {
+          setMessages(prev => [...prev, {
+            type: 'ambient' as const,
+            speaker: action.speaker,
+            text: action.text,
+            emoji: action.emoji,
+          }]);
+          scrollToBottom();
+        }
+
+        scheduleNext();
+      }, nextAmbientInterval());
+    }
+
+    scheduleNext();
+  }, [scrollToBottom]);
+
+  // ─── 🆕 v43: Proactive Nudge 루프 ────────────────────
+
+  const resetNudgeTimer = useCallback(() => {
+    if (nudgeTimerRef.current) clearTimeout(nudgeTimerRef.current);
+
+    // 세션 당 최대 3회
+    if (nudgeCountRef.current >= 3) return;
+
+    nudgeTimerRef.current = setTimeout(() => {
+      // 유저가 여전히 비활성인지 체크
+      const inactiveMs = Date.now() - lastUserActionRef.current;
+      if (inactiveMs < 90000) { // 1.5분 미만이면 다시 대기
+        resetNudgeTimer();
+        return;
+      }
+
+      const nudge = getProactiveNudge(usedNudgesRef.current);
+      if (nudge) {
+        nudgeCountRef.current++;
+        renderWithTyping(nudge.speaker, nudge.text).then(() => {
+          setMessages(prev => { saveHistory(prev, true); return prev; });
+        });
+      }
+
+      // 다음 nudge 예약
+      resetNudgeTimer();
+    }, nudgeTimeout());
+  }, [renderWithTyping, saveHistory]);
 
   // ─── 초기화 ───────────────────────────────────────────
 
@@ -163,7 +264,7 @@ export default function LoungePage() {
         // 🆕 v42: 배치 메시지가 있으면 배치 모드!
         if (batch?.messages?.length && batch.messages.length > 5) {
           setBatchData(batch);
-          setBatchMessages(batch.messages); // Zustand에도 설정
+          setBatchMessages(batch.messages);
 
           const { past, future } = splitByTime(batch.messages);
 
@@ -173,15 +274,14 @@ export default function LoungePage() {
               if (m.type === 'system') return { type: 'system', text: m.text };
               if (m.type === 'user') return { type: 'user', text: m.text };
               if (m.type === 'action') return { type: 'action', speaker: m.speaker, text: m.text };
+              if (m.type === 'ambient') return { type: 'ambient', speaker: m.speaker, text: m.text, emoji: '' };
               return { type: 'character', speaker: m.speaker, text: m.text };
             });
 
-            // 히스토리에서 아직 안 뜬 과거 메시지 추가
             const historyTexts = new Set(restored.filter(m => m.type === 'character').map(m => (m as any).text));
             const newPast = past.filter(m => m.type === 'character' && !historyTexts.has(m.text));
 
             if (newPast.length > 0) {
-              // 읽지 않은 메시지 구분선
               setUnreadLine(restored.length);
               const unreadMsgs: LoungeMessageType[] = newPast.map(m => {
                 if (m.type === 'system') {
@@ -201,7 +301,6 @@ export default function LoungePage() {
 
             setUserJoined(true);
 
-            // 재입장 인사 — 이미 "돌아왔어요"가 마지막에 있으면 스킵 (중복 방지)
             const lastFewTexts = existingHistory.slice(-3).map((m: any) => m.text ?? '');
             const alreadyGreeted = lastFewTexts.some((t: string) => t.includes('돌아왔어요'));
             if (!alreadyGreeted) {
@@ -216,9 +315,8 @@ export default function LoungePage() {
             // 첫 입장: 과거 메시지 한꺼번에 보여주기
             const initialMsgs: LoungeMessageType[] = [];
 
-            // 과거 메시지 (읽지 않은 상태로)
             if (past.length > 0) {
-              setUnreadLine(0); // 첫 입장이니 전부 읽지 않은 메시지
+              setUnreadLine(0);
 
               for (const msg of past) {
                 if (msg.type === 'system') {
@@ -234,10 +332,8 @@ export default function LoungePage() {
               }
             }
 
-            // 유저 합류
             initialMsgs.push({ type: 'system', text: `${data.nickname ?? '나'}님이 들어왔어요` });
 
-            // 인사
             if (batch.proactiveGreeting) {
               initialMsgs.push({
                 type: 'character' as const,
@@ -249,8 +345,6 @@ export default function LoungePage() {
             setMessages(initialMsgs);
             setUserJoined(true);
             if (!data.todayCheckedIn) setTimeout(() => setShowCheckIn(true), 1500);
-
-            // 히스토리 저장
             saveHistory(initialMsgs, true);
           }
 
@@ -272,13 +366,13 @@ export default function LoungePage() {
             if (m.type === 'system') return { type: 'system', text: m.text };
             if (m.type === 'user') return { type: 'user', text: m.text };
             if (m.type === 'action') return { type: 'action', speaker: m.speaker, text: m.text };
+            if (m.type === 'ambient') return { type: 'ambient', speaker: m.speaker, text: m.text, emoji: '' };
             return { type: 'character', speaker: m.speaker, text: m.text };
           });
           setMessages(restored);
           setUserJoined(true);
           if (!data.todayCheckedIn) setShowCheckIn(true);
 
-          // 재입장 인사 — 중복 방지
           const lastFewTexts = existingHistory.slice(-3).map((m: any) => m.text ?? '');
           const alreadyGreeted = lastFewTexts.some((t: string) => t.includes('돌아왔어요'));
           if (!alreadyGreeted) {
@@ -289,9 +383,10 @@ export default function LoungePage() {
               const speaker = data.persona === 'tarot' ? 'tarot' as const : 'luna' as const;
               setMessages(prev => [...prev, { type: 'system', text: `${userName}님이 돌아왔어요` }]);
               setTimeout(() => {
-                setMessages(prev => [...prev, { type: 'character', speaker, text: greeting }]);
-                scrollToBottom();
-              }, 1500);
+                renderWithTyping(speaker, greeting).then(() => {
+                  setMessages(prev => { saveHistory(prev, true); return prev; });
+                });
+              }, 1000);
             }, 500);
           }
 
@@ -338,17 +433,10 @@ export default function LoungePage() {
             const speaker = data.persona === 'tarot' ? 'tarot' as const : 'luna' as const;
             if (onJoin) {
               setTimeout(() => {
-                setMessages(prev => [...prev, { type: 'typing', speaker }]);
-                scrollToBottom();
-                setTimeout(() => {
-                  setMessages(prev => {
-                    const clean = prev.filter(m => m.type !== 'typing');
-                    return [...clean, { type: 'character' as const, speaker, text: onJoin }];
-                  });
-                  scrollToBottom();
+                renderWithTyping(speaker, onJoin).then(() => {
                   if (!data.todayCheckedIn) setTimeout(() => setShowCheckIn(true), 1500);
                   setMessages(prev => { saveHistory(prev, true); return prev; });
-                }, 1200);
+                });
               }, 1000);
             } else {
               if (!data.todayCheckedIn) setTimeout(() => setShowCheckIn(true), 1000);
@@ -369,11 +457,47 @@ export default function LoungePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 유저 메시지 전송
+  // ─── 🆕 v43: Ambient + Nudge 루프 시작 ───────────────
+
+  useEffect(() => {
+    if (!userJoined) return;
+
+    // Ambient 행동 루프 시작
+    startAmbientLoop();
+    // Nudge 타이머 시작
+    resetNudgeTimer();
+
+    return () => {
+      if (ambientTimerRef.current) clearTimeout(ambientTimerRef.current);
+      if (nudgeTimerRef.current) clearTimeout(nudgeTimerRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userJoined]);
+
+  // 🆕 v43: 유저 메시지 전송 + 리액션
   const handleSend = useCallback(async (text: string) => {
+    lastUserActionRef.current = Date.now();
+    resetNudgeTimer(); // 유저 활동 → nudge 타이머 리셋
+
+    // 유저 메시지 추가 (리액션은 나중에)
+    const userMsgIdx = messages.length;
     addMsg({ type: 'user', text });
     setSending(true);
-    setIsPausedByUser(true); // 배치 일시정지
+    setIsPausedByUser(true);
+
+    // 🆕 v43: 리액션 이모지 생성 → 1~3초 뒤 표시
+    const reaction = getMessageReaction(text);
+    if (reaction) {
+      setTimeout(() => {
+        setMessages(prev => prev.map((m, i) => {
+          // 가장 마지막 user 메시지에 리액션 추가
+          if (m.type === 'user' && !('reaction' in m && (m as any).reaction) && (m as any).text === text) {
+            return { ...m, reaction: reaction.emoji, reactionSpeaker: reaction.speaker } as LoungeMessageType;
+          }
+          return m;
+        }));
+      }, 1000 + Math.random() * 2000);
+    }
 
     const recentChat = messages
       .filter(m => m.type === 'character' || m.type === 'user')
@@ -395,35 +519,26 @@ export default function LoungePage() {
       for (const resp of data.responses ?? []) {
         await new Promise<void>(resolve => {
           setTimeout(() => {
-            setMessages(prev => [...prev, { type: 'typing', speaker: resp.speaker }]);
-            scrollToBottom();
-            setTimeout(() => {
-              setMessages(prev => {
-                const clean = prev.filter(m => m.type !== 'typing');
-                const updated = [...clean, { type: 'character' as const, speaker: resp.speaker, text: resp.text }];
-                saveHistory(updated, true);
-                return updated;
-              });
-              scrollToBottom();
+            renderWithTyping(resp.speaker, resp.text).then(() => {
+              setMessages(prev => { saveHistory(prev, true); return prev; });
               resolve();
-            }, 800 + resp.text.length * 25);
+            });
           }, (resp.delay ?? 2) * 1000);
         });
       }
 
       if (data.shouldSuggestCounseling) {
         setTimeout(() => {
-          addMsg({ type: 'character', speaker: 'luna', text: '음... 이건 좀 더 이야기해봐야 할 것 같은데. 상담으로 가볼까?' });
+          renderWithTyping('luna', '음... 이건 좀 더 이야기해봐야 할 것 같은데. 상담으로 가볼까?');
         }, 2000);
       }
     } catch (e) {
       addMsg({ type: 'character', speaker: 'luna', text: '앗, 잠깐 연결이 끊겼어. 다시 말해줄래?' });
     } finally {
       setSending(false);
-      // 유저 응답 완료 후 5초 뒤 배치 재생 재개
       setTimeout(() => setIsPausedByUser(false), 5000);
     }
-  }, [messages, addMsg, scrollToBottom, saveHistory]);
+  }, [messages, addMsg, scrollToBottom, saveHistory, renderWithTyping, resetNudgeTimer]);
 
   // 감정 체크인
   const handleCheckIn = useCallback(async (mood: string, score: number) => {
@@ -431,12 +546,13 @@ export default function LoungePage() {
     setShowCheckIn(false);
     addMsg({ type: 'system', text: `오늘의 기분: ${mood}` });
     setTimeout(() => {
-      const reaction = score >= 3
-        ? { speaker: 'luna' as const, text: '좋은 하루 보내고 있구나!' }
+      const speaker = persona === 'tarot' ? 'tarot' as const : 'luna' as const;
+      const text = score >= 3
+        ? '좋은 하루 보내고 있구나!'
         : score >= 2
-        ? { speaker: 'luna' as const, text: '그렇구나... 이야기해볼래?' }
-        : { speaker: 'luna' as const, text: '많이 힘들구나. 옆에 있을게.' };
-      addMsg({ type: 'character', ...reaction });
+        ? '그렇구나... 이야기해볼래?'
+        : '많이 힘들구나. 옆에 있을게.';
+      renderWithTyping(speaker, text);
     }, 1500);
 
     const supabase = createClient();
@@ -454,15 +570,19 @@ export default function LoungePage() {
     profile.lastVisitDate = today;
     setStreakDays(profile.streakDays ?? 1);
     await supabase.from('user_profiles').update({ memory_profile: profile }).eq('id', user.id);
-  }, [addMsg]);
+  }, [addMsg, persona, renderWithTyping]);
 
   const luna = dailyState?.luna;
   const tarot = dailyState?.tarot;
 
+  // 🆕 v43: Live presence 계산
+  const lunaPresence = getCharacterPresence('luna');
+  const tarotPresence = getCharacterPresence('tarot');
+
   // NPC Life Engine tick 루프 — 배치 실패 시 폴백
   useEffect(() => {
     if (!userJoined || !userName) return;
-    if (batchData) return; // 배치 모드면 NPC tick 불필요
+    if (batchData) return;
 
     if (!engineRef.current) {
       const baseLuna = dailyState?.luna?.mood?.positivity ?? 0.3;
@@ -485,11 +605,7 @@ export default function LoungePage() {
           delay += 2000 + (msg.type === 'character' ? ((msg as any).text?.length ?? 10) * 30 : 500);
           setTimeout(() => {
             if (msg.type === 'character') {
-              setMessages(prev => [...prev, { type: 'typing', speaker: (msg as any).speaker }]);
-              setTimeout(() => {
-                setMessages(prev => [...prev.filter(m => m.type !== 'typing'), msg]);
-                scrollToBottom();
-              }, 1000);
+              renderWithTyping((msg as any).speaker, (msg as any).text);
             } else {
               setMessages(prev => [...prev, msg]);
             }
@@ -512,36 +628,81 @@ export default function LoungePage() {
   useEffect(() => {
     return () => {
       activeTimersRef.current.forEach(t => clearTimeout(t));
+      if (ambientTimerRef.current) clearTimeout(ambientTimerRef.current);
+      if (nudgeTimerRef.current) clearTimeout(nudgeTimerRef.current);
     };
   }, []);
 
   return (
     <LoungeBackground>
       <div className="flex flex-col h-screen">
-        {/* 헤더 */}
+        {/* 🆕 v43: LIVE 헤더 */}
         <div className="flex-shrink-0 px-4 pt-3 pb-2 flex items-center justify-between"
-          style={{ background: isNight ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.5)', backdropFilter: 'blur(12px)' }}>
+          style={{ background: isNight ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.6)', backdropFilter: 'blur(12px)' }}>
           <div>
-            <h1 className="text-[16px] font-black" style={{ color: isNight ? '#e2e8f0' : '#3d2066' }}>
-              🏠 라운지
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-[16px] font-black" style={{ color: isNight ? '#e2e8f0' : '#3d2066' }}>
+                🏠 라운지
+              </h1>
+              {/* 참여 인원 */}
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                style={{
+                  background: isNight ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)',
+                  color: isNight ? '#94a3b8' : '#9ca3af',
+                }}>
+                👥 3
+              </span>
+            </div>
             {streakDays > 1 && (
               <span className="text-[10px] font-bold" style={{ color: '#f97316' }}>🔥 {streakDays}일 연속</span>
             )}
+            {/* 🆕 v43: 헤더 타이핑 상태 */}
+            <AnimatePresence>
+              {headerTyping && (
+                <motion.p
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -5 }}
+                  className="text-[10px]"
+                  style={{ color: CHAR_COLORS[headerTyping] }}
+                >
+                  {headerTyping === 'luna' ? '루나' : '타로냥'}가 입력 중...
+                </motion.p>
+              )}
+            </AnimatePresence>
           </div>
-          <div className="flex flex-col gap-1">
+
+          {/* 캐릭터 상태 — 🆕 온라인 dot 추가 */}
+          <div className="flex flex-col gap-1.5">
             {luna && (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
+                {/* 온라인 dot */}
+                <motion.div
+                  className="w-2 h-2 rounded-full"
+                  style={{ background: lunaPresence.isOnline ? '#22c55e' : '#94a3b8' }}
+                  animate={lunaPresence.isOnline ? { scale: [1, 1.3, 1], opacity: [0.7, 1, 0.7] } : {}}
+                  transition={{ duration: 2, repeat: Infinity }}
+                />
                 <span className="text-[12px]">{lunaLive?.emotionEmoji ?? moodToEmoji(luna.mood)}</span>
                 <span className="text-[10px] font-medium" style={{ color: '#ea580c' }}>루나</span>
-                <span className="text-[9px] text-gray-400">{lunaLive?.activity ?? luna.currentActivity} {lunaLive?.emoji ?? ''}</span>
+                <span className="text-[9px]" style={{ color: isNight ? '#94a3b8' : '#9ca3af' }}>
+                  {lunaPresence.isSleeping ? '💤 zzz' : (lunaLive?.activity ?? lunaPresence.statusText)}
+                </span>
               </div>
             )}
             {tarot && (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
+                <motion.div
+                  className="w-2 h-2 rounded-full"
+                  style={{ background: tarotPresence.isOnline ? '#22c55e' : '#94a3b8' }}
+                  animate={tarotPresence.isOnline ? { scale: [1, 1.3, 1], opacity: [0.7, 1, 0.7] } : {}}
+                  transition={{ duration: 2.5, repeat: Infinity }}
+                />
                 <span className="text-[12px]">{tarotLive?.emotionEmoji ?? moodToEmoji(tarot.mood)}</span>
                 <span className="text-[10px] font-medium" style={{ color: '#7c3aed' }}>타로냥</span>
-                <span className="text-[9px] text-gray-400">{tarotLive?.activity ?? tarot.currentActivity} {tarotLive?.emoji ?? ''}</span>
+                <span className="text-[9px]" style={{ color: isNight ? '#94a3b8' : '#9ca3af' }}>
+                  {tarotPresence.isSleeping ? '💤 zzz' : (tarotLive?.activity ?? tarotPresence.statusText)}
+                </span>
               </div>
             )}
           </div>
@@ -559,13 +720,11 @@ export default function LoungePage() {
           )}
 
           {messages.map((msg, i) => {
-            // 날짜 구분선
             const todayStr = new Date().toISOString().slice(0, 10);
             const msgDate = (msg as any).date ?? todayStr;
             const prevDate = i > 0 ? ((messages[i - 1] as any).date ?? todayStr) : '';
             const showDateLine = i === 0 || msgDate !== prevDate;
 
-            // 🆕 v42: 읽지 않은 메시지 구분선
             const showUnreadLine = unreadLine >= 0 && i === unreadLine;
 
             return (
@@ -625,3 +784,9 @@ export default function LoungePage() {
     </LoungeBackground>
   );
 }
+
+// 헤더 타이핑 색상
+const CHAR_COLORS: Record<string, string> = {
+  luna: '#ea580c',
+  tarot: '#7c3aed',
+};
