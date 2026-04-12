@@ -538,11 +538,16 @@ export class CounselingPipeline {
     const updatedCompletedEvents = [...(completedEvents ?? [])];
     let updatedLastEventTurn = lastEventTurn;  // 🆕 v10: 이벤트 발생 시 업데이트
 
+    // 🆕 v43: completedEvents 로드 상태 로그 (DB race condition 디버깅)
+    console.log(`[Pipeline] 🔍 completedEvents 로드: [${updatedCompletedEvents.join(', ')}] (${updatedCompletedEvents.length}개)`);
+
     // 🆕 v10: 각 이벤트 트리거 시 phaseCtx에 최신 lastEventTurn 반영
     const makeCtxForEvent = (): PhaseContext => ({ ...phaseCtx, completedEvents: updatedCompletedEvents, lastEventTurn: updatedLastEventTurn, phaseStartTurn: updatedPhaseStartTurn });
 
     // 🆕 v20: 한 턴에 최대 1개 이벤트만 허용 (동시 표시 방지)
     const canFireEvent = () => eventsToFire.length === 0;
+    // 🆕 v43: 이벤트 타입 기반 이중 체크 — eventsToFire 내 중복 + completedEvents 중복 동시 방지
+    const canFireEventType = (type: PhaseEventType) => canFireEvent() && !eventsToFire.some(e => e.type === type) && !updatedCompletedEvents.includes(type);
 
     // 🆕 v29: Phase 전환 시 이전 Phase의 졸업 이벤트 체크용 컨텍스트
     // ABSOLUTE_MAX 강제 전환 시 newPhaseV2='MIRROR'가 되어 HOOK 이벤트가 누락됨
@@ -1389,7 +1394,7 @@ ${researchResult.insight}
           console.log(`[Pipeline] 🧑 HLRE 루나감정(후): ${hlrePost.emotionState.currentEmotion}(${Math.round(hlrePost.emotionState.currentIntensity * 100)}%)`);
 
           // 🆕 ACE v4: AI가 [MIND_READ_READY] 태그를 출력했으면 → 마음읽기 이벤트 발동
-          if (hlrePost.mindReadReady && canFireEvent() && !updatedCompletedEvents.includes('EMOTION_THERMOMETER')) {
+          if (hlrePost.mindReadReady && canFireEventType('EMOTION_THERMOMETER')) {
             const avgScore = emotionBaseline !== undefined
               ? (emotionBaseline + stateResult.emotionScore) / 2
               : stateResult.emotionScore;
@@ -1404,24 +1409,32 @@ ${researchResult.insight}
             updatedCompletedEvents.push('EMOTION_THERMOMETER');
             updatedLastEventTurn = turnCount;
             console.log(`[Pipeline] 🧠 AI 자율 마음읽기 발동! "${surface}" → "${deep}"`);
+          } else if (hlrePost.mindReadReady) {
+            console.log(`[Pipeline] ⚠️ MIND_READ 차단: canFire=${canFireEvent()}, completed=${updatedCompletedEvents.includes('EMOTION_THERMOMETER')}, inQueue=${eventsToFire.some(e => e.type === 'EMOTION_THERMOMETER')}`);
           }
 
           // 🆕 ACE v4: AI가 [STORY_READY:...] 태그를 출력했으면 → 루나의 이야기 이벤트 발동
-          if (hlrePost.storyData && canFireEvent() && !updatedCompletedEvents.includes('LUNA_STORY')) {
+          // 🆕 v43: canFireEventType으로 이중 체크 (DB race condition 방어)
+          if (hlrePost.storyData && canFireEventType('LUNA_STORY')) {
             const { opener, situation, innerThought, cliffhanger } = hlrePost.storyData;
             eventsToFire.push(createLunaStory(opener, situation, innerThought, cliffhanger));
             updatedCompletedEvents.push('LUNA_STORY');
             updatedLastEventTurn = turnCount;
             console.log(`[Pipeline] 📖 AI 자율 루나이야기 발동! opener: "${opener.slice(0, 30)}..."`);
+          } else if (hlrePost.storyData) {
+            console.log(`[Pipeline] ⚠️ LUNA_STORY 중복 차단! canFire=${canFireEvent()}, completed=${updatedCompletedEvents.includes('LUNA_STORY')}, inQueue=${eventsToFire.some(e => e.type === 'LUNA_STORY')}`);
           }
 
           // 🆕 ACE v4: AI가 [STRATEGY_READY:...] 태그를 출력했으면 → 루나의 작전회의 이벤트 발동
-          if (hlrePost.strategyData && canFireEvent() && !updatedCompletedEvents.includes('LUNA_STRATEGY')) {
+          // 🆕 v43: canFireEventType으로 이중 체크
+          if (hlrePost.strategyData && canFireEventType('LUNA_STRATEGY')) {
             const { opener: stratOpener, situationSummary, draftHook, roleplayHook, panelHook } = hlrePost.strategyData;
             eventsToFire.push(createLunaStrategy(stratOpener, situationSummary, draftHook, roleplayHook, panelHook));
             updatedCompletedEvents.push('LUNA_STRATEGY');
             updatedLastEventTurn = turnCount;
             console.log(`[Pipeline] 🔥 AI 자율 작전회의 발동! opener: "${stratOpener.slice(0, 30)}..." | 상황: "${situationSummary.slice(0, 40)}..."`);
+          } else if (hlrePost.strategyData) {
+            console.log(`[Pipeline] ⚠️ LUNA_STRATEGY 중복 차단! canFire=${canFireEvent()}, completed=${updatedCompletedEvents.includes('LUNA_STRATEGY')}`);
           }
 
           // 🆕 v35: 💬 메시지 초안 모드 — [TONE_SELECT:...] → TONE_SELECT 이벤트

@@ -117,6 +117,20 @@ export function useChat(sessionId: string): UseChatReturn {
             }
           }
           setMessages(loaded);
+
+          // 🆕 v43: 세션 레벨 이벤트 중복 방지 — DB에서 로드된 event 메시지 타입을 firedEventTypesRef에 seed
+          // 이미 발동된 이벤트가 SSE로 또 들어와도 클라이언트에서 차단
+          for (const msg of loaded) {
+            if (msg.senderType === ('event' as any)) {
+              try {
+                const evt = JSON.parse(msg.content);
+                if (evt?.type) {
+                  firedEventTypesRef.current.add(evt.type);
+                }
+              } catch { /* ignore */ }
+            }
+          }
+          console.log(`[useChat] 📦 세션 이벤트 복원: [${[...firedEventTypesRef.current].join(', ')}]`);
         }
       })
       .catch((err) => {
@@ -202,10 +216,9 @@ export function useChat(sessionId: string): UseChatReturn {
     setNudges([]);
     setSuggestions([]);
     setPanelData(null);
-    // 🆕 v25: 이벤트 UI 유지 — setPhaseEvents([]) 제거
-    // 이전 턴 이벤트를 채팅에 그대로 남겨둠 (카드 뽑기 UI 등)
-    // firedEventTypesRef는 리셋해서 새 턴의 이벤트는 추가 가능
-    firedEventTypesRef.current = new Set();
+    // 🆕 v43: 세션 레벨 이벤트 보존 — 완전 초기화 대신 기존 발동된 이벤트 타입을 유지하면서 새 턴의 이벤트만 허용
+    // (DB race condition으로 같은 이벤트가 다음 턴에서 또 yield되어도 클라이언트에서 차단)
+    // firedEventTypesRef.current를 초기화하지 않음 — 세션 동안 누적 유지
     // 🆕 ACE v4: 이벤트 버퍼링 — ||| 분리 후에 이벤트를 마지막에 삽입
     const pendingEventsBuffer: PhaseEvent[] = [];
 
