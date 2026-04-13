@@ -4,6 +4,7 @@ import { CounselingPipeline } from '@/engines/pipeline';
 import { checkRateLimitFromDb } from '@/lib/utils/rate-limit';
 import { ingestMessage } from '@/lib/rag/ingestor';
 import { generateMessage } from '@/lib/ai/claude';
+import { getCascadeLog } from '@/lib/ai/provider-registry'; // 🆕 v46: 에러 시 캐스케이드 로그 전송
 import type { PersonaMode } from '@/types/persona.types';
 import type { SuggestionMeta } from '@/types/engine.types';
 // 🆕 v31: 동적 import → static import (콜드 스타트 -100~300ms)
@@ -754,6 +755,29 @@ export async function POST(req: NextRequest) {
 
       } catch (err: any) {
         console.error('[Chat] ❌ 스트리밍 에러:', err?.message || err);
+
+        // 🆕 v46: 에러 시에도 캐스케이드 로그 전송 → F12에서 어디서 터졌는지 확인 가능
+        const errorCascadeLog = getCascadeLog();
+        if (errorCascadeLog.length > 0) {
+          console.error('[Chat] 📊 에러 시점 캐스케이드 로그:', errorCascadeLog.map(l => `${l.provider}/${l.model}→${l.status}`).join(' | '));
+          try {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({
+                type: 'context_log',
+                data: {
+                  turnCount,
+                  responseTimeMs: Date.now() - t0,
+                  systemPrompt: '[에러로 인해 미생성]',
+                  chatMessages: [],
+                  pipelineMeta: { error: err?.message?.slice(0, 200), phase: 'ERROR' },
+                  aiResponse: fullText || '[응답 없음]',
+                  cascadeLog: errorCascadeLog,
+                },
+              })}\n\n`)
+            );
+          } catch (_) { /* enqueue 실패 무시 */ }
+        }
+
         // 이미 텍스트가 부분 전송된 경우 → done만 보내서 정상 종료 처리
         if (fullText.length > 0) {
           console.warn(`[Chat] ⚠️ 부분 텍스트 있음 (${fullText.length}자) — 그대로 완료 처리`);
