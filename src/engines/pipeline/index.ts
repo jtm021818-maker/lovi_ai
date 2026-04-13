@@ -629,7 +629,8 @@ export class CounselingPipeline {
     }
 
     // 🆕 v14: 반복 패턴 거울 (BRIDGE 구간) — SCALING_QUESTION 대체
-    if (canFireEvent() && PhaseManager.shouldTriggerEvent(newPhaseV2, 'PATTERN_MIRROR', makeCtxForEvent())) {
+    // 🆕 v43: strategyMode 활성화 시 스킵 — 레거시 이벤트가 v35 모드 이벤트(DRAFT_WORKSHOP 등) 차단 방지
+    if (!savedStrategyMode && canFireEvent() && PhaseManager.shouldTriggerEvent(newPhaseV2, 'PATTERN_MIRROR', makeCtxForEvent())) {
       // 🆕 v20: LLM 기반 동적 패턴 분석 (폴백: 기존 하드코딩)
       let dynamicPatterns = null;
       try {
@@ -644,7 +645,8 @@ export class CounselingPipeline {
     }
 
     // 솔루션 프리뷰 (BRIDGE 구간)
-    if (canFireEvent() && PhaseManager.shouldTriggerEvent(newPhaseV2, 'SOLUTION_PREVIEW', makeCtxForEvent())) {
+    // 🆕 v43: strategyMode 활성화 시 스킵 — 레거시 이벤트가 v35 모드 이벤트 차단 방지
+    if (!savedStrategyMode && canFireEvent() && PhaseManager.shouldTriggerEvent(newPhaseV2, 'SOLUTION_PREVIEW', makeCtxForEvent())) {
       eventsToFire.push(createSolutionPreview(solutionMatches.length, !axesState.needsDiagnostic, axesState.filledCount));
       updatedCompletedEvents.push('SOLUTION_PREVIEW');
       updatedLastEventTurn = turnCount;

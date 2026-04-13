@@ -9,6 +9,7 @@
  */
 
 import type { LunaEmotionState } from './luna-emotion-core';
+import { buildEmotionPrompt } from './luna-emotion-core';
 import type { UserPattern } from './luna-growth';
 
 // ============================================
@@ -54,6 +55,11 @@ export interface SessionContext {
 
   // === 메모리 트리거 ===
   triggeredMemory: string | null;    // 트리거된 기억 injection
+
+  // === 🆕 행동 패턴 인식 (anti-monotony) ===
+  lunaRecentActionTypes: string[];   // 최근 행동 유형 분류 (예: ['empathy', 'question', 'side_take'])
+  actionPatternHint: string | null;  // 패턴 경고 힌트 (있을 때만)
+  formattedRecentActions: string;    // 행동 유형 포맷된 문자열
 }
 
 // ============================================
@@ -77,20 +83,17 @@ export function buildContextPrompt(ctx: SessionContext): string {
     parts.push(ctx.triggeredMemory);
   }
 
-  // 3. 🆕 ACE v4: 루나 감정 — 더 풍부한 서사적 표현
+  // 3. 🆕 v3: 루나 감정 — Feeling-First Architecture
+  // 기존: 라벨 1줄만 전달 → 감정이 응답에 영향 못 줌
+  // 변경: buildEmotionPrompt()로 톤 힌트까지 전달 → 감정이 응답 스타일을 결정
   const emo = ctx.lunaEmotion;
   if (emo.currentIntensity > 0.2) {
-    const LABELS: Record<string, string> = {
-      angry: '화남', sad: '슬픔', happy: '기분 좋음',
-      anxious: '걱정됨', affection: '따뜻함', worried: '걱정됨',
-      excited: '신남', calm: '차분', bored: '평온',
-    };
-    const label = LABELS[emo.currentEmotion] ?? '차분';
+    const emotionPrompt = buildEmotionPrompt(emo);
     const intensity = Math.round(emo.currentIntensity * 100);
     if (intensity > 50) {
-      parts.push(`[루나의 내면]\n지금 기분: ${label} (${intensity}%) — 유저 상태에 꽤 영향받는 중`);
+      parts.push(`[루나의 내면]\n${emotionPrompt}\n이 감정이 네 응답에 자연스럽게 묻어나게 해. 감정을 숨기지 마.`);
     } else {
-      parts.push(`[루나 지금 기분: ${label}]`);
+      parts.push(emotionPrompt);
     }
   }
 
@@ -114,10 +117,18 @@ export function buildContextPrompt(ctx: SessionContext): string {
     parts.push(`[대화 흐름 참고: ${ctx.journeyPhase}]`);
   }
 
-  // 8. 루나가 직전까지 한 것 — 반복 방지 참고
-  if (ctx.lunaRecentActions.length > 0) {
+  // 8. 🆕 루나 행동 패턴 — 행동 유형 분류 기반 (내용 요약 → 행동 유형으로 업그레이드)
+  if (ctx.formattedRecentActions) {
+    parts.push(ctx.formattedRecentActions);
+  } else if (ctx.lunaRecentActions.length > 0) {
+    // 폴백: 기존 방식
     const recent = ctx.lunaRecentActions.slice(-3).join(', ');
     parts.push(`[루나가 최근 한 것: ${recent}]`);
+  }
+
+  // 8.1 🆕 패턴 경고 힌트 (자기 인식 가드레일)
+  if (ctx.actionPatternHint) {
+    parts.push(ctx.actionPatternHint);
   }
 
   // 9. 유저 반복 패턴 (감지되었으면 — 판단은 루나가)

@@ -78,6 +78,7 @@ export async function POST(req: NextRequest) {
   const needsCounseling = /힘들|고민|이별|바람|읽씹|짝사랑|불안|무서|죽고싶|자해/.test(message);
 
   const prompt = `루나와 타로냥이 톡방에서 ${name}에게 반응해. 자연스러운 톡방 대화체.
+** 단톡방이니까 유저한테 반응 + 그 뒤에 루나↔타로냥 자체 수다도 이어줘! **
 
 [최근 대화]
 ${chatContext}
@@ -105,11 +106,19 @@ ${sharedLanguage ? '우리만의 표현: ' + sharedLanguage : ''}
 - 최근 상담 내용이 있으면 자연스럽게 연결 (분석하듯 X, 기억하는 친구처럼 O).
 ${needsCounseling ? '- 깊은 고민이면 "상담으로 가볼까?" 부드럽게 제안.' : ''}
 
+** 핵심: 단톡방에서 누가 말하면 다른 사람들이 그 주제로 수다 이어감! **
+"responses"(유저에 직접 반응) 1~2개 + "afterChat"(루나↔타로냥 자체 수다) 2~3턴.
+afterChat은 유저 말을 주제로 둘이 자연스럽게 수다. 가볍게. 분석 X.
+
 JSON만:
 {
   "responses": [
-    { "speaker": "luna", "text": "...", "delay": 2 },
-    { "speaker": "tarot", "text": "...", "delay": 4 }
+    { "speaker": "luna", "text": "...", "delay": 1 },
+    { "speaker": "tarot", "text": "...", "delay": 3 }
+  ],
+  "afterChat": [
+    { "speaker": "tarot", "text": "...(루나↔타로냥 자체 수다)", "delay": 8 },
+    { "speaker": "luna", "text": "...", "delay": 11 }
   ]
 }`;
 
@@ -119,7 +128,7 @@ JSON만:
       loungeCascade,
       'Generate chat responses as JSON only.',
       [{ role: 'user' as const, content: prompt }],
-      512,
+      768, // 🆕 v44: 확장 응답 포함하므로 토큰 증가
     );
 
     const jsonMatch = result.text.match(/\{[\s\S]*\}/);
@@ -128,6 +137,7 @@ JSON만:
     const parsed = JSON.parse(jsonMatch[0]);
     return NextResponse.json({
       responses: parsed.responses ?? [],
+      afterChat: parsed.afterChat ?? [], // 🆕 v44: 후속 수다
       shouldSuggestCounseling: needsCounseling,
     });
   } catch (e) {
@@ -137,6 +147,7 @@ JSON만:
       responses: [
         { speaker: 'luna', text: '음... 그렇구나!', delay: 2 },
       ],
+      afterChat: [],
       shouldSuggestCounseling: false,
     });
   }

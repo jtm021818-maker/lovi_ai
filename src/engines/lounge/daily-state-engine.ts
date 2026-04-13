@@ -164,15 +164,19 @@ ${intimacyInfo}
 - 말 짧고 쿨함. "냥" 안 씀.
 - 수면: ${tarotWakeHour}시 기상, ${tarotSleepHour}시 취침
 
-[대화 생성 규칙 — 매우 중요!]
-1. ${lunaWakeHour}시~${lunaSleepHour}시(다음날) 동안 메시지 생성 (루나 활동 시간)
-2. 5~20분 불규칙 간격으로 메시지 배치 (카톡 단톡방 리듬!)
-3. 총 35~45개 메시지
-4. 8~15분 침묵 → 2~5개 연속 → 10~20분 침묵 (단톡방 클러스터 패턴)
+[🔥 v44: 카톡 클러스터 패턴 — 매우 중요!]
+1. ${lunaWakeHour}시~${lunaSleepHour}시(다음날) 동안 메시지 생성
+2. ⚠️ "클러스터" 패턴으로 배치: 3~5개 메시지가 같은 minute 또는 1~2분 이내 연속!
+   - 클러스터 내: 같은 hour, minute는 0~2분 차이만
+   - 클러스터 간: 10~25분 침묵
+   - 이게 진짜 카톡 단톡방 리듬!!
+3. 총 50~70개 메시지 (클러스터 10~15개)
+4. 클러스터 구조 예시:
+   - [9:12 루나] [9:12 타로냥] [9:13 루나] [9:14 타로냥] → (20분 침묵) → [9:34 루나] [9:35 타로냥] [9:36 루나]
 5. 대화 유형 비율:
-   - 루나↔타로냥 일상 수다/티격태격 (40%)
+   - 루나↔타로냥 일상 수다/티격태격 (45%)
    - ${name} 관련 — 상담 기억 기반! (25%)
-   - 개인 활동/시스템 메시지 (20%)
+   - 개인 활동/시스템 메시지 (15%)
    - 감성/밤 대화 (15%)
 6. ${name} 관련 대화는 반드시 최근 상담 내용을 자연스럽게 반영
 7. 시간대: 아침=활기+기지개, 낮=나른+수다, 저녁=차분+반성, 밤=감성
@@ -185,7 +189,9 @@ JSON만 응답해:
   "messages": [
     { "hour": ${lunaWakeHour}, "minute": 12, "type": "system", "text": "루나가 일어났어요 ☀️" },
     { "hour": ${lunaWakeHour}, "minute": 15, "type": "character", "speaker": "luna", "text": "아침이다~", "isAboutUser": false },
-    { "hour": ${lunaWakeHour}, "minute": 32, "type": "character", "speaker": "luna", "text": "어제 ${name} 상담한 거... 좀 걱정된다", "isAboutUser": true },
+    { "hour": ${lunaWakeHour}, "minute": 15, "type": "character", "speaker": "tarot", "text": "...일찍 일어나네", "isAboutUser": false },
+    { "hour": ${lunaWakeHour}, "minute": 16, "type": "character", "speaker": "luna", "text": "어제 ${name} 상담한 거... 좀 걱정된다", "isAboutUser": true },
+    { "hour": ${lunaWakeHour}, "minute": 16, "type": "character", "speaker": "tarot", "text": "카드 에너지는 나쁘지 않았어", "isAboutUser": true },
     ...
   ],
   "proactiveGreeting": "${name}이 들어왔을 때 첫 인사 (상담 기억 기반, 1~2문장)",
@@ -193,7 +199,8 @@ JSON만 응답해:
 }
 
 isAboutUser: ${name}을 직접 언급하거나 걱정/응원하는 내용이면 true, 아니면 false.
-speaker: "luna" 또는 "tarot" (시스템 메시지엔 없음)`;
+speaker: "luna" 또는 "tarot" (시스템 메시지엔 없음)
+⚠️ 같은 클러스터의 메시지는 hour와 minute가 거의 같아야 함! (1~2분 차이 이내)`;
 }
 
 // ─── 폴백 상태 (LLM 실패 시) ────────────────────────────

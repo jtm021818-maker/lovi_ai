@@ -344,12 +344,12 @@ export function getCharacterPresence(character: 'luna' | 'tarot'): CharacterPres
 
 // ─── Ambient Interval Helper ────────────────────────────
 
-/** 랜덤 간격 (ms): 45초~150초 */
+/** 랜덤 간격 (ms): 20초~45초 — v44: 클러스터 사이에 끼워넣으려면 짧아야 함 */
 export function nextAmbientInterval(): number {
-  return 45000 + Math.floor(Math.random() * 105000); // 45s ~ 150s
+  return 20000 + Math.floor(Math.random() * 25000); // 20s ~ 45s
 }
 
-/** 먼저 말걸기 대기 시간 (ms): 2~3분 */
+/** 먼저 말걸기 대기 시간 (ms): 1.5~2.5분 — v44: 더 적극적 */
 export function nudgeTimeout(): number {
-  return 120000 + Math.floor(Math.random() * 60000); // 2min ~ 3min
+  return 90000 + Math.floor(Math.random() * 60000); // 1.5min ~ 2.5min
 }

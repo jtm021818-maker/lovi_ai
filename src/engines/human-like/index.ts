@@ -51,6 +51,15 @@ import { type JourneyState, createJourneyState, updateJourney } from './journey-
 // === 유지 모듈: 감정 감지 (turn-context에서 이것만 사용) ===
 import { detectUserEmotion } from './turn-context';
 
+// === 🆕 행동 분류기 (anti-monotony + 자기 인식) ===
+import {
+  type LunaActionType,
+  classifyLunaAction,
+  buildActionPatternHint,
+  formatRecentActions,
+  actionToTurnType,
+} from './action-classifier';
+
 // === 유지 모듈: 기타 ===
 // proactive-emotion은 파이프라인에서 직접 사용 가능 (ACE에서는 맥락으로 자연스럽게 처리)
 
@@ -107,6 +116,9 @@ export class HumanLikeEngine {
   // 루나 최근 행동 (반복 방지 맥락)
   private lunaRecentSummaries: string[] = [];
 
+  // 🆕 행동 유형 분류 (anti-monotony 자기 인식)
+  private recentActionTypes: LunaActionType[] = [];
+
   constructor(_sessionSeed?: number, savedEmotionState?: string | null, savedSessionStory?: string | null) {
     this.lunaEmotion = savedEmotionState
       ? deserializeEmotionState(savedEmotionState)
@@ -160,10 +172,14 @@ export class HumanLikeEngine {
 
     // ③ Turn Arc 업데이트
     const depthMax: Record<string, number> = { HOOK: 5, MIRROR: 4, BRIDGE: 4, SOLVE: 4, EMPOWER: 3 };
+    // 🆕 이전 행동 유형을 정확히 전달 (기존: 'EMPATHY' 하드코딩 → AI가 "계속 공감했다"고 오인)
+    const lastActionAsTurnType = this.recentActionTypes.length > 0
+      ? actionToTurnType(this.recentActionTypes[this.recentActionTypes.length - 1])
+      : 'EMPATHY';
     this.turnArc = updateTurnArc(
       this.turnArc,
       turnInPhase,
-      'EMPATHY', // ACE에서는 턴타입 고정 (AI가 자율 판단)
+      lastActionAsTurnType, // 🆕 실제 행동 유형 전달
       phase,
       userMessage,
       null,
@@ -339,6 +355,12 @@ export class HumanLikeEngine {
     this.lunaRecentSummaries.push(summary);
     if (this.lunaRecentSummaries.length > 5) this.lunaRecentSummaries.shift();
 
+    // 🆕 행동 유형 분류 (anti-monotony 자기 인식)
+    const actionType = classifyLunaAction(finalResponse);
+    this.recentActionTypes.push(actionType);
+    if (this.recentActionTypes.length > 5) this.recentActionTypes.shift();
+    console.log(`[ACE] 🎭 행동분류: ${actionType} | 최근: [${this.recentActionTypes.join(', ')}]`);
+
     // 세션 스토리 비트 기록
     const lastUserMsg = userMessages?.[userMessages.length - 1] ?? '';
     const prevEmotion = this.sessionStory.beats.length > 0
@@ -450,6 +472,11 @@ export class HumanLikeEngine {
       ),
 
       triggeredMemory: this.lastMemoryResult?.injection ?? null,
+
+      // 🆕 행동 패턴 인식
+      lunaRecentActionTypes: this.recentActionTypes.map(String),
+      actionPatternHint: buildActionPatternHint(this.recentActionTypes),
+      formattedRecentActions: formatRecentActions(this.recentActionTypes, this.lunaRecentSummaries),
     };
 
     // 기억 컨텍스트 추가
@@ -490,6 +517,31 @@ export class HumanLikeEngine {
     // 루나 취약함 (확률적 — 사람다움)
     const vulnHint = getLunaVulnerabilityHint(this.turnCount, this.userModel.lunaRelationship.intimacyScore);
     if (vulnHint) parts.push(vulnHint);
+
+    // 🆕 v3: 감정-행동 일관성 힌트 (Feeling-First)
+    // 루나가 화난 상태인데 공감만 계속하면 → "화난 대로 보여줘도 돼"
+    if (this.lunaEmotion.currentIntensity > 0.5 && this.recentActionTypes.length >= 2) {
+      const emotionBehaviorMap: Record<string, string[]> = {
+        angry: ['side_take', 'opinion'],
+        sad: ['empathy', 'experience'],
+        worried: ['empathy', 'normalization'],
+        anxious: ['empathy', 'normalization'],
+        happy: ['relief', 'reaction_only'],
+        excited: ['relief', 'reaction_only'],
+        affection: ['experience', 'meta_comment'],
+      };
+      const naturalBehaviors = emotionBehaviorMap[this.lunaEmotion.currentEmotion] ?? [];
+      const recent = this.recentActionTypes.slice(-2);
+      const mismatch = naturalBehaviors.length > 0 && recent.every(a => !naturalBehaviors.includes(a));
+      if (mismatch) {
+        const LABELS: Record<string, string> = {
+          angry: '화남', sad: '슬픔', worried: '걱정', anxious: '불안',
+          happy: '기쁨', excited: '신남', affection: '따뜻함',
+        };
+        const label = LABELS[this.lunaEmotion.currentEmotion] ?? this.lunaEmotion.currentEmotion;
+        parts.push(`[참고: 너 지금 ${label} 상태인데 최근 반응이 그 감정과 안 맞아. 감정을 숨기지 말고 드러내도 돼.]`);
+      }
+    }
 
     // ========== Layer 2.5: Phase 목적 (루나의 숨겨진 의도) ==========
     const purposePrompt = buildPhasePurposePrompt(phase, turnInPhase, completedEvents, strategyMode ?? null);

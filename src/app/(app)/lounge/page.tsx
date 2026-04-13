@@ -1,14 +1,14 @@
 'use client';
 
 /**
- * 🏠 v43: 라운지 — "살아있는 단톡방"
+ * 🏠 v44: 라운지 — "진짜 카톡 단톡방"
  *
- * v42→v43 핵심 변경:
- * - 🌿 Ambient Life System: 캐릭터가 자동으로 행동 표시 (30초~2분 랜덤)
- * - 💬 Proactive Nudge: 유저 2~3분 방치 시 먼저 말걸기
- * - 😂 Message Reactions: 유저 메시지에 이모지 리액션
- * - ⌨️ Enhanced Typing: 글자수 비례 딜레이 + 멈칫 효과
- * - 🟢 Live Status Header: 온라인 펄스 dot + 입력 중 표시
+ * v43→v44 핵심 꼼수:
+ * - 🔥 Auto-Chat Cluster: 3~6개 메시지 연속 출현 (카톡 리듬)
+ * - 💬 즉석 수다 엔진: 150+ 루나↔타로냥 대화쌍 (LLM 0회)
+ * - 📣 확장 응답: 유저 말 → 5~7개 반응 체인 + afterChat
+ * - 🔄 미래 메시지 Flush: 유저 말 후 배치 취소 → 대화 전환
+ * - 👁️ 카톡 그룹핑: 연속 메시지 프로필 숨김
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -33,6 +33,7 @@ import {
   nextAmbientInterval,
   nudgeTimeout,
 } from '@/engines/lounge/ambient-actions';
+import { pickCluster, clusterToPlayback, nextClusterInterval } from '@/engines/lounge/auto-chat-cluster';
 import { useLoungeStore } from '@/lib/stores/lounge-store';
 import { createClient } from '@/lib/supabase/client';
 
@@ -68,27 +69,53 @@ export default function LoungePage() {
   const usedNudgesRef = useRef<Set<string>>(new Set());
   const nudgeCountRef = useRef(0);
   const lastUserActionRef = useRef(Date.now());
+
+  // 🆕 v44: Auto-Chat Cluster 상태
+  const clusterTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const clusterPlaybackRef = useRef<NodeJS.Timeout[]>([]);
+  const usedClusterIdsRef = useRef<Set<string>>(new Set());
+  const isClusterPausedRef = useRef(false);  // 유저 말할 때 일시정지
+  const afterChatTimersRef = useRef<NodeJS.Timeout[]>([]);
   const [headerTyping, setHeaderTyping] = useState<'luna' | 'tarot' | null>(null);
 
   // Zustand 연동
   const setOnLounge = useLoungeStore(s => s.setOnLounge);
   const clearUnread = useLoungeStore(s => s.clearUnread);
   const setBatchMessages = useLoungeStore(s => s.setBatchMessages);
+  const consumeQueue = useLoungeStore(s => s.consumeQueue);
 
   const timeOfDay = getTimeOfDay();
   const isNight = timeOfDay === 'night' || timeOfDay === 'lateNight';
   const currentHour = new Date().getHours();
 
-  // 라운지 진입 시 Zustand 동기화
-  useEffect(() => {
-    setOnLounge(true);
-    clearUnread();
-    return () => setOnLounge(false);
-  }, [setOnLounge, clearUnread]);
-
   const scrollToBottom = useCallback(() => {
     setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }), 100);
   }, []);
+
+  // 라운지 진입 시 Zustand 동기화 + 🆕 v45: 글로벌 큐 소비
+  useEffect(() => {
+    setOnLounge(true);
+    clearUnread();
+
+    // 🆕 v45: 라운지 밖에서 축적된 메시지를 즉시 렌더링
+    const queued = consumeQueue();
+    if (queued.length > 0) {
+      setMessages(prev => {
+        const newMsgs = queued.map(q => {
+          if (q.type === 'ambient') {
+            return { type: 'ambient' as const, speaker: q.speaker, text: q.text, emoji: q.emoji ?? '', timestamp: q.timestamp };
+          }
+          return { type: 'character' as const, speaker: q.speaker, text: q.text, timestamp: q.timestamp };
+        });
+        // 읽지 않은 메시지 라인 표시
+        if (newMsgs.length > 0) setUnreadLine(prev.length);
+        return [...prev, ...newMsgs];
+      });
+      scrollToBottom();
+    }
+
+    return () => setOnLounge(false);
+  }, [setOnLounge, clearUnread, consumeQueue, scrollToBottom]);
 
   const addMsg = useCallback((msg: LoungeMessageType) => {
     setMessages(prev => [...prev, msg]);
@@ -182,13 +209,17 @@ export default function LoungePage() {
   // ─── 🆕 v43: Ambient Life 루프 ────────────────────────
 
   const startAmbientLoop = useCallback(() => {
-    // 기존 타이머 정리
     if (ambientTimerRef.current) clearTimeout(ambientTimerRef.current);
 
     function scheduleNext() {
       ambientTimerRef.current = setTimeout(() => {
         // 유저가 최근에 활동했으면 스킵 (10초 이내)
         if (Date.now() - lastUserActionRef.current < 10000) {
+          scheduleNext();
+          return;
+        }
+        // 🆕 v44: 클러스터 재생 중이면 ambient 스킵
+        if (isClusterPausedRef.current) {
           scheduleNext();
           return;
         }
@@ -211,6 +242,76 @@ export default function LoungePage() {
     scheduleNext();
   }, [scrollToBottom]);
 
+  // ─── 🆕 v44: Auto-Chat Cluster 루프 ──────────────────
+
+  const startClusterLoop = useCallback(() => {
+    if (clusterTimerRef.current) clearTimeout(clusterTimerRef.current);
+
+    function scheduleNextCluster() {
+      clusterTimerRef.current = setTimeout(() => {
+        // 유저가 최근에 활동했으면 스킵 (20초 이내)
+        if (Date.now() - lastUserActionRef.current < 20000) {
+          scheduleNextCluster();
+          return;
+        }
+        // 클러스터 일시정지 상태면 스킵
+        if (isClusterPausedRef.current) {
+          scheduleNextCluster();
+          return;
+        }
+
+        const cluster = pickCluster(usedClusterIdsRef.current, userName);
+        if (!cluster) {
+          scheduleNextCluster();
+          return;
+        }
+
+        const playback = clusterToPlayback(cluster);
+
+        // 클러스터 재생: 각 라인을 타이핑 인디케이터 → 메시지 순서로
+        for (const item of playback) {
+          const timer = setTimeout(() => {
+            renderWithTyping(item.speaker, item.text, {
+              isConsecutive: false, // 그룹핑은 아래 render에서 처리
+            } as any);
+          }, item.delayMs);
+          clusterPlaybackRef.current.push(timer);
+        }
+
+        // 클러스터 끝나면 히스토리 저장 + 다음 클러스터 예약
+        const lastDelay = playback.length > 0 ? playback[playback.length - 1].delayMs : 0;
+        const saveTimer = setTimeout(() => {
+          setMessages(prev => { saveHistory(prev, true); return prev; });
+          scheduleNextCluster();
+        }, lastDelay + 3000);
+        clusterPlaybackRef.current.push(saveTimer);
+      }, nextClusterInterval());
+    }
+
+    // 첫 클러스터는 5초 후 즉시! — 입장하자마자 활발한 느낌
+    clusterTimerRef.current = setTimeout(() => {
+      const cluster = pickCluster(usedClusterIdsRef.current, userName);
+      if (cluster) {
+        const playback = clusterToPlayback(cluster);
+        for (const item of playback) {
+          const timer = setTimeout(() => {
+            renderWithTyping(item.speaker, item.text);
+          }, item.delayMs);
+          clusterPlaybackRef.current.push(timer);
+        }
+        const lastDelay = playback.length > 0 ? playback[playback.length - 1].delayMs : 0;
+        const saveTimer = setTimeout(() => {
+          setMessages(prev => { saveHistory(prev, true); return prev; });
+          scheduleNextCluster();
+        }, lastDelay + 3000);
+        clusterPlaybackRef.current.push(saveTimer);
+      } else {
+        scheduleNextCluster();
+      }
+    }, 5000);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userName, renderWithTyping, saveHistory]);
+
   // ─── 🆕 v43: Proactive Nudge 루프 ────────────────────
 
   const resetNudgeTimer = useCallback(() => {
@@ -220,9 +321,8 @@ export default function LoungePage() {
     if (nudgeCountRef.current >= 3) return;
 
     nudgeTimerRef.current = setTimeout(() => {
-      // 유저가 여전히 비활성인지 체크
       const inactiveMs = Date.now() - lastUserActionRef.current;
-      if (inactiveMs < 90000) { // 1.5분 미만이면 다시 대기
+      if (inactiveMs < 60000) { // 🆕 v44: 1분 미만이면 다시 대기
         resetNudgeTimer();
         return;
       }
@@ -235,7 +335,6 @@ export default function LoungePage() {
         });
       }
 
-      // 다음 nudge 예약
       resetNudgeTimer();
     }, nudgeTimeout());
   }, [renderWithTyping, saveHistory]);
@@ -457,7 +556,7 @@ export default function LoungePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ─── 🆕 v43: Ambient + Nudge 루프 시작 ───────────────
+  // ─── 🆕 v44: Ambient + Nudge + Cluster 루프 시작 ─────
 
   useEffect(() => {
     if (!userJoined) return;
@@ -466,31 +565,42 @@ export default function LoungePage() {
     startAmbientLoop();
     // Nudge 타이머 시작
     resetNudgeTimer();
+    // 🆕 v44: Auto-Chat Cluster 루프 시작
+    startClusterLoop();
 
     return () => {
       if (ambientTimerRef.current) clearTimeout(ambientTimerRef.current);
       if (nudgeTimerRef.current) clearTimeout(nudgeTimerRef.current);
+      if (clusterTimerRef.current) clearTimeout(clusterTimerRef.current);
+      clusterPlaybackRef.current.forEach(t => clearTimeout(t));
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userJoined]);
 
-  // 🆕 v43: 유저 메시지 전송 + 리액션
+  // 🆕 v44: 유저 메시지 전송 + 리액션 + 확장 응답 + 미래 flush
   const handleSend = useCallback(async (text: string) => {
     lastUserActionRef.current = Date.now();
-    resetNudgeTimer(); // 유저 활동 → nudge 타이머 리셋
+    resetNudgeTimer();
 
-    // 유저 메시지 추가 (리액션은 나중에)
-    const userMsgIdx = messages.length;
+    // 🆕 v44: 클러스터/배치 일시정지 + 진행 중 타이머 취소
+    isClusterPausedRef.current = true;
+    clusterPlaybackRef.current.forEach(t => clearTimeout(t));
+    clusterPlaybackRef.current = [];
+    afterChatTimersRef.current.forEach(t => clearTimeout(t));
+    afterChatTimersRef.current = [];
+    // 🆕 v44: 미래 배치 메시지 flush (꼼수 4)
+    activeTimersRef.current.forEach(t => clearTimeout(t));
+    activeTimersRef.current = [];
+
     addMsg({ type: 'user', text });
     setSending(true);
     setIsPausedByUser(true);
 
-    // 🆕 v43: 리액션 이모지 생성 → 1~3초 뒤 표시
+    // 리액션 이모지 생성 → 1~3초 뒤 표시
     const reaction = getMessageReaction(text);
     if (reaction) {
       setTimeout(() => {
-        setMessages(prev => prev.map((m, i) => {
-          // 가장 마지막 user 메시지에 리액션 추가
+        setMessages(prev => prev.map((m) => {
           if (m.type === 'user' && !('reaction' in m && (m as any).reaction) && (m as any).text === text) {
             return { ...m, reaction: reaction.emoji, reactionSpeaker: reaction.speaker } as LoungeMessageType;
           }
@@ -516,6 +626,7 @@ export default function LoungePage() {
       if (!res.ok) throw new Error('Failed');
       const data = await res.json();
 
+      // 직접 반응 재생 (responses)
       for (const resp of data.responses ?? []) {
         await new Promise<void>(resolve => {
           setTimeout(() => {
@@ -523,8 +634,21 @@ export default function LoungePage() {
               setMessages(prev => { saveHistory(prev, true); return prev; });
               resolve();
             });
-          }, (resp.delay ?? 2) * 1000);
+          }, (resp.delay ?? 1) * 1000);
         });
+      }
+
+      // 🆕 v44: 후속 수다 재생 (afterChat) — 루나↔타로냥 자체 대화
+      const afterChat = data.afterChat ?? [];
+      if (afterChat.length > 0) {
+        for (const ac of afterChat) {
+          const timer = setTimeout(() => {
+            renderWithTyping(ac.speaker, ac.text).then(() => {
+              setMessages(prev => { saveHistory(prev, true); return prev; });
+            });
+          }, (ac.delay ?? 8) * 1000);
+          afterChatTimersRef.current.push(timer);
+        }
       }
 
       if (data.shouldSuggestCounseling) {
@@ -532,13 +656,27 @@ export default function LoungePage() {
           renderWithTyping('luna', '음... 이건 좀 더 이야기해봐야 할 것 같은데. 상담으로 가볼까?');
         }, 2000);
       }
+
+      // 🆕 v44: afterChat 다 끝나면 배치/클러스터 재개 (10분 후)
+      const lastAfterChatDelay = afterChat.length > 0
+        ? Math.max(...afterChat.map((ac: any) => (ac.delay ?? 8) * 1000))
+        : 5000;
+      setTimeout(() => {
+        isClusterPausedRef.current = false;
+        setIsPausedByUser(false);
+        // 배치 메시지 재개 (현재 시점부터 남은 미래 메시지만)
+        if (batchData?.messages?.length) {
+          const { future } = splitByTime(batchData.messages);
+          scheduleFutureMessages(future);
+        }
+      }, lastAfterChatDelay + 5000); // afterChat 끝 + 5초 후 빠른 재개
+
     } catch (e) {
       addMsg({ type: 'character', speaker: 'luna', text: '앗, 잠깐 연결이 끊겼어. 다시 말해줄래?' });
     } finally {
       setSending(false);
-      setTimeout(() => setIsPausedByUser(false), 5000);
     }
-  }, [messages, addMsg, scrollToBottom, saveHistory, renderWithTyping, resetNudgeTimer]);
+  }, [messages, addMsg, scrollToBottom, saveHistory, renderWithTyping, resetNudgeTimer, batchData, scheduleFutureMessages]);
 
   // 감정 체크인
   const handleCheckIn = useCallback(async (mood: string, score: number) => {
@@ -630,6 +768,9 @@ export default function LoungePage() {
       activeTimersRef.current.forEach(t => clearTimeout(t));
       if (ambientTimerRef.current) clearTimeout(ambientTimerRef.current);
       if (nudgeTimerRef.current) clearTimeout(nudgeTimerRef.current);
+      if (clusterTimerRef.current) clearTimeout(clusterTimerRef.current);
+      clusterPlaybackRef.current.forEach(t => clearTimeout(t));
+      afterChatTimersRef.current.forEach(t => clearTimeout(t));
     };
   }, []);
 
@@ -722,10 +863,23 @@ export default function LoungePage() {
           {messages.map((msg, i) => {
             const todayStr = new Date().toISOString().slice(0, 10);
             const msgDate = (msg as any).date ?? todayStr;
-            const prevDate = i > 0 ? ((messages[i - 1] as any).date ?? todayStr) : '';
-            const showDateLine = i === 0 || msgDate !== prevDate;
+            const prevDate = i > 0 ? ((messages[i - 1] as any).date ?? todayStr) : null;
+            // 🆕 v45: 첫 메시지이거나 날짜가 바뀔 때만 구분선
+            const showDateLine = i === 0 || (prevDate !== null && msgDate !== prevDate);
 
             const showUnreadLine = unreadLine >= 0 && i === unreadLine;
+
+            // 🆕 v44: 카톡 그룹핑 — 같은 speaker 연속이면 프로필 숨김
+            const prevMsg = i > 0 ? messages[i - 1] : null;
+            const isConsecutive =
+              msg.type === 'character' &&
+              prevMsg?.type === 'character' &&
+              (msg as any).speaker === (prevMsg as any).speaker;
+
+            // 그룹핑된 메시지 객체 생성
+            const displayMsg = isConsecutive
+              ? { ...msg, isConsecutive: true } as LoungeMessageType
+              : msg;
 
             return (
               <div key={i}>
@@ -750,7 +904,7 @@ export default function LoungePage() {
                   </div>
                 )}
 
-                <LoungeMessage message={msg} />
+                <LoungeMessage message={displayMsg} />
               </div>
             );
           })}
