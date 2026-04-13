@@ -671,6 +671,13 @@ export function getPhaseSignalPrompt(): string {
 === 3. 속마음 (필수 — 매 턴) ===
 [LUNA_THOUGHT:지금 네 머릿속에 있는 한 마디]
 
+=== 4. 상황 파악 완료 (HOOK에서만 — 조건 충족 시) ===
+[SITUATION_CLEAR:상황 한 문장|해결해야 할 과제]
+
+이 태그는 "이 사람의 상황 + 해결해야 할 것"이 파악됐을 때만 붙여.
+파악 안 됐으면 안 붙여도 돼. 파악됐으면 반드시 붙여.
+이 태그가 있어야 다음 단계로 넘어가.
+
 규칙:
 - 최대 25자 이내
 - 루나가 친구 얘기 듣고 속으로 생각하는 것
@@ -704,6 +711,7 @@ export function getPhaseSignalPrompt(): string {
 
 전체 응답 예시:
 "헐...|||뭐래 진짜[SITUATION_READ:걔가 읽씹하니까 불안한 거구나][LUNA_THOUGHT:답장 문제가 아니라 불안이 핵심인 거 같아][PHASE_SIGNAL:STAY]"
-"그건 힘들겠다|||같이 봐볼까?[SITUATION_READ:진짜 무서운 건 버림받을까 하는 마음][LUNA_THOUGHT:패턴이 좀 보인다... 새 시각을 줘야겠다][PHASE_SIGNAL:READY]"
-"아이고...|||진짜 속상했겠다[SITUATION_READ:상대가 무시해서 자존감이 흔들림][LUNA_THOUGHT:일단 이 애 마음부터 달래주자][PHASE_SIGNAL:STAY]"`;
+"야 그건 좀 심하다|||근데 먼저 연락해볼 생각은 있어?[SITUATION_READ:3일째 연락 없어서 불안][LUNA_THOUGHT:상황 파악됐다 정리해주자][SITUATION_CLEAR:남친 3일 연락 두절로 불안|먼저 연락할지 기다릴지 판단][PHASE_SIGNAL:READY]"
+"아이고...|||진짜 속상했겠다[SITUATION_READ:상대가 무시해서 자존감이 흔들림][LUNA_THOUGHT:일단 이 애 마음부터 달래주자][PHASE_SIGNAL:STAY]"
+"야 걔가 좀 그런 거 아냐?|||질투 표현을 어떻게 할지가 문제인 거지[SITUATION_READ:여친 전남친 만남에 질투+불안][LUNA_THOUGHT:핵심이 보인다][SITUATION_CLEAR:여친이 전남친 만남 숨김|질투를 어떻게 전달할지][PHASE_SIGNAL:READY]"`;
 }
