@@ -61,7 +61,7 @@ const TAROT_GATE_EVENTS: Record<string, PhaseEventType[]> = {
 //   - 그래서 빠듯하게 할 이유가 없음 — 비상구는 비상구다워야 함
 // ============================================
 const SAFETY_MAX_TURNS: Record<string, number> = {
-  HOOK: 12,
+  HOOK: 12,    // 비상구만. 자체판단(태그)이 핵심.
   MIRROR: 12,
   BRIDGE: 10,
   SOLVE: 10,
