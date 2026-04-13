@@ -295,13 +295,16 @@ export class HumanLikeEngine {
     // 🆕 v36: 루나 인사이트 태그
     situationRead: string | null;
     lunaThought: string | null;
+    // 🆕 v4: 상황 파악 카드 데이터
+    situationSummary: string | null;
+    coreProblem: string | null;
   }> {
     // Phase 시그널 파싱 (모든 태그 한 번에 추출 + 제거)
     const parsed = parsePhaseSignal(response);
     const { cleanResponse, signal, mindReadReady, storyData, strategyData,
       toneSelectData, draftCards, rpIn, rpOut, roleplayFeedback, panelReport, ideaRefine,
       actionPlan, warmWrap, thinkingDeepKeyword,
-      situationRead, lunaThought } = parsed;
+      situationRead, lunaThought, situationSummary, coreProblem } = parsed;
     if (signal) {
       console.log(`[ACE] 🏷️ Phase시그널: ${signal}`);
     }
@@ -403,6 +406,8 @@ export class HumanLikeEngine {
       thinkingDeepKeyword,
       situationRead,
       lunaThought,
+      situationSummary,
+      coreProblem,
     };
   }
 

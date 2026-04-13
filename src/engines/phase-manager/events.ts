@@ -145,6 +145,62 @@ export function createMindReading(
 }
 
 /**
+ * 🆕 v4: 상황 파악 카드 (HOOK 구간 — 마음읽기 대체)
+ *
+ * 기존 마음읽기: "깊은 감정 추측" → 틀릴 수 있음, 좁음
+ * 새 상황 파악: "전체 상황 요약 확인" → 넓음, 신뢰감 높음
+ *
+ * "야 내가 들은 거 정리해볼게" → 상황 + 핵심 문제 → 맞아?
+ * 루나 스티커를 적극 활용하여 감정적 공감도 함께 전달
+ */
+export function createSituationSummary(
+  situationSummary: string,
+  coreProblem: string,
+  emotionScore: number,
+  stickerId?: string,
+): PhaseEvent {
+  // 스티커 자동 선택 (감정 점수 기반)
+  const autoSticker = stickerId ?? (
+    emotionScore <= -4 ? 'comfort' :
+    emotionScore <= -2 ? 'think' :
+    emotionScore <= 0 ? 'think' :
+    'proud'
+  );
+
+  const openers = [
+    '야 내가 여기까지 들은 거 정리해볼게',
+    '잠깐, 내가 이해한 거 맞는지 봐봐',
+    '야 근데 내가 듣고 이해한 게 맞아?',
+    '내가 정리해볼게 잠깐만',
+  ];
+  const lunaMessage = openers[Math.floor(Math.random() * openers.length)];
+
+  return {
+    type: 'MIND_READING' as PhaseEventType, // 기존 타입 재활용 (프론트엔드 호환)
+    phase: 'HOOK',
+    data: {
+      // 기존 MIND_READING 필드 호환
+      surfaceEmotion: situationSummary,
+      deepGuess: coreProblem,
+      fullText: situationSummary,
+      lunaMessage,
+      lunaConfidence: Math.min(1, Math.abs(emotionScore) * 0.15 + 0.4),
+      aiAssessedScore: Math.round(Math.max(-5, Math.min(5, emotionScore))),
+      // 🆕 상황 파악 카드 전용 필드
+      eventStyle: 'situation_summary',
+      stickerId: autoSticker,
+      situationSummary,
+      coreProblem,
+      choices: [
+        { label: '맞아 그래!', value: 'confirm', emoji: '💡' },
+        { label: '좀 다른데...', value: 'different', emoji: '🤔' },
+        { label: '더 있어', value: 'more', emoji: '📝' },
+      ],
+    } as unknown as Record<string, unknown>,
+  };
+}
+
+/**
  * 🆕 ACE v4: 루나의 이야기 이벤트 생성 (EMOTION_MIRROR 대체)
  *
  * "친한 누나가 자기 이야기 꺼내는 순간"

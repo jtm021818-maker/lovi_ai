@@ -20,7 +20,7 @@ import { validateResponse } from '@/lib/ai/response-validator';
 import { retrieveMemories, formatMemoriesAsContext } from '@/lib/rag/retriever';
 import { PhaseManager, type PhaseContext } from '@/engines/phase-manager';
 import { HumanLikeEngine } from '@/engines/human-like';
-import { createEmotionThermometer, createMindReading, createEmotionMirror, createPatternMirror, createSolutionPreview, createSolutionCard, createMessageDraft, createGrowthReport, createSessionSummary, createHomeworkCard, createTarotAxisCollect, createTarotDraw, createTarotInsight, createTarotSessionSummary, createTarotHomework, createLunaStory, createLunaStrategy, createToneSelect, createDraftWorkshop, createRoleplayFeedback, createPanelReport, createIdeaRefine, createActionPlan, createWarmWrap } from '@/engines/phase-manager/events';
+import { createEmotionThermometer, createMindReading, createSituationSummary, createEmotionMirror, createPatternMirror, createSolutionPreview, createSolutionCard, createMessageDraft, createGrowthReport, createSessionSummary, createHomeworkCard, createTarotAxisCollect, createTarotDraw, createTarotInsight, createTarotSessionSummary, createTarotHomework, createLunaStory, createLunaStrategy, createToneSelect, createDraftWorkshop, createRoleplayFeedback, createPanelReport, createIdeaRefine, createActionPlan, createWarmWrap } from '@/engines/phase-manager/events';
 import { generateDynamicTarotInsight } from '@/engines/tarot/interpretation-engine';
 import { matchTarotSolutions, getTarotSolutionPrompt } from '@/engines/solution-dictionary/tarot-solutions';
 import { mapEmotionToCardEnergy, getEnergyPromptHint } from '@/engines/tarot/emotion-card-mapper';
@@ -576,8 +576,8 @@ export class CounselingPipeline {
           ?? (stateResult.emotionReason
             ? stateResult.emotionReason.replace(/느껴졌어요|보여요|것 같아요/g, '').trim()
             : '');
-        eventsToFire.push(createMindReading(surface, deep, avgScore, stateResult.emotionReason));
-        console.log(`[Pipeline] 🦊 마음읽기(GTC): "${surface}" → "${deep}" (점수 ${avgScore})`);
+        eventsToFire.push(createSituationSummary(surface, deep, avgScore));
+        console.log(`[Pipeline] 📋 상황파악카드: "${surface}" → "${deep}" (점수 ${avgScore})`);
       } else {
         eventsToFire.push(createEmotionThermometer(avgScore, stateResult.emotionReason));
         console.log(`[Pipeline] 🌡️ 온도계: 평균 = ${avgScore}`);
@@ -1407,10 +1407,14 @@ ${researchResult.insight}
               ?? (stateResult.emotionReason
                 ? stateResult.emotionReason.replace(/느껴졌어요|보여요|것 같아요/g, '').trim()
                 : '');
-            eventsToFire.push(createMindReading(surface, deep, avgScore, stateResult.emotionReason));
+            // 🆕 v4: 상황 파악 카드로 교체 (마음읽기 → 상황 요약)
+            // SITUATION_CLEAR 태그가 있으면 파싱된 데이터 사용, 없으면 코드 레벨 추정
+            const sitSummary = hlrePost.situationSummary ?? surface;
+            const sitProblem = hlrePost.coreProblem ?? deep;
+            eventsToFire.push(createSituationSummary(sitSummary, sitProblem, avgScore));
             updatedCompletedEvents.push('EMOTION_THERMOMETER');
             updatedLastEventTurn = turnCount;
-            console.log(`[Pipeline] 🧠 AI 자율 마음읽기 발동! "${surface}" → "${deep}"`);
+            console.log(`[Pipeline] 📋 AI 자율 상황파악 발동! "${sitSummary}" | 핵심: "${sitProblem}"`);
           } else if (hlrePost.mindReadReady) {
             console.log(`[Pipeline] ⚠️ MIND_READ 차단: canFire=${canFireEvent()}, completed=${updatedCompletedEvents.includes('EMOTION_THERMOMETER')}, inQueue=${eventsToFire.some(e => e.type === 'EMOTION_THERMOMETER')}`);
           }

@@ -85,8 +85,8 @@ interface PhaseEventConfig {
 const MIN_EVENT_GAP = 2;
 
 const EVENT_CONFIG: Record<string, PhaseEventConfig> = {
-  // HOOK: 마음읽기 — AI [MIND_READ_READY] 태그로 발동, 코드 안전망은 2턴
-  EMOTION_THERMOMETER: { phase: 'HOOK',    minTurnInPhase: 2 },
+  // HOOK: 상황 파악 — AI [SITUATION_CLEAR] 태그로 발동. 턴 제한 없음 (루나가 판단)
+  EMOTION_THERMOMETER: { phase: 'HOOK',    minTurnInPhase: 1 },
 
   // MIRROR 이벤트들 — AI 태그로 발동
   EMOTION_MIRROR:      { phase: 'MIRROR',  minTurnInPhase: 1 },

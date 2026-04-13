@@ -17,6 +17,8 @@ export type PhaseSignal = 'STAY' | 'READY' | 'URGENT';
 const SIGNAL_REGEX = /\[PHASE_SIGNAL:(STAY|READY|URGENT)\]\s*/;
 // 🆕 ACE v4: 마음읽기 준비 태그 — AI가 "파악됐다"고 판단하면 출력
 const MIND_READ_REGEX = /\[MIND_READ_READY\]\s*/;
+// 🆕 v4: 상황 파악 태그 — [SITUATION_CLEAR:상황요약|핵심문제]
+const SITUATION_CLEAR_REGEX = /\[SITUATION_CLEAR:([^|]+)\|([^\]]+)\]\s*/;
 // 🆕 ACE v4: 루나 이야기 준비 태그 — [STORY_READY:opener|situation|innerThought|cliffhanger]
 // AI가 자기개방으로 "나도 비슷한 거 겪어봤거든" 이야기를 생성하면 출력
 const STORY_READY_REGEX = /\[STORY_READY:([^|\]]+)\|([^|\]]+)\|([^|\]]+)\|([^\]]+)\]\s*/;
@@ -163,12 +165,27 @@ export function parsePhaseSignal(response: string): {
   // 🆕 v36: 루나 인사이트 태그
   situationRead: string | null;
   lunaThought: string | null;
+  // 🆕 v4: 상황 파악 카드 데이터
+  situationSummary: string | null;
+  coreProblem: string | null;
 } {
   let cleaned = response;
 
-  // 🆕 ACE v4: [MIND_READ_READY] 태그 감지 + 제거
-  const mindReadReady = MIND_READ_REGEX.test(cleaned);
-  if (mindReadReady) {
+  // 🆕 v4: [SITUATION_CLEAR:상황|문제] 태그 감지 + 파싱 + 제거
+  let situationSummary: string | null = null;
+  let coreProblem: string | null = null;
+  const sitClearMatch = cleaned.match(SITUATION_CLEAR_REGEX);
+  if (sitClearMatch) {
+    situationSummary = sitClearMatch[1].trim();
+    coreProblem = sitClearMatch[2].trim();
+    cleaned = cleaned.replace(SITUATION_CLEAR_REGEX, '').trim();
+    console.log(`[PhaseSignal] 📋 상황파악: "${situationSummary}" | 핵심: "${coreProblem}"`);
+  }
+
+  // 🆕 ACE v4: [MIND_READ_READY] 태그 감지 + 제거 (하위 호환 유지)
+  // SITUATION_CLEAR가 있으면 mindReadReady도 true로 설정 (게이트 호환)
+  const mindReadReady = MIND_READ_REGEX.test(cleaned) || !!sitClearMatch;
+  if (MIND_READ_REGEX.test(cleaned)) {
     cleaned = cleaned.replace(MIND_READ_REGEX, '').trim();
   }
 
@@ -336,6 +353,8 @@ export function parsePhaseSignal(response: string): {
     thinkingDeepKeyword,
     situationRead,
     lunaThought,
+    situationSummary,
+    coreProblem,
   };
 
   return {
@@ -356,6 +375,8 @@ export function parsePhaseSignal(response: string): {
     thinkingDeepKeyword,
     situationRead,
     lunaThought,
+    situationSummary,
+    coreProblem,
   };
 }
 
