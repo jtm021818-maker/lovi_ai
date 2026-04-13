@@ -21,6 +21,7 @@ import { retrieveMemories, formatMemoriesAsContext } from '@/lib/rag/retriever';
 import { PhaseManager, type PhaseContext } from '@/engines/phase-manager';
 import { HumanLikeEngine } from '@/engines/human-like';
 import { parsePhaseSignal } from '@/engines/human-like/phase-signal';
+import { resetCascadeLog, getCascadeLog } from '@/lib/ai/provider-registry';
 import { createEmotionThermometer, createMindReading, createSituationSummary, createEmotionMirror, createPatternMirror, createSolutionPreview, createSolutionCard, createMessageDraft, createGrowthReport, createSessionSummary, createHomeworkCard, createTarotAxisCollect, createTarotDraw, createTarotInsight, createTarotSessionSummary, createTarotHomework, createLunaStory, createLunaStrategy, createToneSelect, createDraftWorkshop, createRoleplayFeedback, createPanelReport, createIdeaRefine, createActionPlan, createWarmWrap } from '@/engines/phase-manager/events';
 import { generateDynamicTarotInsight } from '@/engines/tarot/interpretation-engine';
 import { matchTarotSolutions, getTarotSolutionPrompt } from '@/engines/solution-dictionary/tarot-solutions';
@@ -227,6 +228,7 @@ export class CounselingPipeline {
   > {
     // 🆕 v31: Step 1 + Step 4를 병렬 실행 (상태분석과 RAG는 독립적 — ~200~500ms 절약)
     const tPipeStart = Date.now();
+    resetCascadeLog(); // 🆕 v46: 이번 턴의 캐스케이드 로그 초기화
     const ragPromise = ragContext
       ? retrieveMemories(ragContext.supabase, ragContext.userId, userMessage)
           .then(formatMemoriesAsContext)
@@ -1705,6 +1707,7 @@ ${researchResult.insight}
         },
         phaseStartTurn: updatedPhaseStartTurn,
       },
+      cascadeLog: getCascadeLog(), // 🆕 v46: 모델별 시도 로그 (브라우저 F12 전송)
     };
 
     yield { type: 'done', data: { stateResult, strategyResult, suggestionShown: gateResult.show, responseMode: therapeuticResponse.mode, updatedAxes: currentScenario === RelationshipScenario.READ_AND_IGNORED ? updatedAxes : undefined, phaseV2: newPhaseV2, completedEvents: updatedCompletedEvents, lastEventTurn: updatedLastEventTurn, confirmedEmotionScore, emotionHistory: updatedEmotionHistory, promptStyle: currentPromptStyle, emotionAccumulatorState: updatedAccumulator, phaseStartTurn: updatedPhaseStartTurn, lunaEmotionState: hlreActive ? hlre.serializeEmotionState() : undefined, sessionStoryState: hlreActive ? hlre.serializeSessionStory() : undefined, strategyMode: activeStrategyMode, intimacyState: hlreActive ? hlre.getIntimacyState(intimacyPersonaKey) : null, intimacyPersonaKey: hlreActive ? intimacyPersonaKey : undefined, intimacyAll: hlreActive ? hlre.getIntimacyAll() : null, intimacyLevelUp, _contextLog } };

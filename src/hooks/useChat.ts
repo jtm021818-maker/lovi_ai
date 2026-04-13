@@ -327,6 +327,33 @@ export function useChat(sessionId: string): UseChatReturn {
                 console.log('%c⚙️ Pipeline Meta', 'color: #9c27b0; font-weight: bold;', ctx.pipelineMeta);
                 console.log('%c🤖 AI Response', 'color: #2196f3; font-weight: bold;');
                 console.log(ctx.aiResponse);
+
+                // 🆕 v46: 캐스케이드 로그 — 모델별 시도/성공/실패 시각화
+                if (ctx.cascadeLog?.length) {
+                  console.groupCollapsed(
+                    `%c🔗 [Cascade] ${ctx.cascadeLog.length}건 시도`,
+                    'color: #e91e63; font-weight: bold; font-size: 12px;'
+                  );
+                  ctx.cascadeLog.forEach((log: any, i: number) => {
+                    const icon = log.status === 'success' ? '✅' : log.status === 'timeout' ? '⏰' : log.status === 'rate_limit' ? '🚫' : log.status === 'retry' ? '🔄' : '❌';
+                    const color = log.status === 'success' ? 'color: #4caf50' : 'color: #f44336';
+                    console.log(
+                      `%c${icon} [${i + 1}] ${log.provider}/${log.tier} (${log.model}) → ${log.status}${log.ttfbMs !== undefined ? ` | TTFB: ${log.ttfbMs}ms` : ''}${log.totalMs !== undefined ? ` | Total: ${log.totalMs}ms` : ''}${log.error ? ` | Error: ${log.error}` : ''}`,
+                      `${color}; font-weight: bold;`
+                    );
+                  });
+                  // 테이블로도 출력
+                  console.table(ctx.cascadeLog.map((l: any) => ({
+                    Provider: l.provider,
+                    Model: l.model,
+                    Status: l.status,
+                    'TTFB(ms)': l.ttfbMs ?? '-',
+                    'Total(ms)': l.totalMs ?? '-',
+                    Error: l.error ?? '-',
+                  })));
+                  console.groupEnd();
+                }
+
                 console.groupEnd();
                 break;
               }

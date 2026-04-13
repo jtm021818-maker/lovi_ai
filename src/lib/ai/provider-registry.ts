@@ -69,6 +69,34 @@ const TEMPERATURE: Record<ModelTier, number> = {
 };
 
 // ============================================================
+// 🆕 v46: 캐스케이드 시도 로그 (브라우저 F12 전송용)
+// ============================================================
+export interface CascadeAttemptLog {
+  provider: Provider;
+  tier: ModelTier;
+  model: string;
+  status: 'success' | 'error' | 'rate_limit' | 'timeout' | 'empty' | 'retry';
+  ttfbMs?: number;
+  totalMs?: number;
+  error?: string;
+  attempt?: number;
+}
+
+let _cascadeLog: CascadeAttemptLog[] = [];
+
+/** 캐스케이드 로그 초기화 (매 턴 시작 시 호출) */
+export function resetCascadeLog(): void { _cascadeLog = []; }
+
+/** 캐스케이드 로그 조회 */
+export function getCascadeLog(): CascadeAttemptLog[] { return [..._cascadeLog]; }
+
+function logAttempt(entry: CascadeAttemptLog): void {
+  _cascadeLog.push(entry);
+  const icon = entry.status === 'success' ? '✅' : entry.status === 'retry' ? '🔄' : '❌';
+  console.log(`[Cascade] ${icon} ${entry.provider}/${entry.tier} (${entry.model}) → ${entry.status}${entry.ttfbMs ? ` TTFB:${entry.ttfbMs}ms` : ''}${entry.totalMs ? ` Total:${entry.totalMs}ms` : ''}${entry.error ? ` [${entry.error}]` : ''}`);
+}
+
+// ============================================================
 // Gemini 호출
 // ============================================================
 async function geminiGenerate(
@@ -347,7 +375,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
-/** 캐스케이드 호출 — 4단계 폴백 체인 (🆕 v31: 8초 타임아웃) */
+/** 캐스케이드 호출 — 4단계 폴백 체인 (🆕 v31: 8초 타임아웃, v46: 상세 로그) */
 export async function generateWithCascade(
   chain: { provider: Provider; tier: ModelTier; modelOverride?: string }[],
   systemPrompt: string,
@@ -355,37 +383,50 @@ export async function generateWithCascade(
   maxTokens: number = 1024
 ): Promise<{ text: string; usedProvider: Provider; usedTier: ModelTier }> {
   for (const { provider, tier, modelOverride } of chain) {
+    const actualModel = modelOverride || PROVIDER_MODELS[provider][tier];
     const limit = checkProviderRateLimit(provider);
     if (!limit.allowed) {
-      console.log(`[ProviderRegistry] ⏭️ ${provider}/${tier} rate limit → 즉시 스킵`);
+      logAttempt({ provider, tier, model: actualModel, status: 'rate_limit' });
       continue;
     }
 
+    const t0 = Date.now();
     try {
-      // 🆕 v31: 8초 타임아웃 — 먹통 프로바이더 즉시 폴백
       const text = await withTimeout(
         generateWithProvider(provider, systemPrompt, messages, tier, maxTokens, modelOverride),
         8000,
         `${provider}/${tier}`
       );
+      logAttempt({ provider, tier, model: actualModel, status: 'success', totalMs: Date.now() - t0 });
       return { text, usedProvider: provider, usedTier: tier };
     } catch (err: any) {
-      if (err?.status === 429 || err?.code === 429) {
-        console.warn(`[ProviderRegistry] ${provider}/${tier} 429 → 다음 폴백`);
-        continue;
-      }
-      console.error(`[ProviderRegistry] ${provider}/${tier} 에러:`, err?.message);
+      const isTimeout = err?.message?.includes('Timeout');
+      const is429 = err?.status === 429 || err?.code === 429;
+      logAttempt({
+        provider, tier, model: actualModel,
+        status: isTimeout ? 'timeout' : is429 ? 'rate_limit' : 'error',
+        totalMs: Date.now() - t0,
+        error: err?.message?.slice(0, 100),
+      });
       continue;
     }
   }
 
   // 모든 폴백 실패 시 마지막 체인 강제 시도
   const last = chain[chain.length - 1];
-  const text = await generateWithProvider(last.provider, systemPrompt, messages, last.tier, maxTokens, last.modelOverride);
-  return { text, usedProvider: last.provider, usedTier: last.tier };
+  const lastModel = last.modelOverride || PROVIDER_MODELS[last.provider][last.tier];
+  const t0 = Date.now();
+  try {
+    const text = await generateWithProvider(last.provider, systemPrompt, messages, last.tier, maxTokens, last.modelOverride);
+    logAttempt({ provider: last.provider, tier: last.tier, model: lastModel, status: 'success', totalMs: Date.now() - t0 });
+    return { text, usedProvider: last.provider, usedTier: last.tier };
+  } catch (err: any) {
+    logAttempt({ provider: last.provider, tier: last.tier, model: lastModel, status: 'error', totalMs: Date.now() - t0, error: err?.message?.slice(0, 100) });
+    throw err;
+  }
 }
 
-/** 캐스케이드 스트리밍 — 4단계 폴백 체인 (🆕 v45.5: TTFB 15초 타임아웃 추가) */
+/** 캐스케이드 스트리밍 — 4단계 폴백 체인 (🆕 v45.5: TTFB 15초 타임아웃, v46: 상세 로그) */
 export async function* streamWithCascade(
   chain: { provider: Provider; tier: ModelTier; modelOverride?: string }[],
   systemPrompt: string,
@@ -393,49 +434,56 @@ export async function* streamWithCascade(
   maxTokens: number = 1024
 ): AsyncGenerator<string> {
   for (const { provider, tier, modelOverride } of chain) {
+    const actualModel = modelOverride || PROVIDER_MODELS[provider][tier];
     const limit = checkProviderRateLimit(provider);
-    if (!limit.allowed) continue;
+    if (!limit.allowed) {
+      logAttempt({ provider, tier, model: actualModel, status: 'rate_limit' });
+      continue;
+    }
 
     let hasYieldedAny = false;
-    const actualModel = modelOverride || PROVIDER_MODELS[provider][tier];
     const startTime = Date.now();
+    let ttfbMs: number | undefined;
     try {
       const gen = streamWithProvider(provider, systemPrompt, messages, tier, maxTokens, modelOverride);
-
-      // 🆕 v45.5: TTFB 타임아웃 — 첫 청크가 15초 내에 안 오면 폴백
-      // Gemini preview 모델이 가끔 연결만 맺고 먹통되는 문제 해결
       const TTFB_TIMEOUT_MS = 15000;
 
       for await (const chunk of wrapWithTTFBTimeout(gen, TTFB_TIMEOUT_MS, `${provider}/${tier}`)) {
         if (!hasYieldedAny) {
-          console.log(`[ProviderRegistry] ✅ 스트리밍 시작: ${provider}/${tier} (model: ${actualModel}) | TTFB: ${Date.now() - startTime}ms`);
+          ttfbMs = Date.now() - startTime;
         }
         hasYieldedAny = true;
         yield chunk;
       }
-      console.log(`[ProviderRegistry] ✅ 스트리밍 완료: ${provider}/${tier} (model: ${actualModel}) | 총 ${Date.now() - startTime}ms`);
-      return; // 정상 완료
+      logAttempt({ provider, tier, model: actualModel, status: 'success', ttfbMs, totalMs: Date.now() - startTime });
+      return;
     } catch (err: any) {
-      // 이미 텍스트가 부분 전송된 경우 → 폴백하면 중복되므로 그대로 종료
       if (hasYieldedAny) {
-        console.warn(`[ProviderRegistry] ${provider}/${tier} 스트리밍 중간 에러 (부분전송됨, 그대로 종료):`, err?.message);
+        logAttempt({ provider, tier, model: actualModel, status: 'success', ttfbMs, totalMs: Date.now() - startTime, error: `부분전송 후 에러: ${err?.message?.slice(0, 60)}` });
         return;
       }
-      if (err?.status === 429 || err?.code === 429) {
-        console.warn(`[ProviderRegistry] ${provider}/${tier} 스트리밍 429 → 다음 폴백`);
-        continue;
-      }
-      console.error(`[ProviderRegistry] ${provider}/${tier} 스트리밍 에러:`, err?.message);
+      const isTimeout = err?.message?.includes('TTFB Timeout');
+      const is429 = err?.status === 429 || err?.code === 429;
+      logAttempt({
+        provider, tier, model: actualModel,
+        status: isTimeout ? 'timeout' : is429 ? 'rate_limit' : 'error',
+        totalMs: Date.now() - startTime,
+        error: err?.message?.slice(0, 100),
+      });
       continue;
     }
   }
 
   // 모든 폴백 실패 → 마지막 강제
   const last = chain[chain.length - 1];
+  const lastModel = last.modelOverride || PROVIDER_MODELS[last.provider][last.tier];
+  const t0 = Date.now();
+  logAttempt({ provider: last.provider, tier: last.tier, model: lastModel, status: 'retry', error: '모든 폴백 실패 → 최후 강제 시도' });
   const gen = streamWithProvider(last.provider, systemPrompt, messages, last.tier, maxTokens, last.modelOverride);
   for await (const chunk of gen) {
     yield chunk;
   }
+  logAttempt({ provider: last.provider, tier: last.tier, model: lastModel, status: 'success', totalMs: Date.now() - t0, error: '최후 강제 시도 성공' });
 }
 
 /**

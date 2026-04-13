@@ -630,6 +630,10 @@ export async function POST(req: NextRequest) {
                 const responseTimeMs = Date.now() - t0;
                 // 서버 콘솔 (간략)
                 console.log(`[AI Context] 🧠 턴${turnCount} | ${persona} | ${finalPhaseV2} | prompt=${ctxLog.systemPrompt.length}자 | msgs=${ctxLog.recentMessages.length}개 | ${responseTimeMs}ms`);
+                // 🆕 v46: 캐스케이드 로그도 서버 콘솔에 요약
+                if (ctxLog.cascadeLog?.length) {
+                  console.log(`[AI Cascade] 📊 시도 ${ctxLog.cascadeLog.length}건:`, ctxLog.cascadeLog.map((l: any) => `${l.provider}/${l.model}→${l.status}${l.totalMs ? `(${l.totalMs}ms)` : ''}`).join(' | '));
+                }
                 // 클라이언트 SSE 전송 (브라우저 F12에서 확인)
                 controller.enqueue(
                   encoder.encode(`data: ${JSON.stringify({
@@ -641,6 +645,7 @@ export async function POST(req: NextRequest) {
                       chatMessages: ctxLog.recentMessages,
                       pipelineMeta: ctxLog.pipelineMeta,
                       aiResponse: fullText,
+                      cascadeLog: ctxLog.cascadeLog || [], // 🆕 v46: 모델별 시도 로그
                     },
                   })}\n\n`)
                 );
