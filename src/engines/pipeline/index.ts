@@ -20,6 +20,7 @@ import { validateResponse } from '@/lib/ai/response-validator';
 import { retrieveMemories, formatMemoriesAsContext } from '@/lib/rag/retriever';
 import { PhaseManager, type PhaseContext } from '@/engines/phase-manager';
 import { HumanLikeEngine } from '@/engines/human-like';
+import { parsePhaseSignal } from '@/engines/human-like/phase-signal';
 import { createEmotionThermometer, createMindReading, createSituationSummary, createEmotionMirror, createPatternMirror, createSolutionPreview, createSolutionCard, createMessageDraft, createGrowthReport, createSessionSummary, createHomeworkCard, createTarotAxisCollect, createTarotDraw, createTarotInsight, createTarotSessionSummary, createTarotHomework, createLunaStory, createLunaStrategy, createToneSelect, createDraftWorkshop, createRoleplayFeedback, createPanelReport, createIdeaRefine, createActionPlan, createWarmWrap } from '@/engines/phase-manager/events';
 import { generateDynamicTarotInsight } from '@/engines/tarot/interpretation-engine';
 import { matchTarotSolutions, getTarotSolutionPrompt } from '@/engines/solution-dictionary/tarot-solutions';
@@ -498,7 +499,7 @@ export class CounselingPipeline {
         userMessage,
       ],
     };
-    const newPhaseV2 = PhaseManager.getCurrentPhase(phaseCtx);
+    let newPhaseV2 = PhaseManager.getCurrentPhase(phaseCtx);
     const phaseChanged = newPhaseV2 !== prevPhaseV2;
 
     // 🆕 v20: Phase 전환 시 phaseStartTurn 갱신
@@ -1419,6 +1420,21 @@ ${researchResult.insight}
             console.log(`[Pipeline] ⚠️ MIND_READ 차단: canFire=${canFireEvent()}, completed=${updatedCompletedEvents.includes('EMOTION_THERMOMETER')}, inQueue=${eventsToFire.some(e => e.type === 'EMOTION_THERMOMETER')}`);
           }
 
+          // 🆕 v4: 코드 레벨 안전망 — AI 태그 없어도 formulation 채워지면 상황파악 발동
+          // 소형 모델(Qwen/Cerebras)이 [SITUATION_CLEAR] 태그를 안 출력할 때 대비
+          if (!hlrePost.mindReadReady && canFireEventType('EMOTION_THERMOMETER') && turnInPhase >= 2) {
+            const formulationCheck = hlre.isFormulationReady();
+            if (formulationCheck.ready) {
+              const avgScore = emotionBaseline !== undefined
+                ? (emotionBaseline + stateResult.emotionScore) / 2
+                : stateResult.emotionScore;
+              eventsToFire.push(createSituationSummary(formulationCheck.summary, formulationCheck.problem, avgScore));
+              updatedCompletedEvents.push('EMOTION_THERMOMETER');
+              updatedLastEventTurn = turnCount;
+              console.log(`[Pipeline] 📋 코드 안전망 상황파악 발동! "${formulationCheck.summary}" | "${formulationCheck.problem}" (formulation 기반)`);
+            }
+          }
+
           // 🆕 ACE v4: AI가 [STORY_READY:...] 태그를 출력했으면 → 루나의 이야기 이벤트 발동
           // 🆕 v43: canFireEventType으로 이중 체크 (DB race condition 방어)
           if (hlrePost.storyData && canFireEventType('LUNA_STORY')) {
@@ -1550,6 +1566,38 @@ ${researchResult.insight}
           }
         } catch (e) {
           console.warn('[Pipeline] HLRE 후처리 오류 (무시):', e);
+        }
+      }
+
+      // 🆕 v45.5: Phase 재판단 — AI 시그널이 응답 후에 파싱되므로, 여기서 PhaseManager 재실행
+      // HOOK→MIRROR 등 시그널 기반 전환이 이번 턴에 즉시 반영
+      if (hlreActive) {
+        try {
+          const parsed2 = parsePhaseSignal(fullText);
+          const aiPhaseSignal = parsed2.signal;
+          if (aiPhaseSignal && aiPhaseSignal !== 'STAY') {
+            const reCheckCtx: PhaseContext = {
+              ...phaseCtx,
+              currentPhase: newPhaseV2,
+              completedEvents: updatedCompletedEvents,
+              lastEventTurn: updatedLastEventTurn,
+              phaseStartTurn: updatedPhaseStartTurn,
+              phaseSignal: aiPhaseSignal,
+            };
+            const reCheckedPhase = PhaseManager.getCurrentPhase(reCheckCtx);
+            if (reCheckedPhase !== newPhaseV2) {
+              console.log(`[Pipeline] 🔄 Phase 재판단! AI 시그널 ${aiPhaseSignal} → ${newPhaseV2} → ${reCheckedPhase} (턴 ${turnCount})`);
+              // Phase 전환 반영
+              newPhaseV2 = reCheckedPhase;
+              updatedPhaseStartTurn = turnCount;
+              // 클라이언트에 Phase 변경 재전송
+              const reProgress = Math.min(PhaseManager.getProgress(reCheckedPhase) + Math.min(turnCount * 3, 15), 100);
+              const reThinking = computeLunaThinking(reCheckedPhase, 0, stateResult, updatedCompletedEvents);
+              yield { type: 'phase_change', data: { phase: reCheckedPhase, progress: reProgress, lunaThinking: reThinking.lunaThinking, understandingLevel: reThinking.understandingLevel } };
+            }
+          }
+        } catch (e) {
+          console.warn('[Pipeline] Phase 재판단 오류 (무시):', e);
         }
       }
 

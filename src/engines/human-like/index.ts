@@ -615,6 +615,21 @@ export class HumanLikeEngine {
     return serializeStory(this.sessionStory);
   }
 
+  /** 🆕 v4: 코드 레벨 상황 파악 판단 — AI 태그 안전망 */
+  isFormulationReady(): { ready: boolean; summary: string; problem: string } {
+    const f = this.sessionStory.formulation;
+    const hasHurt = !!f.hurtBecause && f.hurtBecause.length > 3;
+    const hasGoal = !!(f.wants || f.fears);
+    if (hasHurt && hasGoal) {
+      return {
+        ready: true,
+        summary: f.hurtBecause!,
+        problem: f.wants || f.fears || '',
+      };
+    }
+    return { ready: false, summary: '', problem: '' };
+  }
+
   getWorkingMemory(): WorkingMemory {
     return this.workingMemory;
   }

@@ -205,6 +205,9 @@ export interface PhaseContext {
     signal: string;
   };
   mindReadReady?: boolean;
+
+  // 🆕 v45.5: AI Phase 시그널 (파이프라인에서 전달)
+  phaseSignal?: 'STAY' | 'READY' | 'URGENT' | null;
 }
 
 // ============================================
@@ -225,7 +228,7 @@ export class PhaseManager {
    * ✅ AI가 이벤트 태그를 출력하는 순간이 곧 전환 시점
    */
   static getCurrentPhase(ctx: PhaseContext): ConversationPhaseV2 {
-    const { turnCount, currentPhase, phaseStartTurn, completedEvents, persona } = ctx;
+    const { turnCount, currentPhase, phaseStartTurn, completedEvents, persona, phaseSignal } = ctx;
 
     // 현재 Phase의 다음 Phase 결정
     const currentIdx = PHASE_ORDER.indexOf(currentPhase);
@@ -250,9 +253,20 @@ export class PhaseManager {
       : LUNA_GATE_EVENTS[currentPhase];
 
     if (gateEvents && gateEvents.some(e => completedEvents.includes(e))) {
-      // LUNA_STORY는 LUNA_STRATEGY의 대체가 될 수 없음 — MIRROR 전환 주의
-      // (LUNA_STORY는 자기개방이고, LUNA_STRATEGY가 진짜 BRIDGE 진입 게이트)
       console.log(`[PhaseManager] ✅ 게이트 이벤트 충족 → ${currentPhase} → ${nextPhase} (턴 ${turnCount}, phase내 ${turnsInPhase}턴)`);
+      return nextPhase;
+    }
+
+    // 🆕 v45.5: AI PHASE_SIGNAL 기반 전환 — 게이트 이벤트 없이도 READY/URGENT면 전환
+    // HOOK에서 특히 중요: AI가 [SITUATION_CLEAR] 태그를 안 내도
+    // [PHASE_SIGNAL:READY]만 있으면 전환 가능
+    if (phaseSignal === 'URGENT') {
+      console.log(`[PhaseManager] 🚨 AI URGENT 시그널 → ${currentPhase} → ${nextPhase} (턴 ${turnCount})`);
+      return nextPhase;
+    }
+
+    if (phaseSignal === 'READY' && turnsInPhase >= 2) {
+      console.log(`[PhaseManager] ✅ AI READY 시그널 → ${currentPhase} → ${nextPhase} (턴 ${turnCount}, phase내 ${turnsInPhase}턴)`);
       return nextPhase;
     }
 
