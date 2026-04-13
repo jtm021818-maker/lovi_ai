@@ -585,12 +585,12 @@ export class HumanLikeEngine {
   private describeJourney(): string {
     const p = this.journeyState.phase;
     const map: Record<string, string> = {
-      LISTENING: '아직 듣는 단계. 유저 얘기를 충분히 듣고 있어.',
+      LISTENING: '유저 얘기 듣는 중. 상황이 파악되면 바로 [SITUATION_CLEAR] 붙여.',
       UNDERSTANDING: '핵심 감정이 보이기 시작. 좀 더 깊이 갈 수 있어.',
       SUPPORTING: '유저가 안정 찾아가는 중. 다른 시각이나 정리가 도움될 수 있어.',
       EMPOWERING: '유저가 스스로 방향 잡아가는 중. 응원해주면 돼.',
     };
-    return map[p] ?? '대화 초반. 유저 얘기를 들어보자.';
+    return map[p] ?? '상황 파악 중. 파악되면 바로 [SITUATION_CLEAR] 태그를 붙여.';
   }
 
   private getRecentExchange(): string {

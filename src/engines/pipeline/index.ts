@@ -1571,13 +1571,19 @@ ${researchResult.insight}
         }
       }
 
-      // 🆕 v45.5: Phase 재판단 — AI 시그널이 응답 후에 파싱되므로, 여기서 PhaseManager 재실행
-      // HOOK→MIRROR 등 시그널 기반 전환이 이번 턴에 즉시 반영
+      // 🆕 v46.2: Phase 재판단 — 게이트 이벤트 + AI 시그널 통합
+      // 기존 v45.5에서는 AI가 STAY를 출력하면 재판단 자체를 스킵했음
+      // → [SITUATION_CLEAR]로 EMOTION_THERMOMETER 완료되어도 전환 안 되는 버그
+      // 수정: completedEvents가 업데이트된 후 항상 재판단 실행
       if (hlreActive) {
         try {
           const parsed2 = parsePhaseSignal(fullText);
           const aiPhaseSignal = parsed2.signal;
-          if (aiPhaseSignal && aiPhaseSignal !== 'STAY') {
+          // 게이트 이벤트가 이번 턴에 새로 완료되었거나, AI 시그널이 READY/URGENT이면 재판단
+          const hasNewGateEvents = updatedCompletedEvents.length > (completedEvents?.length ?? 0);
+          const hasTransitionSignal = aiPhaseSignal && aiPhaseSignal !== 'STAY';
+          
+          if (hasNewGateEvents || hasTransitionSignal) {
             const reCheckCtx: PhaseContext = {
               ...phaseCtx,
               currentPhase: newPhaseV2,
@@ -1588,11 +1594,10 @@ ${researchResult.insight}
             };
             const reCheckedPhase = PhaseManager.getCurrentPhase(reCheckCtx);
             if (reCheckedPhase !== newPhaseV2) {
-              console.log(`[Pipeline] 🔄 Phase 재판단! AI 시그널 ${aiPhaseSignal} → ${newPhaseV2} → ${reCheckedPhase} (턴 ${turnCount})`);
-              // Phase 전환 반영
+              const reason = hasNewGateEvents ? `게이트이벤트(${updatedCompletedEvents.slice(-1)})` : `AI시그널(${aiPhaseSignal})`;
+              console.log(`[Pipeline] 🔄 Phase 재판단! ${reason} → ${newPhaseV2} → ${reCheckedPhase} (턴 ${turnCount})`);
               newPhaseV2 = reCheckedPhase;
               updatedPhaseStartTurn = turnCount;
-              // 클라이언트에 Phase 변경 재전송
               const reProgress = Math.min(PhaseManager.getProgress(reCheckedPhase) + Math.min(turnCount * 3, 15), 100);
               const reThinking = computeLunaThinking(reCheckedPhase, 0, stateResult, updatedCompletedEvents);
               yield { type: 'phase_change', data: { phase: reCheckedPhase, progress: reProgress, lunaThinking: reThinking.lunaThinking, understandingLevel: reThinking.understandingLevel } };

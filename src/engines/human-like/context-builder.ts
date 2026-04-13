@@ -161,7 +161,7 @@ export function buildContextPrompt(ctx: SessionContext): string {
 
   // 13. 세션 내 위치
   if (ctx.turnInSession <= 2) {
-    parts.push(`[세션 초반 — ${ctx.turnInSession}번째 대화]`);
+    parts.push(`[세션 초반 — ${ctx.turnInSession}번째 대화. 상황이 파악되면 주저하지 말고 바로 [SITUATION_CLEAR] 태그를 붙여.]`);
   }
 
   return parts.filter(Boolean).join('\n');

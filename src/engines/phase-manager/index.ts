@@ -258,8 +258,6 @@ export class PhaseManager {
     }
 
     // 🆕 v45.5: AI PHASE_SIGNAL 기반 전환 — 게이트 이벤트 없이도 READY/URGENT면 전환
-    // HOOK에서 특히 중요: AI가 [SITUATION_CLEAR] 태그를 안 내도
-    // [PHASE_SIGNAL:READY]만 있으면 전환 가능
     if (phaseSignal === 'URGENT') {
       console.log(`[PhaseManager] 🚨 AI URGENT 시그널 → ${currentPhase} → ${nextPhase} (턴 ${turnCount})`);
       return nextPhase;
