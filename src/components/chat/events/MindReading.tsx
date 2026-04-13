@@ -37,10 +37,18 @@ export default function MindReading({ event, onSelect, disabled }: MindReadingPr
     fullText?: string;
     lunaMessage?: string;
     choices?: ChoiceItem[];
+    // 🆕 상황 파악 카드
+    eventStyle?: string;
+    stickerId?: string;
+    situationSummary?: string;
+    coreProblem?: string;
   };
 
-  const guessText = data.fullText || data.deepGuess || '네 마음이 좀 복잡한 것 같아';
-  const lunaMsg = data.lunaMessage || '야 잠깐, 나 느낌 오는 게 하나 있는데';
+  const isSituationSummary = data.eventStyle === 'situation_summary';
+  const guessText = isSituationSummary
+    ? (data.situationSummary || data.fullText || '네 상황을 정리해볼게')
+    : (data.fullText || data.deepGuess || '네 마음이 좀 복잡한 것 같아');
+  const lunaMsg = data.lunaMessage || (isSituationSummary ? '야 내가 들은 거 정리해볼게' : '야 잠깐, 나 느낌 오는 게 하나 있는데');
   const choices = data.choices ?? [
     { label: '어 맞아! 그런 것 같아', value: 'confirm', emoji: '💡' },
     { label: '음 좀 다른 것 같은데...', value: 'different', emoji: '🤔' },
@@ -112,7 +120,9 @@ export default function MindReading({ event, onSelect, disabled }: MindReadingPr
       >
         <div className="flex items-center gap-2">
           <span className="text-lg">🦊</span>
-          <span className="text-[12px] font-bold text-pink-600">마음 들여다보기</span>
+          <span className="text-[12px] font-bold text-pink-600">
+            {isSituationSummary ? '상황 파악 완료' : '마음 들여다보기'}
+          </span>
           <span className="text-[11px] text-gray-400">✓ 루나가 기억할게</span>
         </div>
       </motion.div>
@@ -155,7 +165,9 @@ export default function MindReading({ event, onSelect, disabled }: MindReadingPr
             />
           </div>
           <div>
-            <div className="text-[13px] font-bold text-pink-600">🦊 마음 들여다보기</div>
+            <div className="text-[13px] font-bold text-pink-600">
+              {isSituationSummary ? '📋 루나의 상황 파악' : '🦊 마음 들여다보기'}
+            </div>
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -177,17 +189,53 @@ export default function MindReading({ event, onSelect, disabled }: MindReadingPr
               exit={{ opacity: 0, y: -10 }}
               transition={{ delay: 0.3 }}
             >
-              {/* 가설형 추측 텍스트 */}
+              {/* 상황 파악 or 가설형 추측 텍스트 */}
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 mb-4 border border-pink-100/50 shadow-sm">
-                <div className="text-[11px] text-pink-400 mb-1.5">혹시...</div>
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.6, duration: 0.8 }}
-                  className="text-[15px] font-bold text-gray-800 leading-relaxed"
-                >
-                  &ldquo;{guessText}&rdquo;
-                </motion.div>
+                {isSituationSummary ? (
+                  <>
+                    {data.stickerId && (
+                      <div className="flex justify-center mb-3">
+                        <img
+                          src={`/stickers/luna-${data.stickerId}.png`}
+                          alt="루나"
+                          className="w-[80px] h-auto"
+                        />
+                      </div>
+                    )}
+                    <div className="text-[11px] text-pink-400 mb-1.5">내가 이해한 상황</div>
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.6, duration: 0.8 }}
+                      className="text-[14px] font-bold text-gray-800 leading-relaxed mb-3"
+                    >
+                      &ldquo;{guessText}&rdquo;
+                    </motion.div>
+                    {data.coreProblem && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 1.0, duration: 0.6 }}
+                        className="bg-pink-50 rounded-xl p-3 border border-pink-100/50"
+                      >
+                        <div className="text-[10px] text-pink-400 mb-1">🎯 해결해야 할 것</div>
+                        <div className="text-[13px] font-bold text-pink-600">{data.coreProblem}</div>
+                      </motion.div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="text-[11px] text-pink-400 mb-1.5">혹시...</div>
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.6, duration: 0.8 }}
+                      className="text-[15px] font-bold text-gray-800 leading-relaxed"
+                    >
+                      &ldquo;{guessText}&rdquo;
+                    </motion.div>
+                  </>
+                )}
               </div>
 
               {/* 3선택지 */}
@@ -216,7 +264,9 @@ export default function MindReading({ event, onSelect, disabled }: MindReadingPr
               </div>
 
               <div className="text-center mt-3">
-                <span className="text-[9px] text-gray-400">✨ 루나가 대화를 듣고 느낀 거야</span>
+                <span className="text-[9px] text-gray-400">
+                  {isSituationSummary ? '📋 루나가 네 이야기를 정리한 거야' : '✨ 루나가 대화를 듣고 느낀 거야'}
+                </span>
               </div>
             </motion.div>
           )}
