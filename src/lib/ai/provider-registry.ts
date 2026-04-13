@@ -40,8 +40,8 @@ export type ModelTier = 'haiku' | 'sonnet' | 'opus';
 /** 프로바이더별 모델 매핑 */
 const PROVIDER_MODELS: Record<Provider, Record<ModelTier, string>> = {
   gemini: {
-    haiku: 'gemini-2.5-flash-lite',               // 라운지/상태분석 폴백
-    sonnet: 'gemini-3.1-flash-lite-preview',       // 🆕 v25: 상담 메인 (카톡 엑스레이와 동일)
+    haiku: 'gemini-3.1-flash-lite-preview',          // 🆕 v45.5: 2.5-flash-lite 폐기 → 3.1로 교체
+    sonnet: 'gemini-3.1-flash-lite-preview',       // 상담 메인 (카톡 엑스레이와 동일)
     opus: 'gemini-3.1-flash-lite-preview',         // 상담 위기 대응
   },
   groq: {
@@ -82,18 +82,38 @@ async function geminiGenerate(
     parts: [{ text: m.content }],
   }));
 
-  const response = await gemini.models.generateContent({
-    model: PROVIDER_MODELS.gemini[tier],
-    config: {
-      systemInstruction: systemPrompt,
-      maxOutputTokens: maxTokens,
-      temperature: TEMPERATURE[tier],
-    },
-    contents,
-  });
+  // 🆕 v45.5: 1회 자동 재시도 — preview 모델 간헐적 실패 대응
+  const MAX_RETRIES = 1;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await gemini.models.generateContent({
+        model: PROVIDER_MODELS.gemini[tier],
+        config: {
+          systemInstruction: systemPrompt,
+          maxOutputTokens: maxTokens,
+          temperature: TEMPERATURE[tier],
+        },
+        contents,
+      });
 
-  recordProviderUsage('gemini');
-  return response.text ?? '';
+      const text = response.text ?? '';
+      if (!text && attempt < MAX_RETRIES) {
+        console.warn(`[Gemini] ⚠️ 빈 응답 — 재시도 ${attempt + 1}/${MAX_RETRIES}`);
+        continue;
+      }
+
+      recordProviderUsage('gemini');
+      return text;
+    } catch (err: any) {
+      if (attempt < MAX_RETRIES) {
+        console.warn(`[Gemini] ⚠️ 에러 → 재시도 ${attempt + 1}/${MAX_RETRIES}:`, err?.message);
+        await new Promise(r => setTimeout(r, 500));
+        continue;
+      }
+      throw err;
+    }
+  }
+  return ''; // 여기 도달하면 빈 문자열(캐스케이드가 처리)
 }
 
 async function* geminiStream(
@@ -107,22 +127,46 @@ async function* geminiStream(
     parts: [{ text: m.content }],
   }));
 
-  const response = await gemini.models.generateContentStream({
-    model: PROVIDER_MODELS.gemini[tier],
-    config: {
-      systemInstruction: systemPrompt,
-      maxOutputTokens: maxTokens,
-      temperature: TEMPERATURE[tier],
-    },
-    contents,
-  });
+  // 🆕 v45.5: 1회 자동 재시도 — preview 모델 간헐적 실패 대응
+  const MAX_RETRIES = 1;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await gemini.models.generateContentStream({
+        model: PROVIDER_MODELS.gemini[tier],
+        config: {
+          systemInstruction: systemPrompt,
+          maxOutputTokens: maxTokens,
+          temperature: TEMPERATURE[tier],
+        },
+        contents,
+      });
 
-  for await (const chunk of response) {
-    const text = chunk.text;
-    if (text) yield text;
+      let yieldedAny = false;
+      for await (const chunk of response) {
+        const text = chunk.text;
+        if (text) {
+          yieldedAny = true;
+          yield text;
+        }
+      }
+
+      // 빈 응답이면 재시도
+      if (!yieldedAny && attempt < MAX_RETRIES) {
+        console.warn(`[Gemini] ⚠️ 빈 응답 — 재시도 ${attempt + 1}/${MAX_RETRIES}`);
+        continue;
+      }
+
+      recordProviderUsage('gemini');
+      return;
+    } catch (err: any) {
+      if (attempt < MAX_RETRIES) {
+        console.warn(`[Gemini] ⚠️ 스트리밍 에러 → 재시도 ${attempt + 1}/${MAX_RETRIES}:`, err?.message);
+        await new Promise(r => setTimeout(r, 500)); // 0.5초 대기 후 재시도
+        continue;
+      }
+      throw err; // 재시도 소진 → 캐스케이드 폴백으로 전달
+    }
   }
-
-  recordProviderUsage('gemini');
 }
 
 // ============================================================
@@ -341,7 +385,7 @@ export async function generateWithCascade(
   return { text, usedProvider: last.provider, usedTier: last.tier };
 }
 
-/** 캐스케이드 스트리밍 — 4단계 폴백 체인 */
+/** 캐스케이드 스트리밍 — 4단계 폴백 체인 (🆕 v45.5: TTFB 15초 타임아웃 추가) */
 export async function* streamWithCascade(
   chain: { provider: Provider; tier: ModelTier; modelOverride?: string }[],
   systemPrompt: string,
@@ -357,7 +401,12 @@ export async function* streamWithCascade(
     const startTime = Date.now();
     try {
       const gen = streamWithProvider(provider, systemPrompt, messages, tier, maxTokens, modelOverride);
-      for await (const chunk of gen) {
+
+      // 🆕 v45.5: TTFB 타임아웃 — 첫 청크가 15초 내에 안 오면 폴백
+      // Gemini preview 모델이 가끔 연결만 맺고 먹통되는 문제 해결
+      const TTFB_TIMEOUT_MS = 15000;
+
+      for await (const chunk of wrapWithTTFBTimeout(gen, TTFB_TIMEOUT_MS, `${provider}/${tier}`)) {
         if (!hasYieldedAny) {
           console.log(`[ProviderRegistry] ✅ 스트리밍 시작: ${provider}/${tier} (model: ${actualModel}) | TTFB: ${Date.now() - startTime}ms`);
         }
@@ -384,6 +433,33 @@ export async function* streamWithCascade(
   // 모든 폴백 실패 → 마지막 강제
   const last = chain[chain.length - 1];
   const gen = streamWithProvider(last.provider, systemPrompt, messages, last.tier, maxTokens, last.modelOverride);
+  for await (const chunk of gen) {
+    yield chunk;
+  }
+}
+
+/**
+ * 🆕 v45.5: TTFB(Time to First Byte) 타임아웃 래퍼
+ * AsyncGenerator를 감싸서 첫 청크가 timeoutMs 내에 안 오면 에러 발생.
+ * 첫 청크 이후에는 타임아웃 없이 정상 스트리밍.
+ */
+async function* wrapWithTTFBTimeout<T>(
+  gen: AsyncGenerator<T>,
+  timeoutMs: number,
+  label: string
+): AsyncGenerator<T> {
+  // 첫 번째 next() 결과를 타임아웃과 경쟁
+  const first = await Promise.race([
+    gen.next(),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`[TTFB Timeout] ${label}: ${timeoutMs}ms 내 첫 응답 없음`)), timeoutMs)
+    ),
+  ]);
+
+  if (first.done) return;
+  yield first.value;
+
+  // 나머지는 타임아웃 없이 정상 스트리밍
   for await (const chunk of gen) {
     yield chunk;
   }
