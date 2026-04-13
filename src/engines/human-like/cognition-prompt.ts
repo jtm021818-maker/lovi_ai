@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 🆕 ACE Layer 3: 자율 사고 (Cognition Layer)
  *
  * AI가 응답하기 전에 "먼저 생각하는 과정"을 거치게 한다.
@@ -1266,7 +1266,7 @@ WARM_WRAP 발동 후엔 **새 상담 절대 금지**. 카페 문 닫혔어.
   // Phase 초반이면 목적 강조, 후반이면 전환 준비 힌트
   let transitionHint = '';
   if (phase === 'HOOK' && turnInPhase >= 2 && !completedEvents.includes('EMOTION_THERMOMETER')) {
-    transitionHint = '\n\n[잠깐 점검: 이 사람 핵심 감정이 뭔지 한 문장으로 말할 수 있어? "이 사람은 ○○ 때문에 힘든 거다" — 이게 되면 [SITUATION_CLEAR:상황|문제] 태그를 반드시 붙여. "좀 더 들어봐야 할 것 같은데"는 회피야. 파악됐으면 바로!]';
+    transitionHint = '\n\n[잠깐 점검: 이 사람 핵심 감정이 뭔지 한 문장으로 말할 수 있어? "이 사람은 ○○ 때문에 힘든 거다" — 둘 다 보이면 [SITUATION_CLEAR:상황|과제] 붙여. 아직 안 보이면 더 들어.]';
   } else if (phase === 'HOOK' && completedEvents.includes('EMOTION_THERMOMETER')) {
     transitionHint = '\n\n[마음읽기 했어. 유저 반응을 보고, 이제 자연스럽게 더 깊은 감정 탐색으로 넘어가.]';
   } else if (phase === 'MIRROR' && turnInPhase >= 2 && !completedEvents.includes('LUNA_STORY')) {
