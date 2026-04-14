@@ -615,16 +615,16 @@ export class HumanLikeEngine {
     return serializeStory(this.sessionStory);
   }
 
-  /** 🆕 v4: 코드 레벨 상황 파악 판단 — AI 태그 안전망 */
+  /** 🆕 v48: 코드 레벨 상황 파악 판단 — AI 태그 안전망 (완화) */
   isFormulationReady(): { ready: boolean; summary: string; problem: string } {
     const f = this.sessionStory.formulation;
     const hasHurt = !!f.hurtBecause && f.hurtBecause.length > 3;
-    const hasGoal = !!(f.wants || f.fears);
-    if (hasHurt && hasGoal) {
+    // v48: 상황만 파악되면 ready (해결과제는 없어도 됨 — 연극할 수 있으면 충분)
+    if (hasHurt) {
       return {
         ready: true,
         summary: f.hurtBecause!,
-        problem: f.wants || f.fears || '',
+        problem: f.wants || f.fears || '아직 모르겠음',
       };
     }
     return { ready: false, summary: '', problem: '' };

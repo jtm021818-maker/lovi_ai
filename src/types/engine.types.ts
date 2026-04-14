@@ -196,14 +196,19 @@ export interface InsightCardData {
   choices: { label: string; value: string }[];
 }
 
-/** 🆕 v17: 루나의 마음 거울 데이터 (EFT 표면→1차 감정) */
+/** 🆕 v48: 루나의 1인 연극 거울 (상황 재연 + 속마음 reveal) */
 export interface EmotionMirrorData {
-  surfaceEmotion: string;     // 겉으로 보이는 감정 (예: "화가 나는 상태")
+  surfaceEmotion: string;     // 겉으로 보이는 감정 (내부 추적용)
   surfaceEmoji: string;       // 표면 감정 이모지
-  deepEmotion: string;        // 속마음 진짜 감정 (예: "서운하고 불안한 마음")
+  deepEmotion: string;        // 속마음 진짜 감정 (내부 추적용)
   deepEmoji: string;          // 깊은 감정 이모지
-  lunaMessage: string;        // 루나의 한마디 (예: "이거 맞아? 아니면 다른 느낌이야?")
+  lunaMessage: string;        // 루나의 마무리 한마디
   choices: { label: string; value: string }[];
+
+  // 🆕 v48: 1인 연극 모드
+  sceneTitle?: string;        // 장면 제목 (예: "읽씹 당하는 그 순간")
+  sceneLines?: string[];      // 연극 대사 3~5줄 (지문+대사 혼합, 예: "(폰 들고 씩씩대며) 분명 읽었잖아...")
+  reveal?: string;            // 속마음 reveal 대사 (예: "...근데 사실 화가 나는 게 아니라, 나한테 관심 없을까봐 무서운 거잖아")
 }
 
 /** 🆕 ACE v4: 루나의 이야기 데이터 (자기개방 + 클리프행어) */

@@ -9,6 +9,7 @@ import type { PipelineResult, NudgeAction, StateResult, StrategyResult, Suggesti
 import { accumulateSignal, setSurfaceFromThermometer, isReadyForMirror } from '@/engines/emotion-accumulator';
 import { generateDynamicMirror } from '@/engines/emotion-accumulator/mirror-generator';
 import { generateDynamicPatterns } from '@/engines/emotion-accumulator/pattern-generator';
+import { generateSituationScene } from '@/engines/situation-scene-generator';
 import { matchSolutions, calculateReadiness, getSolutionDictionaryPrompt, parseAxesFromMessage, analyzeAxesState, generateDiagnosticPrompt, mergeLLMAxes, markAxisAsked, generateAxisChoices } from '@/engines/solution-dictionary';
 import type { ReadIgnoredAxes, AxisChoice } from '@/engines/solution-dictionary';
 import type { PersonaMode, PanelResponse } from '@/types/persona.types';
@@ -1425,11 +1426,22 @@ ${researchResult.insight}
               ?? (stateResult.emotionReason
                 ? stateResult.emotionReason.replace(/느껴졌어요|보여요|것 같아요/g, '').trim()
                 : '');
-            // 🆕 v4: 상황 파악 카드로 교체 (마음읽기 → 상황 요약)
-            // SITUATION_CLEAR 태그가 있으면 파싱된 데이터 사용, 없으면 코드 레벨 추정
+            // 🆕 v48: 상황 재연 1인 연극 (마음읽기 → 상황 연극)
             const sitSummary = hlrePost.situationSummary ?? surface;
             const sitProblem = hlrePost.coreProblem ?? deep;
-            eventsToFire.push(createSituationSummary(sitSummary, sitProblem, avgScore));
+            // 최근 유저 메시지 추출 (연극 대사 생성용)
+            const recentUserMsgs = chatHistory
+              .filter((m: { role: string }) => m.role === 'user')
+              .slice(-4)
+              .map((m: { content: string }) => m.content);
+            // 1인 연극 씬 생성 (실패 시 null → 기존 텍스트 폴백)
+            let sceneData: { sceneTitle: string; sceneLines: string[]; problemReveal: string } | null = null;
+            try {
+              sceneData = await generateSituationScene(sitSummary, sitProblem, recentUserMsgs);
+            } catch (err) {
+              console.warn('[Pipeline] 🎭 상황 연극 생성 실패, 텍스트 폴백:', err);
+            }
+            eventsToFire.push(createSituationSummary(sitSummary, sitProblem, avgScore, undefined, sceneData));
             updatedCompletedEvents.push('EMOTION_THERMOMETER');
             updatedLastEventTurn = turnCount;
             console.log(`[Pipeline] 📋 AI 자율 상황파악 발동! "${sitSummary}" | 핵심: "${sitProblem}"`);
@@ -1445,10 +1457,19 @@ ${researchResult.insight}
               const avgScore = emotionBaseline !== undefined
                 ? (emotionBaseline + stateResult.emotionScore) / 2
                 : stateResult.emotionScore;
-              eventsToFire.push(createSituationSummary(formulationCheck.summary, formulationCheck.problem, avgScore));
+              // 🆕 v48: 안전망도 연극 시도
+              const recentMsgsForScene = chatHistory
+                .filter((m: { role: string }) => m.role === 'user')
+                .slice(-4)
+                .map((m: { content: string }) => m.content);
+              let fallbackScene: { sceneTitle: string; sceneLines: string[]; problemReveal: string } | null = null;
+              try {
+                fallbackScene = await generateSituationScene(formulationCheck.summary, formulationCheck.problem, recentMsgsForScene);
+              } catch (_) { /* 텍스트 폴백 */ }
+              eventsToFire.push(createSituationSummary(formulationCheck.summary, formulationCheck.problem, avgScore, undefined, fallbackScene));
               updatedCompletedEvents.push('EMOTION_THERMOMETER');
               updatedLastEventTurn = turnCount;
-              console.log(`[Pipeline] 📋 코드 안전망 상황파악 발동! "${formulationCheck.summary}" | "${formulationCheck.problem}" (formulation 기반)`);
+              console.log(`[Pipeline] 📋 코드 안전망 상황파악 발동! "${formulationCheck.summary}" | "${formulationCheck.problem}" (formulation 기반, scene=${!!fallbackScene})`);
             }
           }
 

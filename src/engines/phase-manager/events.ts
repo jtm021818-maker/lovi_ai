@@ -145,19 +145,19 @@ export function createMindReading(
 }
 
 /**
- * 🆕 v4: 상황 파악 카드 (HOOK 구간 — 마음읽기 대체)
+ * 🆕 v48: 상황 재연 1인 연극 카드 (HOOK 구간)
  *
- * 기존 마음읽기: "깊은 감정 추측" → 틀릴 수 있음, 좁음
- * 새 상황 파악: "전체 상황 요약 확인" → 넓음, 신뢰감 높음
+ * 기존: "내가 이해한 상황" 텍스트 나열 → 노잼
+ * 변경: 루나가 사용자 상황을 1인 연극으로 재연 → "그래서 문제는 이거지?!" → 재미+공감
  *
- * "야 내가 들은 거 정리해볼게" → 상황 + 핵심 문제 → 맞아?
- * 루나 스티커를 적극 활용하여 감정적 공감도 함께 전달
+ * sceneData가 있으면 연극 모드, 없으면 기존 텍스트 폴백
  */
 export function createSituationSummary(
   situationSummary: string,
   coreProblem: string,
   emotionScore: number,
   stickerId?: string,
+  sceneData?: { sceneTitle: string; sceneLines: string[]; problemReveal: string } | null,
 ): PhaseEvent {
   // 스티커 자동 선택 (감정 점수 기반)
   const autoSticker = stickerId ?? (
@@ -167,12 +167,19 @@ export function createSituationSummary(
     'proud'
   );
 
-  const openers = [
-    '야 내가 여기까지 들은 거 정리해볼게',
-    '잠깐, 내가 이해한 거 맞는지 봐봐',
-    '야 근데 내가 듣고 이해한 게 맞아?',
-    '내가 정리해볼게 잠깐만',
-  ];
+  const openers = sceneData
+    ? [
+        '잠깐 내가 니 상황 한번 해볼게 ㅋㅋ',
+        '야 봐봐 내가 니 상황 재연해볼게',
+        '잠깐만, 내가 느낀 거 보여줄게',
+        '야 이거 맞는지 봐봐 ㅋㅋ',
+      ]
+    : [
+        '야 내가 여기까지 들은 거 정리해볼게',
+        '잠깐, 내가 이해한 거 맞는지 봐봐',
+        '야 근데 내가 듣고 이해한 게 맞아?',
+        '내가 정리해볼게 잠깐만',
+      ];
   const lunaMessage = openers[Math.floor(Math.random() * openers.length)];
 
   return {
@@ -186,13 +193,17 @@ export function createSituationSummary(
       lunaMessage,
       lunaConfidence: Math.min(1, Math.abs(emotionScore) * 0.15 + 0.4),
       aiAssessedScore: Math.round(Math.max(-5, Math.min(5, emotionScore))),
-      // 🆕 상황 파악 카드 전용 필드
-      eventStyle: 'situation_summary',
+      // 🆕 v48: 연극 모드 or 텍스트 폴백
+      eventStyle: sceneData ? 'situation_scene' : 'situation_summary',
       stickerId: autoSticker,
       situationSummary,
       coreProblem,
+      // 🆕 v48: 1인 연극 데이터
+      sceneTitle: sceneData?.sceneTitle,
+      sceneLines: sceneData?.sceneLines,
+      problemReveal: sceneData?.problemReveal,
       choices: [
-        { label: '맞아 그래!', value: 'confirm', emoji: '💡' },
+        { label: '엇 맞아 ㅋㅋ', value: 'confirm', emoji: '😂' },
         { label: '좀 다른데...', value: 'different', emoji: '🤔' },
         { label: '더 있어', value: 'more', emoji: '📝' },
       ],
@@ -418,68 +429,157 @@ export function createEmotionMirror(
     };
   }
 
-  // 폴백: 기존 하드코딩 시나리오 매핑
-  // 감정 점수 기반 표면/깊은 감정 매핑
+  // 🆕 v48: 폴백 — 시나리오별 1인 연극 하드코딩
   const score = stateResult.emotionScore;
 
-  // 시나리오별 표면→깊은 감정 매핑 (EFT 기반)
-  type EmotionPair = { surfaceEmoji: string; surface: string; deepEmoji: string; deep: string };
-  const scenarioEmotions: Record<string, EmotionPair> = {
+  type SceneData = {
+    surfaceEmoji: string; surface: string;
+    deepEmoji: string; deep: string;
+    sceneTitle: string; sceneLines: string[];
+    reveal: string;
+  };
+
+  const scenarioScenes: Record<string, SceneData> = {
     [RelationshipScenario.READ_AND_IGNORED]: {
       surfaceEmoji: '😤', surface: '답답하고 짜증나는 상태',
-      deepEmoji: '💔', deep: '무시당한 것 같아서 서운하고, 나한테 관심 없는 건 아닌지 불안한 마음',
+      deepEmoji: '💔', deep: '나한테 관심 없는 건 아닌지 불안한 마음',
+      sceneTitle: '읽씹 당하는 그 순간',
+      sceneLines: [
+        '(폰 확 던지며) 아 진짜 왜 읽고 씹어? 한 글자라도 치든가',
+        '(근데 또 폰 슬쩍 확인하면서) ...혹시 답장 왔나',
+        '(한숨) ...솔직히 화가 나는 게 아니라',
+        '(작은 목소리로) 나한테 이제 관심 없어진 건 아닌지... 그게 무서운 거야',
+      ],
+      reveal: '화가 나는 게 아니라, 관심 밖이 된 건 아닌지 무서운 거잖아',
     },
     [RelationshipScenario.GHOSTING]: {
       surfaceEmoji: '😠', surface: '화나고 억울한 상태',
-      deepEmoji: '😢', deep: '내가 뭘 잘못한 건지 모르겠어서 혼란스럽고, 버려진 것 같은 두려움',
+      deepEmoji: '😢', deep: '버려진 것 같은 두려움',
+      sceneTitle: '연락이 끊긴 그 밤',
+      sceneLines: [
+        '(마지막 카톡 올려보며) 이게 3일 전이네... 아 진짜 나쁜 놈',
+        '(톡 창 열었다 닫았다 반복) 내가 먼저 할까... 아니 왜 내가?',
+        '(침대에 누우며) ...근데 계속 생각나',
+        '(이불 뒤집어쓰며) 내가 뭘 잘못한 건지... 그게 제일 모르겠어',
+      ],
+      reveal: '억울한 게 아니라, 이유도 모르고 버려진 것 같은 게 제일 무서운 거잖아',
     },
     [RelationshipScenario.JEALOUSY]: {
       surfaceEmoji: '😡', surface: '질투나고 의심되는 상태',
-      deepEmoji: '😰', deep: '나를 떠날까봐 불안하고, 내가 충분하지 않은 건 아닌지 걱정되는 마음',
+      deepEmoji: '😰', deep: '내가 충분하지 않은 건 아닌지 걱정',
+      sceneTitle: '인스타 스토리 확인하는 나',
+      sceneLines: [
+        '(인스타 뒤지며) 이 여자는 또 누구야... 좋아요까지 눌렀네?',
+        '(폰 꾹 누르며) 아 별거 아니겠지... 별거 아닌 거야...',
+        '(근데 또 프로필 들어가봄) ...왜 나한테는 이런 거 안 하면서',
+        '(폰 엎으며 작게) 나보다 저 사람이 더 좋은 건 아닌지...',
+      ],
+      reveal: '질투가 아니라, 내가 충분하지 않은 건 아닌지 불안한 거잖아',
     },
     [RelationshipScenario.LONG_DISTANCE]: {
       surfaceEmoji: '😔', surface: '외롭고 답답한 상태',
-      deepEmoji: '💜', deep: '보고 싶은데 못 봐서 힘들고, 마음이 멀어질까봐 불안한 마음',
+      deepEmoji: '💜', deep: '마음이 멀어질까봐 불안한 마음',
+      sceneTitle: '영통 끊고 난 뒤',
+      sceneLines: [
+        '(영통 끝나고 폰 내려놓으며) 하... 또 화면으로만 봤네',
+        '(빈 방 둘러보며) 옆에 있으면 좋겠다... 진짜로',
+        '(SNS 보다가) 다들 같이 다니는데... 우린 언제',
+        '(이불 끌어안으며) ...점점 할 말이 줄어드는 것 같아서 무서워',
+      ],
+      reveal: '외로운 게 아니라, 마음까지 멀어지고 있는 건 아닌지 그게 무서운 거잖아',
     },
     [RelationshipScenario.INFIDELITY]: {
       surfaceEmoji: '🤬', surface: '분노와 배신감 상태',
-      deepEmoji: '💔', deep: '내가 부족해서 그런 건지 자책하고, 앞으로 어떡해야 할지 두려운 마음',
+      deepEmoji: '💔', deep: '내가 부족했나 자책하는 마음',
+      sceneTitle: '알게 된 그 순간',
+      sceneLines: [
+        '(손 떨리며) 이게 진짜야...? 아 진짜 미쳤나봐 이 사람',
+        '(카톡 증거 다시 보며) 죽여버리고 싶다... 진짜로',
+        '(근데 갑자기 멈추며) ...근데 왜 나는',
+        '(울컥하며) 내가 뭐가 부족해서 이런 건지... 자꾸 그 생각이 나',
+      ],
+      reveal: '배신감 뒤에, 내가 부족한 사람인 건 아닌지 자책하고 있는 거잖아',
     },
     [RelationshipScenario.BREAKUP_CONTEMPLATION]: {
       surfaceEmoji: '😐', surface: '지치고 무기력한 상태',
-      deepEmoji: '😢', deep: '떠나고 싶으면서도 남고 싶은 마음, 둘 다 있어서 혼란스러운 마음',
+      deepEmoji: '😢', deep: '떠나고 싶으면서도 남고 싶은 혼란',
+      sceneTitle: '헤어질까 말까 고민하는 밤',
+      sceneLines: [
+        '(천장 보며) 이러다 또 하루 갔네... 어제도 싸웠는데',
+        '(카톡 프로필 보며) 헤어지자고 할까... 아 근데',
+        '(예전 사진 넘기다가) ...이때는 좋았는데',
+        '(폰 덮으며) 끝내는 것도, 계속하는 것도... 둘 다 무서워',
+      ],
+      reveal: '지친 게 아니라, 어떤 선택을 해도 후회할 것 같아서 무서운 거잖아',
     },
     [RelationshipScenario.BOREDOM]: {
       surfaceEmoji: '😑', surface: '지루하고 무감각한 상태',
-      deepEmoji: '😟', deep: '이게 맞나 싶은 불안, 예전 같은 설렘이 돌아올 수 있을지 걱정되는 마음',
+      deepEmoji: '😟', deep: '이게 맞나 싶은 불안',
+      sceneTitle: '옆에 있어도 혼자인 느낌',
+      sceneLines: [
+        '(같이 있는데 각자 폰 보며) ...오늘도 할 말이 없네',
+        '(상대 프로필 보다가) 언제부터 이랬지... 설레던 적이 있었나',
+        '(한숨) 그냥 습관으로 만나는 건 아닌지',
+        '(창밖 보며 작게) 이게 사랑 맞나... 아닌 걸 모른 척 하는 건 아닌지',
+      ],
+      reveal: '지루한 게 아니라, 이게 진짜 사랑인지 확인하기 무서운 거잖아',
     },
   };
 
-  // 기본 감정 매핑 (시나리오 없거나 GENERAL)
-  const defaultPair: EmotionPair = score <= -3
-    ? { surfaceEmoji: '😢', surface: '많이 힘들고 지친 상태', deepEmoji: '💔', deep: '상처받고 불안한 마음' }
+  // 기본 폴백 (시나리오 없거나 GENERAL)
+  const defaultScene: SceneData = score <= -3
+    ? {
+        surfaceEmoji: '😢', surface: '많이 힘들고 지친 상태',
+        deepEmoji: '💔', deep: '상처받고 불안한 마음',
+        sceneTitle: '혼자 삼키는 밤',
+        sceneLines: [
+          '(이불 속에서) 아... 오늘도 힘들었다 진짜',
+          '(눈 감으며) 괜찮은 척 했는데... 하나도 안 괜찮아',
+          '(뒤척이며) 누구한테 말해도 모를 거야 이 기분',
+          '(작게) ...그냥 안아줬으면 좋겠어',
+        ],
+        reveal: '괜찮은 척 하고 있지만, 사실은 하나도 안 괜찮은 거잖아',
+      }
     : score <= -1
-    ? { surfaceEmoji: '😔', surface: '답답하고 복잡한 상태', deepEmoji: '😢', deep: '서운하고 걱정되는 마음' }
-    : { surfaceEmoji: '😐', surface: '복잡한 감정 상태', deepEmoji: '💭', deep: '정리되지 않는 여러 감정이 섞인 마음' };
+    ? {
+        surfaceEmoji: '😔', surface: '답답하고 복잡한 상태',
+        deepEmoji: '😢', deep: '서운하고 걱정되는 마음',
+        sceneTitle: '복잡한 머릿속',
+        sceneLines: [
+          '(멍하니 앉아서) 뭐가 문제인지도 모르겠어',
+          '(머리 싸매며) 생각이 너무 많아... 정리가 안 돼',
+          '(폰 보다가 덮으며) 말해봤자 뭐가 달라지겠어',
+          '(작게 혼잣말) ...근데 이대로는 싫어',
+        ],
+        reveal: '답답한 게 아니라, 어떻게 해야 할지 몰라서 불안한 거잖아',
+      }
+    : {
+        surfaceEmoji: '😐', surface: '복잡한 감정 상태',
+        deepEmoji: '💭', deep: '정리되지 않는 여러 감정',
+        sceneTitle: '감정의 실타래',
+        sceneLines: [
+          '(가만히 앉아서) 나 지금 뭔 감정인지도 모르겠어',
+          '(손톱 뜯으며) 화난 건지 슬픈 건지 그냥 피곤한 건지',
+          '(고개 기울이며) ...뭔가 정리하고 싶은데',
+          '(한숨) 내가 뭘 원하는지부터 모르겠어 사실',
+        ],
+        reveal: '복잡한 게 아니라, 내 감정을 아직 마주하기 어려운 거일 수도 있어',
+      };
 
-  const pair = (scenario && scenarioEmotions[scenario]) ?? defaultPair;
+  const scene = (scenario && scenarioScenes[scenario]) ?? defaultScene;
 
-  // 🆕 v4 ACE: 자연스러운 감정 거울 — 분석이 아니라 대화 느낌
-  const mirrorOpeners = [
-    '야 근데 나 좀 느껴지는 게 있어... 이거 맞는지 봐봐',
-    '잠깐, 나 듣다 보니까 이런 느낌인 거 같은데',
-    '근데 있잖아... 겉으로는 이런 거 같은데 사실은 좀 다른 거 같아',
-    '내가 들은 거 정리해보면... 이런 느낌인 거 같거든',
-  ];
   const data: EmotionMirrorData = {
-    surfaceEmotion: pair.surface,
-    surfaceEmoji: pair.surfaceEmoji,
-    deepEmotion: pair.deep,
-    deepEmoji: pair.deepEmoji,
-    lunaMessage: mirrorOpeners[Math.floor(Math.random() * mirrorOpeners.length)],
+    surfaceEmotion: scene.surface,
+    surfaceEmoji: scene.surfaceEmoji,
+    deepEmotion: scene.deep,
+    deepEmoji: scene.deepEmoji,
+    lunaMessage: '이런 느낌이지? 🦊',
+    sceneTitle: scene.sceneTitle,
+    sceneLines: scene.sceneLines,
+    reveal: scene.reveal,
     choices: [
-      { label: '맞아 그런 것 같아', value: 'confirm' },
-      { label: '음 좀 다른데', value: 'different' },
+      { label: '엇 맞아...', value: 'confirm' },
+      { label: '아 좀 다른데ㅋㅋ', value: 'different' },
     ],
   };
 
