@@ -469,9 +469,9 @@ export class HumanLikeEngine {
 
       storyPrompt: buildStoryPrompt(this.sessionStory),
 
-      relationshipsPrompt: buildRelationshipPrompt(this.userModel.relationships),
+      relationshipsPrompt: buildRelationshipPrompt(this.userModel?.relationships ?? []),
       sharedLanguagePrompt: buildSharedLanguagePrompt(
-        (this.userModel.lunaRelationship.sharedLanguage ?? []).map(
+        (this.userModel?.lunaRelationship?.sharedLanguage ?? []).map(
           (s: { term: string; meaning: string }) => ({ ...s, createdBy: 'user' as const })
         ),
       ),
@@ -479,9 +479,9 @@ export class HumanLikeEngine {
       triggeredMemory: this.lastMemoryResult?.injection ?? null,
 
       // 🆕 행동 패턴 인식
-      lunaRecentActionTypes: this.recentActionTypes.map(String),
-      actionPatternHint: buildActionPatternHint(this.recentActionTypes),
-      formattedRecentActions: formatRecentActions(this.recentActionTypes, this.lunaRecentSummaries),
+      lunaRecentActionTypes: (this.recentActionTypes ?? []).map(String),
+      actionPatternHint: buildActionPatternHint(this.recentActionTypes ?? []),
+      formattedRecentActions: formatRecentActions(this.recentActionTypes ?? [], this.lunaRecentSummaries ?? []),
     };
 
     // 기억 컨텍스트 추가
@@ -516,16 +516,16 @@ export class HumanLikeEngine {
     if (unspokenHint) parts.push(unspokenHint);
 
     // 친밀도 행동 힌트 (맥락 — 지시 아님)
-    const intimacyHint = getIntimacyBehavior(this.userModel.lunaRelationship.intimacyScore);
+    const intimacyHint = getIntimacyBehavior(this.userModel?.lunaRelationship?.intimacyScore ?? 10);
     if (intimacyHint) parts.push(intimacyHint);
 
     // 루나 취약함 (확률적 — 사람다움)
-    const vulnHint = getLunaVulnerabilityHint(this.turnCount, this.userModel.lunaRelationship.intimacyScore);
+    const vulnHint = getLunaVulnerabilityHint(this.turnCount, this.userModel?.lunaRelationship?.intimacyScore ?? 10);
     if (vulnHint) parts.push(vulnHint);
 
     // 🆕 v3: 감정-행동 일관성 힌트 (Feeling-First)
     // 루나가 화난 상태인데 공감만 계속하면 → "화난 대로 보여줘도 돼"
-    if (this.lunaEmotion.currentIntensity > 0.5 && this.recentActionTypes.length >= 2) {
+    if (this.lunaEmotion.currentIntensity > 0.5 && (this.recentActionTypes ?? []).length >= 2) {
       const emotionBehaviorMap: Record<string, string[]> = {
         angry: ['side_take', 'opinion'],
         sad: ['empathy', 'experience'],

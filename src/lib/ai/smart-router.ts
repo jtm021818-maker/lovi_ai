@@ -1,9 +1,9 @@
 /**
  * 스마트 라우터 — 태스크×전략별 프로바이더 캐스케이드 체인 결정
  *
- * [v25 원칙 — 무료 100명/일 설계]
- * 1. 상담 메인: Gemini 2.5 Flash (한국어 최강) → Qwen3-32B → Cerebras 70B
- * 2. 라운지: Groq Qwen3-32B (한도 절약) → Cerebras 70B → Gemini Flash-Lite
+ * [v47 원칙 — 무료 100명/일 설계]
+ * 1. 상담 메인: Gemini 2.5 Flash (한국어 최강) → Qwen3-32B → Cerebras GPT-OSS 120B
+ * 2. 라운지: Groq Qwen3-32B (한도 절약) → Cerebras 120B → Gemini Flash-Lite
  * 3. 이벤트(거울/패턴): Gemini 2.5 Flash (임팩트 순간 집중)
  * 4. 상태분석/검증: 8B 모델 (15,000+/일)
  * 5. 위기/감정거울: Gemini 2.5 Flash
