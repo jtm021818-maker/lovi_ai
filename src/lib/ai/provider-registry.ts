@@ -40,9 +40,9 @@ export type ModelTier = 'haiku' | 'sonnet' | 'opus';
 /** 프로바이더별 모델 매핑 */
 const PROVIDER_MODELS: Record<Provider, Record<ModelTier, string>> = {
   gemini: {
-    haiku: 'gemini-3.1-flash-lite-preview',          // v48: 3.1 flash-lite
-    sonnet: 'gemini-3.1-flash-lite-preview',         // v48: 상담 메인
-    opus: 'gemini-3.1-flash-lite-preview',           // v48: 위기 대응
+    haiku: 'gemini-2.5-flash',          // 🆕 503 에러 회피용 안정화 모델
+    sonnet: 'gemini-2.5-flash',         // 🆕 503 에러 회피용 안정화 모델
+    opus: 'gemini-2.5-flash',           // 🆕 503 에러 회피용 안정화 모델
   },
   groq: {
     haiku: 'llama-3.1-8b-instant',
@@ -51,8 +51,8 @@ const PROVIDER_MODELS: Record<Provider, Record<ModelTier, string>> = {
   },
   cerebras: {
     haiku: 'llama3.1-8b',           // 🆕 v47: ID 수정 (llama-3.1-8b → llama3.1-8b)
-    sonnet: 'gpt-oss-120b',         // 🆕 v47: llama-3.1-70b deprecated(404) → gpt-oss-120b
-    opus: 'gpt-oss-120b',           // 🆕 v47: 120B (최후 폴백, 131k context)
+    sonnet: 'llama3.1-8b',          // 🆕 gpt-oss-120b 404 에러로 확실히 작동하는 8B로 통일
+    opus: 'llama3.1-8b',            // 🆕 최후 폴백이므로 에러 방지 최우선
   },
 };
 
