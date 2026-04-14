@@ -147,10 +147,8 @@ export function createMindReading(
 /**
  * 🆕 v48: 상황 재연 1인 연극 카드 (HOOK 구간)
  *
- * 기존: "내가 이해한 상황" 텍스트 나열 → 노잼
- * 변경: 루나가 사용자 상황을 1인 연극으로 재연 → "그래서 문제는 이거지?!" → 재미+공감
- *
- * sceneData가 있으면 연극 모드, 없으면 기존 텍스트 폴백
+ * 항상 연극 포맷. LLM 씬 있으면 그거 쓰고, 없으면 상황요약으로 자동 구성.
+ * 절대 옛날 텍스트 폴백으로 안 떨어짐.
  */
 export function createSituationSummary(
   situationSummary: string,
@@ -159,49 +157,34 @@ export function createSituationSummary(
   stickerId?: string,
   sceneData?: { sceneTitle: string; sceneLines: string[]; problemReveal: string } | null,
 ): PhaseEvent {
-  // 스티커 자동 선택 (감정 점수 기반)
-  const autoSticker = stickerId ?? (
-    emotionScore <= -4 ? 'comfort' :
-    emotionScore <= -2 ? 'think' :
-    emotionScore <= 0 ? 'think' :
-    'proud'
-  );
+  // 🆕 v48: LLM 씬 없으면 상황요약 텍스트로 자동 연극 구성 (항상 연극 포맷)
+  const scene = sceneData ?? buildFallbackScene(situationSummary, coreProblem);
 
-  const openers = sceneData
-    ? [
-        '잠깐 내가 니 상황 한번 해볼게 ㅋㅋ',
-        '야 봐봐 내가 니 상황 재연해볼게',
-        '잠깐만, 내가 느낀 거 보여줄게',
-        '야 이거 맞는지 봐봐 ㅋㅋ',
-      ]
-    : [
-        '야 내가 여기까지 들은 거 정리해볼게',
-        '잠깐, 내가 이해한 거 맞는지 봐봐',
-        '야 근데 내가 듣고 이해한 게 맞아?',
-        '내가 정리해볼게 잠깐만',
-      ];
+  const openers = [
+    '잠깐 내가 니 상황 한번 해볼게 ㅋㅋ',
+    '야 봐봐 내가 니 상황 재연해볼게',
+    '잠깐만, 내가 느낀 거 보여줄게',
+    '야 이거 맞는지 봐봐 ㅋㅋ',
+  ];
   const lunaMessage = openers[Math.floor(Math.random() * openers.length)];
 
   return {
-    type: 'MIND_READING' as PhaseEventType, // 기존 타입 재활용 (프론트엔드 호환)
+    type: 'MIND_READING' as PhaseEventType,
     phase: 'HOOK',
     data: {
-      // 기존 MIND_READING 필드 호환
       surfaceEmotion: situationSummary,
       deepGuess: coreProblem,
       fullText: situationSummary,
       lunaMessage,
       lunaConfidence: Math.min(1, Math.abs(emotionScore) * 0.15 + 0.4),
       aiAssessedScore: Math.round(Math.max(-5, Math.min(5, emotionScore))),
-      // 🆕 v48: 연극 모드 or 텍스트 폴백
-      eventStyle: sceneData ? 'situation_scene' : 'situation_summary',
-      stickerId: autoSticker,
+      // 🆕 v48: 항상 연극 모드
+      eventStyle: 'situation_scene',
       situationSummary,
       coreProblem,
-      // 🆕 v48: 1인 연극 데이터
-      sceneTitle: sceneData?.sceneTitle,
-      sceneLines: sceneData?.sceneLines,
-      problemReveal: sceneData?.problemReveal,
+      sceneTitle: scene.sceneTitle,
+      sceneLines: scene.sceneLines,
+      problemReveal: scene.problemReveal,
       choices: [
         { label: '엇 맞아 ㅋㅋ', value: 'confirm', emoji: '😂' },
         { label: '좀 다른데...', value: 'different', emoji: '🤔' },
@@ -209,6 +192,34 @@ export function createSituationSummary(
       ],
     } as unknown as Record<string, unknown>,
   };
+}
+
+/**
+ * 🆕 v48: LLM 씬 생성 실패 시 상황요약 텍스트로 자동 연극 구성
+ * situationSummary를 루나가 연기하는 형태로 변환
+ */
+function buildFallbackScene(
+  situationSummary: string,
+  coreProblem: string,
+): { sceneTitle: string; sceneLines: string[]; problemReveal: string } {
+  // 상황요약에서 핵심 키워드 추출해서 장면 제목 생성
+  const titleCandidates = situationSummary.match(/[가-힣]+(?:이|가|을|를|에서|한테|때문)/g);
+  const sceneTitle = titleCandidates
+    ? titleCandidates[0].replace(/이$|가$|을$|를$|에서$|한테$|때문$/, '') + '... 그 상황'
+    : '너의 그 상황';
+
+  // 상황요약을 연극 대사로 변환
+  const sceneLines = [
+    `(루나가 니 상황 재연 중) "${situationSummary}"`,
+    '(고개 끄덕이며) 음... 그래 이런 거지?',
+    `(눈 마주치며) 그래서 지금 이게 제일 마음에 걸리는 거잖아`,
+  ];
+
+  const problemReveal = coreProblem && coreProblem !== '아직 모르겠음'
+    ? `그래서 네 문제는, ${coreProblem} — 이거지?`
+    : `그래서 네 상황이 이런 거지? 내가 제대로 이해한 거 맞아?`;
+
+  return { sceneTitle, sceneLines, problemReveal };
 }
 
 /**

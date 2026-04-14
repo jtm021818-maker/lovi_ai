@@ -40,9 +40,9 @@ export type ModelTier = 'haiku' | 'sonnet' | 'opus';
 /** 프로바이더별 모델 매핑 */
 const PROVIDER_MODELS: Record<Provider, Record<ModelTier, string>> = {
   gemini: {
-    haiku: 'gemini-2.5-flash',          // 🆕 503 에러 회피용 안정화 모델
-    sonnet: 'gemini-2.5-flash',         // 🆕 503 에러 회피용 안정화 모델
-    opus: 'gemini-2.5-flash',           // 🆕 503 에러 회피용 안정화 모델
+    haiku: 'gemini-3.1-flash-lite',     // 상담 메인 모델
+    sonnet: 'gemini-3.1-flash-lite',    // 상담 메인 모델
+    opus: 'gemini-3.1-flash-lite',      // 상담 메인 모델
   },
   groq: {
     haiku: 'llama-3.1-8b-instant',
