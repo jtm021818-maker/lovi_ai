@@ -1277,7 +1277,22 @@ ${researchResult.insight}
     }
 
     messages.push({ role: 'user', content: userMessage });
-    const recentMessages = messages.slice(-20);
+    let recentMessages = messages.slice(-20);
+
+    // 🆕 v47: 프롬프트 크기 측정 + 자동 트리밍 (Groq 413 방어)
+    const estimateTokens = (text: string) => Math.ceil(text.length / 2.5); // 한글 ~2.5자/토큰
+    const systemTokens = estimateTokens(systemPrompt);
+    const msgTokens = recentMessages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+    const totalTokens = systemTokens + msgTokens;
+    console.log(`[Pipeline] 📏 프롬프트 크기: system=${systemTokens}토큰, msgs=${msgTokens}토큰 (${recentMessages.length}개), total≈${totalTokens}토큰`);
+
+    // 32K 컨텍스트 윈도우 기준 80% = 25,600 토큰 초과 시 히스토리 축소
+    if (totalTokens > 25600 && recentMessages.length > 4) {
+      const targetMsgs = Math.max(4, Math.floor(recentMessages.length * 0.5));
+      recentMessages = recentMessages.slice(-targetMsgs);
+      const newMsgTokens = recentMessages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+      console.log(`[Pipeline] ✂️ 히스토리 축소: ${messages.length}→${recentMessages.length}개 (${msgTokens}→${newMsgTokens}토큰)`);
+    }
 
     if (persona === 'panel') {
       // 패널 모드: 구조화 출력 (비스트리밍) — 3사 캐스케이드
