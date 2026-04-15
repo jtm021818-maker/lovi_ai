@@ -530,6 +530,13 @@ export async function POST(req: NextRequest) {
               );
               break;
 
+            // 🆕 v48: 캐스케이드 재시도 상태 — 클라이언트 UI에 재시도 진행 표시
+            case 'retry_status':
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ type: 'retry_status', data: event.data })}\n\n`)
+              );
+              break;
+
             case 'done':
               responseMode = (event.data as any).responseMode;
               updatedAxes = (event.data as any).updatedAxes;

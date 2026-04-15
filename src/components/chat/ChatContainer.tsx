@@ -27,6 +27,8 @@ import LunaThoughtHistory from './LunaThoughtHistory';
 import SituationTimeline from './SituationTimeline';
 // 🆕 v40: 루나 딥리서치 "진짜 고민 중" 로딩 UI
 import LunaThinkingDeep from './LunaThinkingDeep';
+// 🆕 v48: 캐스케이드 재시도 UI
+import LunaRetrying from './LunaRetrying';
 // 🆕 v41: 친밀도 레벨업 축하 팝업
 import IntimacyLevelUp from '@/components/intimacy/IntimacyLevelUp';
 // 🆕 v35: 모드별 SOLVE 이벤트 UI
@@ -105,7 +107,7 @@ const SCENARIO_LABELS: Record<RelationshipScenario, { icon: string; label: strin
 };
 
 export default function ChatContainer({ sessionId }: ChatContainerProps) {
-  const { messages, isLoading, nudges, stateResult, suggestions, panelData, axesProgress, phaseEvents, currentPhase, phaseProgress, sessionStatus, sessionSummary, sendMessage, pendingEventLock, lunaThinking, understandingLevel, thinkingDeep, intimacyLevelUp, dismissIntimacyLevelUp } = useChat(sessionId);
+  const { messages, isLoading, nudges, stateResult, suggestions, panelData, axesProgress, phaseEvents, currentPhase, phaseProgress, sessionStatus, sessionSummary, sendMessage, pendingEventLock, lunaThinking, understandingLevel, thinkingDeep, retryStatus, intimacyLevelUp, dismissIntimacyLevelUp } = useChat(sessionId);
   const { toggle: toggleSpeak, isSpeaking, speak, isSupported: ttsSupported, settings: voiceSettings, updateSettings: updateVoiceSettings } = useLunaVoice();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activePersona, setActivePersona] = useState<PersonaMode>('luna');
@@ -549,6 +551,14 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
             <LunaThinkingDeep
               phrases={thinkingDeep.phrases}
               done={!thinkingDeep.active}
+            />
+          )}
+
+          {/* 🆕 v48: 캐스케이드 재시도 — "다시 생각하는 중" UI */}
+          {retryStatus && (
+            <LunaRetrying
+              retries={retryStatus.retries}
+              done={!retryStatus.active}
             />
           )}
 

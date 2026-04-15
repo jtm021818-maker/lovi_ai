@@ -13,7 +13,7 @@ import { generateSituationScene } from '@/engines/situation-scene-generator';
 import { matchSolutions, calculateReadiness, getSolutionDictionaryPrompt, parseAxesFromMessage, analyzeAxesState, generateDiagnosticPrompt, mergeLLMAxes, markAxisAsked, generateAxisChoices } from '@/engines/solution-dictionary';
 import type { ReadIgnoredAxes, AxisChoice } from '@/engines/solution-dictionary';
 import type { PersonaMode, PanelResponse } from '@/types/persona.types';
-import { generateWithCascade, streamWithCascade } from '@/lib/ai/provider-registry';
+import { generateWithCascade, streamWithCascade, type RetryStatusEvent } from '@/lib/ai/provider-registry';
 import { runDeepResearch, generateThinkingPhrases, extractKeyword } from '@/lib/ai/deep-research';
 import { saveMemory } from '@/engines/human-like/memory-engine';
 import { routeModel } from '@/lib/ai/model-router';
@@ -225,6 +225,8 @@ export class CounselingPipeline {
     | { type: 'phase_change'; data: { phase: ConversationPhaseV2; progress: number; lunaThinking?: string; understandingLevel?: number } }
     // 🆕 v40: 루나가 "진짜 생각하는 중" UI 이벤트 (Gemini Grounding DeepResearch)
     | { type: 'luna_thinking_deep'; data: { status: 'started' | 'done'; keyword?: string; phrases?: string[]; durationMs?: number; hasInsight?: boolean } }
+    // 🆕 v48: 캐스케이드 재시도 상태 — UI에서 예쁜 재시도 표시용
+    | { type: 'retry_status'; data: RetryStatusEvent }
     | { type: 'done'; data: { stateResult: StateResult; strategyResult: StrategyResult; suggestionShown: boolean; responseMode?: ResponseMode; updatedAxes?: Partial<ReadIgnoredAxes>; phaseV2?: ConversationPhaseV2; completedEvents?: PhaseEventType[]; lastEventTurn?: number; confirmedEmotionScore?: number; emotionHistory?: number[]; promptStyle?: string; emotionAccumulatorState?: EmotionAccumulatorState; phaseStartTurn?: number; lunaEmotionState?: string; sessionStoryState?: string; strategyMode?: StrategyMode | null; intimacyState?: import('@/engines/intimacy').IntimacyState | null; intimacyPersonaKey?: 'luna' | 'tarot'; intimacyAll?: { luna: import('@/engines/intimacy').IntimacyState; tarot: import('@/engines/intimacy').IntimacyState } | null; intimacyLevelUp?: { oldLevel: number; newLevel: number; newLevelName: string } | null; _contextLog?: any } }
   > {
     // 🆕 v31: Step 1 + Step 4를 병렬 실행 (상태분석과 RAG는 독립적 — ~200~500ms 절약)
@@ -1331,11 +1333,14 @@ ${researchResult.insight}
     } else {
       // 상담사/친구 모드: 스트리밍 — 3사 캐스케이드
       let fullText = '';
+      // 🆕 v48: 재시도 이벤트 버퍼 — cascade 실패 시 UI에 알림
+      const retryEventBuffer: RetryStatusEvent[] = [];
       const stream = streamWithCascade(
         modelRoute.cascade,
         systemPrompt,
         recentMessages,
-        modelRoute.maxTokens
+        modelRoute.maxTokens,
+        (retryEvt) => { retryEventBuffer.push(retryEvt); }
       );
 
       // <think>...</think> 태그 스트리밍 필터 (qwen3-32b thinking mode)
@@ -1343,6 +1348,12 @@ ${researchResult.insight}
       let stripLeadingWhitespace = false; // </think> 직후 다음 청크 공백 제거용
 
       for await (const chunk of stream) {
+        // 🆕 v48: 재시도 이벤트 플러시 — cascade 폴백 전환 시 UI에 즉시 알림
+        while (retryEventBuffer.length > 0) {
+          const retryEvt = retryEventBuffer.shift()!;
+          yield { type: 'retry_status', data: retryEvt };
+        }
+
         let text = chunk;
 
         // 이전 청크에서 </think> 나왔으면 이번 청크 앞 공백 제거

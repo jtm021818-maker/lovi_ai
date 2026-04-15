@@ -80,10 +80,23 @@ export default function IntimacyCard({
           : '0 4px 16px rgba(168, 85, 247, 0.15)',
       }}
     >
-      {/* 헤더: 💜 친밀도 + 레벨 배지 */}
+      {/* 헤더: 캐릭터 아바타 + 친밀도 + 레벨 배지 */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: accentColor, letterSpacing: 0.5 }}>
-          {isTarot ? '🔮' : '💜'} 친밀도
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <img
+            src={isTarot ? '/taronaong_kakao.png' : '/luna_fox_transparent.png'}
+            alt={isTarot ? '타로냥' : '루나'}
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: '50%',
+              objectFit: 'cover',
+              border: `1.5px solid ${isTarot ? 'rgba(255, 213, 79, 0.5)' : 'rgba(168, 85, 247, 0.4)'}`,
+            }}
+          />
+          <span style={{ fontSize: 11, fontWeight: 700, color: accentColor, letterSpacing: 0.5 }}>
+            친밀도
+          </span>
         </div>
         <div
           style={{

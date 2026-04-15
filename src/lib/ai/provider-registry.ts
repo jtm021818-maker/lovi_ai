@@ -155,8 +155,8 @@ async function* geminiStream(
     parts: [{ text: m.content }],
   }));
 
-  // 🆕 v45.5: 1회 자동 재시도 — preview 모델 간헐적 실패 대응
-  const MAX_RETRIES = 1;
+  // 🆕 v48: 3회 자동 재시도 — timeout/간헐적 실패 대응 (UI 표시 포함)
+  const MAX_RETRIES = 2;  // 0,1,2 = 총 3회 시도
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const response = await gemini.models.generateContentStream({
@@ -180,7 +180,7 @@ async function* geminiStream(
 
       // 빈 응답이면 재시도
       if (!yieldedAny && attempt < MAX_RETRIES) {
-        console.warn(`[Gemini] ⚠️ 빈 응답 — 재시도 ${attempt + 1}/${MAX_RETRIES}`);
+        console.warn(`[Gemini] ⚠️ 빈 응답 — 재시도 ${attempt + 1}/${MAX_RETRIES + 1}`);
         continue;
       }
 
@@ -188,8 +188,8 @@ async function* geminiStream(
       return;
     } catch (err: any) {
       if (attempt < MAX_RETRIES) {
-        console.warn(`[Gemini] ⚠️ 스트리밍 에러 → 재시도 ${attempt + 1}/${MAX_RETRIES}:`, err?.message);
-        await new Promise(r => setTimeout(r, 500)); // 0.5초 대기 후 재시도
+        console.warn(`[Gemini] ⚠️ 스트리밍 에러 → 재시도 ${attempt + 1}/${MAX_RETRIES + 1}:`, err?.message);
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1))); // 점진적 대기 (500ms, 1000ms)
         continue;
       }
       throw err; // 재시도 소진 → 캐스케이드 폴백으로 전달
@@ -426,18 +426,38 @@ export async function generateWithCascade(
   }
 }
 
-/** 캐스케이드 스트리밍 — 4단계 폴백 체인 (🆕 v45.5: TTFB 15초 타임아웃, v46: 상세 로그) */
+/** 🆕 v48: 재시도 상태 콜백 타입 — UI에서 재시도 진행상황 표시용 */
+export interface RetryStatusEvent {
+  provider: Provider;
+  attempt: number;
+  maxAttempts: number;
+  reason: 'timeout' | 'error' | 'empty' | 'rate_limit';
+  message: string;
+}
+
+/** 캐스케이드 스트리밍 — 4단계 폴백 체인 (🆕 v48: 재시도 UI 이벤트, TTFB 30초 타임아웃) */
 export async function* streamWithCascade(
   chain: { provider: Provider; tier: ModelTier; modelOverride?: string }[],
   systemPrompt: string,
   messages: { role: 'user' | 'assistant'; content: string }[],
-  maxTokens: number = 1024
+  maxTokens: number = 1024,
+  onRetry?: (event: RetryStatusEvent) => void
 ): AsyncGenerator<string> {
+  let cascadeAttempt = 0;
+  const totalProviders = chain.length;
+
   for (const { provider, tier, modelOverride } of chain) {
+    cascadeAttempt++;
     const actualModel = modelOverride || PROVIDER_MODELS[provider][tier];
     const limit = checkProviderRateLimit(provider);
     if (!limit.allowed) {
       logAttempt({ provider, tier, model: actualModel, status: 'rate_limit' });
+      // 🆕 v48: 재시도 UI 이벤트 — rate limit
+      onRetry?.({
+        provider, attempt: cascadeAttempt, maxAttempts: totalProviders,
+        reason: 'rate_limit',
+        message: '잠깐, 다시 정리해볼게...',
+      });
       continue;
     }
 
@@ -446,7 +466,7 @@ export async function* streamWithCascade(
     let ttfbMs: number | undefined;
     try {
       const gen = streamWithProvider(provider, systemPrompt, messages, tier, maxTokens, modelOverride);
-      const TTFB_TIMEOUT_MS = 15000;
+      const TTFB_TIMEOUT_MS = 30000;
 
       for await (const chunk of wrapWithTTFBTimeout(gen, TTFB_TIMEOUT_MS, `${provider}/${tier}`)) {
         if (!hasYieldedAny) {
@@ -470,6 +490,19 @@ export async function* streamWithCascade(
         totalMs: Date.now() - startTime,
         error: err?.message?.slice(0, 100),
       });
+      // 🆕 v48: 재시도 UI 이벤트 — timeout/error 시 다음 폴백으로 넘어감을 알림
+      if (cascadeAttempt < totalProviders) {
+        const RETRY_MESSAGES = [
+          '음... 잠깐만, 다시 생각해볼게',
+          '어, 잠시만! 다시 정리해볼게',
+          '기다려줘, 조금만 더 생각해볼게',
+        ];
+        onRetry?.({
+          provider, attempt: cascadeAttempt, maxAttempts: totalProviders,
+          reason: isTimeout ? 'timeout' : is429 ? 'rate_limit' : 'error',
+          message: RETRY_MESSAGES[Math.min(cascadeAttempt - 1, RETRY_MESSAGES.length - 1)],
+        });
+      }
       continue;
     }
   }

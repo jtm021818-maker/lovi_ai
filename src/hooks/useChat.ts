@@ -34,6 +34,11 @@ interface UseChatReturn {
     phrases: string[];
     keyword?: string;
   } | null;
+  // 🆕 v48: 캐스케이드 재시도 상태 — 예쁜 재시도 UI용
+  retryStatus: {
+    retries: { attempt: number; maxAttempts: number; message: string; reason: string }[];
+    active: boolean;
+  } | null;
   // 🆕 v41: 친밀도 레벨업 (축하 팝업용)
   intimacyLevelUp: {
     oldLevel: number;
@@ -68,6 +73,11 @@ export function useChat(sessionId: string): UseChatReturn {
     active: boolean;
     phrases: string[];
     keyword?: string;
+  } | null>(null);
+  // 🆕 v48: 캐스케이드 재시도 상태
+  const [retryStatus, setRetryStatus] = useState<{
+    retries: { attempt: number; maxAttempts: number; message: string; reason: string }[];
+    active: boolean;
   } | null>(null);
   // 🆕 v41: 친밀도 레벨업 팝업 상태
   const [intimacyLevelUp, setIntimacyLevelUp] = useState<{
@@ -216,6 +226,7 @@ export function useChat(sessionId: string): UseChatReturn {
     setNudges([]);
     setSuggestions([]);
     setPanelData(null);
+    setRetryStatus(null);  // 🆕 v48: 재시도 상태 초기화
     // 🆕 v43: 세션 레벨 이벤트 보존 — 완전 초기화 대신 기존 발동된 이벤트 타입을 유지하면서 새 턴의 이벤트만 허용
     // (DB race condition으로 같은 이벤트가 다음 턴에서 또 yield되어도 클라이언트에서 차단)
     // firedEventTypesRef.current를 초기화하지 않음 — 세션 동안 누적 유지
@@ -293,6 +304,16 @@ export function useChat(sessionId: string): UseChatReturn {
               }
 
               case 'text': {
+                // 🆕 v48: 첫 텍스트 도착 시 재시도 UI 종료 (fade out)
+                if (!fullResponseBuffer) {
+                  setRetryStatus((prev) => {
+                    if (prev?.active) {
+                      setTimeout(() => setRetryStatus(null), 400);
+                      return { ...prev, active: false };
+                    }
+                    return prev;
+                  });
+                }
                 // 전체 텍스트는 버퍼에 누적
                 fullResponseBuffer += event.data;
                 // 화면에는 첫 번째 ||| 이전 부분만 표시
@@ -430,6 +451,25 @@ export function useChat(sessionId: string): UseChatReturn {
                 break;
               }
 
+              // 🆕 v48: 캐스케이드 재시도 상태 — 예쁜 재시도 UI
+              case 'retry_status': {
+                const retryData = event.data as any;
+                console.log(`[useChat] 🔄 재시도 ${retryData.attempt}/${retryData.maxAttempts}: ${retryData.message}`);
+                setRetryStatus((prev) => ({
+                  active: true,
+                  retries: [
+                    ...(prev?.retries ?? []),
+                    {
+                      attempt: retryData.attempt,
+                      maxAttempts: retryData.maxAttempts,
+                      message: retryData.message,
+                      reason: retryData.reason,
+                    },
+                  ],
+                }));
+                break;
+              }
+
               case 'error':
                 setMessages((prev) =>
                   prev.map((m) =>
@@ -554,6 +594,8 @@ export function useChat(sessionId: string): UseChatReturn {
     lunaThinking, understandingLevel,
     // 🆕 v40: 루나 딥리서치 상태
     thinkingDeep,
+    // 🆕 v48: 캐스케이드 재시도 상태
+    retryStatus,
     // 🆕 v41: 친밀도 레벨업 팝업 상태
     intimacyLevelUp,
     dismissIntimacyLevelUp: () => setIntimacyLevelUp(null),
