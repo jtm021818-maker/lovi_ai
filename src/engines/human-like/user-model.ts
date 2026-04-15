@@ -281,7 +281,9 @@ export async function loadUserModel(supabase: any, userId: string): Promise<User
       }
       return merged;
     }
-  } catch { /* ignore */ }
+  } catch (e) {
+    console.error('[loadUserModel] ❌ DB 로드 실패 — 기본값 반환 (친밀도 누적 손실 위험!):', (e as Error).message);
+  }
   return createDefaultUserModel();
 }
 
