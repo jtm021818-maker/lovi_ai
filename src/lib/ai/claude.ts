@@ -16,7 +16,7 @@ import {
   generateWithCascade,
   streamWithCascade,
 } from './provider-registry';
-import type { ModelTier } from './provider-registry';
+import type { ModelTier, CascadeStreamChunk } from './provider-registry';
 import { getProviderCascade } from './smart-router';
 
 // re-export for backward compatibility
@@ -51,7 +51,7 @@ export async function* streamMessage(
   messages: { role: 'user' | 'assistant'; content: string }[],
   modelTier: ModelTier = 'sonnet',
   maxTokens: number = 1024
-): AsyncGenerator<string> {
+): AsyncGenerator<CascadeStreamChunk> {
   const task = modelTier === 'haiku' ? 'state_analysis' as const : 'main_response' as const;
   const cascade = getProviderCascade(task);
 

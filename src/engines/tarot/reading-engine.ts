@@ -1,6 +1,7 @@
 import {
   generateWithCascade,
   streamWithCascade,
+  type CascadeStreamChunk,
 } from '@/lib/ai/provider-registry';
 import { getProviderCascade } from '@/lib/ai/smart-router';
 import { drawCards, getLoveSpread, getSingleSpread, getThreeCardSpread, getUnrequitedSpread, getReconnectionSpread, getPaceSpread, getAvoidantSpread } from './index';
@@ -157,7 +158,7 @@ export class TarotReadingEngine {
     reading: TarotReading;
     userMessage: string;
     chatHistory: { role: 'user' | 'assistant'; content: string }[];
-  }): AsyncGenerator<string> {
+  }): AsyncGenerator<CascadeStreamChunk> {
     const systemPrompt = getFollowUpPrompt({
       originalQuestion: params.reading.question,
       cards: params.reading.cards.map(c => ({
