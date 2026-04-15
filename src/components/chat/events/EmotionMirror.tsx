@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import Image from 'next/image';
 import type { PhaseEvent, EmotionMirrorData, RelationshipScenario } from '@/types/engine.types';
 import type { SuggestionMeta } from '@/types/engine.types';
 import { useTypewriter } from '@/hooks/useTypewriter';
@@ -46,11 +46,40 @@ const SCENARIO_GRADIENTS: Record<string, string> = {
 };
 const DEFAULT_GRADIENT = 'linear-gradient(180deg, #1a1025 0%, #0f0a1a 50%, #1a0a2e 100%)';
 
-/** 캐릭터 스프라이트 경로 */
-const SPRITE = {
+/** 캐릭터 스프라이트 시트 (4열 x 2행 = 8프레임, 각 344x384) */
+const SPRITE_SHEET = {
   female: '/char_img/event1_luna_girl.png',
   male: '/char_img/event1_luna_man.png',
 };
+const SPRITE_COLS = 4;
+const SPRITE_ROWS = 2;
+// 프레임 인덱스 (0-7): 0=기본, 1=슬픔, 2=화남, 3=생각, 4=놀람, 5=웃음, 6=걱정, 7=당당
+type SpriteFrame = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+/** 감정/상황에 맞는 스프라이트 프레임 선택 */
+function pickSpriteFrame(emotion: string, isReveal: boolean): SpriteFrame {
+  if (isReveal) return 3; // 생각/깨달음
+  const lower = emotion.toLowerCase();
+  if (lower.includes('화') || lower.includes('짜증') || lower.includes('분노')) return 2;
+  if (lower.includes('슬') || lower.includes('울') || lower.includes('아프')) return 1;
+  if (lower.includes('불안') || lower.includes('걱정') || lower.includes('무서')) return 6;
+  if (lower.includes('놀') || lower.includes('헐') || lower.includes('충격')) return 4;
+  if (lower.includes('웃') || lower.includes('행복') || lower.includes('좋')) return 5;
+  if (lower.includes('당당') || lower.includes('자신') || lower.includes('용기')) return 7;
+  return 0; // 기본
+}
+
+/** CSS object-position으로 스프라이트 시트에서 특정 프레임 표시 */
+function getSpriteStyle(frame: SpriteFrame): React.CSSProperties {
+  const col = frame % SPRITE_COLS;
+  const row = Math.floor(frame / SPRITE_COLS);
+  return {
+    objectFit: 'none' as const,
+    objectPosition: `-${col * 344}px -${row * 384}px`,
+    width: 344,
+    height: 384,
+  };
+}
 
 // ============================================================
 // 타입
@@ -62,7 +91,7 @@ interface EmotionMirrorProps {
   disabled?: boolean;
 }
 
-type ScenePhase = 'intro' | 'playing' | 'reveal' | 'message' | 'choice';
+type ScenePhase = 'intro' | 'playing' | 'reveal' | 'message' | 'choice' | 'closing' | 'closed';
 
 // ============================================================
 // VN 씬 대사 컴포넌트
@@ -167,7 +196,7 @@ export default function EmotionMirror({ event, onSelect, disabled }: EmotionMirr
   }
 
   // ─────────────────────────────────────────
-  // v49: Visual Novel 모드
+  // v49: Visual Novel 모드 (풀스크린 → 채팅 복귀)
   // ─────────────────────────────────────────
   if (hasScene) {
     return (
@@ -207,6 +236,10 @@ function VNScene({
 
   const [phase, setPhase] = useState<ScenePhase>('intro');
   const [lineIndex, setLineIndex] = useState(0);
+  const [mounted, setMounted] = useState(false);
+
+  // Portal mount (SSR 방지)
+  useEffect(() => { setMounted(true); }, []);
 
   // intro → playing 자동 전환
   useEffect(() => {
@@ -232,6 +265,20 @@ function VNScene({
     }
   }, [phase]);
 
+  // closing → closed 자동 전환
+  useEffect(() => {
+    if (phase === 'closing') {
+      const timer = setTimeout(() => setPhase('closed'), 600);
+      return () => clearTimeout(timer);
+    }
+  }, [phase]);
+
+  // 선택 후 closing 트리거
+  const handleChoice = useCallback((value: string) => {
+    onSelect(value);
+    setTimeout(() => setPhase('closing'), 300);
+  }, [onSelect]);
+
   // 현재 대사의 파싱 결과 (speaker 확인용)
   const currentParsed = phase === 'playing' ? parseSceneLine(lines[lineIndex]) : null;
   const isCurrentOpponent = currentParsed?.speaker === '상대';
@@ -247,33 +294,70 @@ function VNScene({
     }
   }, [phase, lineIndex, lines.length]);
 
-  // 배경 스타일
+  // 배경 스타일 (Pollinations = JPEG)
   const bgStyle = data.backgroundImageBase64
     ? { backgroundImage: `url(data:image/jpeg;base64,${data.backgroundImageBase64})` }
     : { background: (scenario && SCENARIO_GRADIENTS[scenario]) || DEFAULT_GRADIENT };
 
-  // 스프라이트 결정
+  // 스프라이트 시트 결정
   const gender = data.characterSetup?.userGender || 'female';
-  const mainSprite = SPRITE[gender] || SPRITE.female;
-  const opponentSprite = gender === 'male' ? SPRITE.female : SPRITE.male;
+  const mainSheet = SPRITE_SHEET[gender] || SPRITE_SHEET.female;
+  const opponentSheet = gender === 'male' ? SPRITE_SHEET.female : SPRITE_SHEET.male;
 
   // 겉감정/속마음 라인 구분 (전환점 기준)
   const transitionIdx = Math.max(Math.floor(lines.length * 0.6), 2);
   const isSurfaceLine = lineIndex < transitionIdx;
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-      className="my-4 max-w-[92%] ml-auto overflow-hidden rounded-2xl shadow-2xl"
-    >
-      {/* VN 씬 컨테이너 */}
-      <div
-        className="relative overflow-hidden cursor-pointer select-none"
-        style={{ aspectRatio: '9/14', maxHeight: '65vh', minHeight: '380px' }}
-        onClick={handleTap}
+  // 대사별 스프라이트 프레임 결정 (루나가 상황에 맞게 표정 변경)
+  const currentFrame = phase === 'reveal'
+    ? pickSpriteFrame(data.deepEmotion, true)
+    : phase === 'playing'
+      ? pickSpriteFrame(parseSceneLine(lines[lineIndex]).dialog, false)
+      : 0; // intro/message/choice = 기본 표정
+  const mainSpriteStyle = getSpriteStyle(currentFrame);
+
+  // closed 상태 → 인라인 요약 카드 (채팅에 남김)
+  if (phase === 'closed') {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10, scale: 0.9 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+        className="my-3 max-w-[85%] ml-auto p-3 rounded-2xl overflow-hidden"
+        style={{ background: 'linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%)', border: '1px solid rgba(168,85,247,0.2)' }}
       >
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-sm">🎭</span>
+          <span className="text-[12px] font-bold text-purple-700">{data.sceneTitle || '루나의 연극'}</span>
+        </div>
+        <p className="text-[12px] text-purple-900/80 leading-snug mb-1">
+          {data.deepEmoji} &ldquo;{data.reveal}&rdquo;
+        </p>
+        <p className="text-[10px] text-purple-400">{submitted ? '✓ 루나가 기억해둘게!' : data.lunaMessage}</p>
+      </motion.div>
+    );
+  }
+
+  // 풀스크린 VN 씬 (Portal → document.body)
+  const vnContent = (
+    <AnimatePresence>
+      {phase !== 'closed' && (
+        <motion.div
+          key="vn-fullscreen"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: phase === 'closing' ? 0 : 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: phase === 'closing' ? 0.5 : 0.4 }}
+          className="fixed inset-0 z-50 bg-black"
+          style={{ height: '100dvh' }}
+        >
+          {/* 씬 컨테이너 (풀스크린) */}
+          <motion.div
+            animate={phase === 'closing' ? { scale: 0.85, opacity: 0, borderRadius: '24px' } : { scale: 1, opacity: 1 }}
+            transition={{ duration: 0.5, ease: 'easeInOut' }}
+            className="relative w-full h-full overflow-hidden cursor-pointer select-none"
+            onClick={handleTap}
+          >
         {/* 배경 이미지 + Ken Burns (framer-motion) */}
         <motion.div
           className="absolute inset-0 bg-cover bg-center"
@@ -320,73 +404,104 @@ function VNScene({
           </div>
         </motion.div>
 
-        {/* 캐릭터 스프라이트 */}
+        {/* 캐릭터 스프라이트 — 종이연극 스타일 (프레임 교체 시 회전 + 호흡 애니메이션) */}
         <div className="absolute inset-0 z-10 pointer-events-none">
           {isDuo ? (
             <>
               {/* 나 (왼쪽) */}
               <motion.div
                 animate={{
-                  y: [0, -3, 0],
-                  opacity: isCurrentOpponent ? 0.4 : 1,
-                  filter: isCurrentOpponent ? 'brightness(0.5)' : 'brightness(1)',
+                  scale: isCurrentOpponent ? [1, 0.97, 1] : [1, 1.03, 1],
+                  y: isCurrentOpponent ? [0, 2, 0] : [0, -4, 0],
+                  opacity: isCurrentOpponent ? 0.5 : 1,
+                  filter: isCurrentOpponent ? 'brightness(0.5) saturate(0.7)' : 'brightness(1) saturate(1)',
                 }}
                 transition={{
-                  y: { duration: 3, repeat: Infinity, ease: 'easeInOut' },
-                  opacity: { duration: 0.4 },
-                  filter: { duration: 0.4 },
+                  scale: { duration: 3, repeat: Infinity, ease: 'easeInOut' },
+                  y: { duration: 2.5, repeat: Infinity, ease: 'easeInOut' },
+                  opacity: { duration: 0.5 },
+                  filter: { duration: 0.5 },
                 }}
-                className="absolute bottom-[8%] left-[2%] h-[55%] w-auto"
+                className="absolute bottom-[18%] left-[2%] overflow-hidden drop-shadow-2xl"
+                style={{ width: 172, height: 192 }}
               >
-                <Image
-                  src={mainSprite}
-                  alt="나"
-                  width={300}
-                  height={500}
-                  className="h-full w-auto object-contain drop-shadow-2xl"
-                  preload
-                />
+                <AnimatePresence mode="wait">
+                  <motion.img
+                    key={`main-${currentFrame}`}
+                    src={mainSheet}
+                    alt="나"
+                    initial={{ rotateY: 90, opacity: 0 }}
+                    animate={{ rotateY: 0, opacity: 1 }}
+                    exit={{ rotateY: -90, opacity: 0 }}
+                    transition={{ duration: 0.3, ease: 'easeOut' }}
+                    style={{
+                      ...mainSpriteStyle,
+                      transform: `scale(${172/344})`,
+                      transformOrigin: `${(currentFrame % SPRITE_COLS) * 344}px ${Math.floor(currentFrame / SPRITE_COLS) * 384}px`,
+                    }}
+                  />
+                </AnimatePresence>
               </motion.div>
               {/* 상대 (오른쪽) */}
               <motion.div
                 animate={{
-                  y: [0, -3, 0],
-                  opacity: isCurrentOpponent ? 1 : 0.4,
-                  filter: isCurrentOpponent ? 'brightness(1)' : 'brightness(0.5)',
+                  scale: isCurrentOpponent ? [1, 1.03, 1] : [1, 0.97, 1],
+                  y: isCurrentOpponent ? [0, -4, 0] : [0, 2, 0],
+                  opacity: isCurrentOpponent ? 1 : 0.5,
+                  filter: isCurrentOpponent ? 'brightness(1) saturate(1)' : 'brightness(0.5) saturate(0.7)',
                 }}
                 transition={{
-                  y: { duration: 3, repeat: Infinity, ease: 'easeInOut', delay: 0.5 },
-                  opacity: { duration: 0.4 },
-                  filter: { duration: 0.4 },
+                  scale: { duration: 3, repeat: Infinity, ease: 'easeInOut', delay: 0.3 },
+                  y: { duration: 2.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 },
+                  opacity: { duration: 0.5 },
+                  filter: { duration: 0.5 },
                 }}
-                className="absolute bottom-[8%] right-[2%] h-[55%] w-auto"
-                style={{ transform: 'scaleX(-1)' }}
+                className="absolute bottom-[18%] right-[2%] overflow-hidden drop-shadow-2xl"
+                style={{ width: 172, height: 192, transform: 'scaleX(-1)' }}
               >
-                <Image
-                  src={opponentSprite}
+                <img
+                  src={opponentSheet}
                   alt="상대"
-                  width={300}
-                  height={500}
-                  className="h-full w-auto object-contain drop-shadow-2xl"
-                  preload
+                  style={{
+                    ...getSpriteStyle(0),
+                    transform: `scale(${172/344})`,
+                    transformOrigin: '0px 0px',
+                  }}
                 />
               </motion.div>
             </>
           ) : (
-            /* Solo 모드 — 중앙 */
+            /* Solo 모드 — 중앙, 종이연극 회전 전환 + 호흡 */
             <motion.div
-              animate={{ y: [0, -4, 0] }}
-              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-              className="absolute bottom-[8%] left-1/2 -translate-x-1/2 h-[55%] w-auto"
+              animate={{
+                scale: [1, 1.04, 1],
+                y: [0, -5, 0],
+                rotate: [0, -0.5, 0.5, 0],
+              }}
+              transition={{
+                scale: { duration: 3.5, repeat: Infinity, ease: 'easeInOut' },
+                y: { duration: 3, repeat: Infinity, ease: 'easeInOut' },
+                rotate: { duration: 5, repeat: Infinity, ease: 'easeInOut' },
+              }}
+              className="absolute bottom-[18%] left-1/2 overflow-hidden drop-shadow-2xl"
+              style={{ width: 220, height: 246, marginLeft: -110 }}
             >
-              <Image
-                src={mainSprite}
-                alt="캐릭터"
-                width={300}
-                height={500}
-                className="h-full w-auto object-contain drop-shadow-2xl"
-                priority
-              />
+              <AnimatePresence mode="wait">
+                <motion.img
+                  key={`solo-${currentFrame}`}
+                  src={mainSheet}
+                  alt="캐릭터"
+                  initial={{ rotateY: 90, opacity: 0, scale: 0.8 }}
+                  animate={{ rotateY: 0, opacity: 1, scale: 1 }}
+                  exit={{ rotateY: -90, opacity: 0, scale: 0.8 }}
+                  transition={{ duration: 0.35, ease: 'easeOut' }}
+                  style={{
+                    ...mainSpriteStyle,
+                    transform: `scale(${220/344})`,
+                    transformOrigin: `${(currentFrame % SPRITE_COLS) * 344}px ${Math.floor(currentFrame / SPRITE_COLS) * 384}px`,
+                  }}
+                />
+              </AnimatePresence>
             </motion.div>
           )}
         </div>
@@ -522,46 +637,47 @@ function VNScene({
             )}
           </AnimatePresence>
         </div>
-      </div>
 
-      {/* 선택 버튼 (씬 밖, 하단) */}
-      <AnimatePresence>
-        {phase === 'choice' && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex gap-2.5 p-3 bg-[#faf9f5]"
-          >
-            {submitted ? (
-              <div className="w-full py-3 text-center text-[13px] font-bold text-slate-500 bg-slate-100 rounded-xl">
-                ✓ 루나가 기억해둘게!
-              </div>
-            ) : (
-              data.choices.map((choice, idx) => (
+        {/* 선택 버튼 (풀스크린 하단, safe area 대응) */}
+        <AnimatePresence>
+          {phase === 'choice' && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="absolute bottom-0 left-0 right-0 z-30 flex gap-2.5 p-4 bg-gradient-to-t from-black/90 via-black/60 to-transparent"
+              style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+            >
+              {data.choices.map((choice, idx) => (
                 <motion.button
                   key={choice.value}
-                  initial={{ opacity: 0, y: 5 }}
+                  initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.1 }}
-                  whileTap={{ scale: 0.96 }}
-                  onClick={() => onSelect(choice.value)}
-                  disabled={disabled}
-                  className={`py-3 rounded-xl font-bold text-[12.5px] transition-all ${
+                  transition={{ delay: 0.1 + idx * 0.1 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => handleChoice(choice.value)}
+                  disabled={disabled || submitted}
+                  className={`py-3.5 rounded-2xl font-bold text-[13px] transition-all ${
                     idx === 0
-                      ? 'flex-1 bg-white border-2 border-slate-200 text-slate-600 hover:bg-slate-50'
-                      : 'flex-[1.5] bg-purple-500 text-white border-2 border-purple-600 hover:bg-purple-600'
-                  } ${disabled ? 'opacity-50 cursor-not-allowed' : 'active:scale-[0.98]'}`}
+                      ? 'flex-1 bg-white/15 backdrop-blur-sm text-white/90 border border-white/20'
+                      : 'flex-[1.5] bg-purple-500 text-white border border-purple-400 shadow-lg shadow-purple-500/30'
+                  } ${disabled || submitted ? 'opacity-50' : 'active:scale-[0.97]'}`}
                 >
                   {choice.label}
                 </motion.button>
-              ))
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-    </motion.div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
+
+  // Portal로 body에 렌더 (모바일 풀스크린)
+  if (!mounted) return null;
+  return createPortal(vnContent, document.body);
 }
 
 // ============================================================
