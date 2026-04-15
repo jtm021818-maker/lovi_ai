@@ -14,7 +14,7 @@ export async function PATCH(req: NextRequest) {
     updates.nickname = body.nickname.trim().slice(0, 20);
   }
   if (typeof body.onboarding_situation === 'string') {
-    const valid = ['breakup', 'crush', 'relationship', 'confused', 'free'];
+    const valid = ['male', 'female', 'other']; // 성별로 용도 변경
     if (valid.includes(body.onboarding_situation)) {
       updates.onboarding_situation = body.onboarding_situation;
     }

@@ -363,27 +363,15 @@ export default function SettingsPage() {
             )}
           </div>
           <div className="settings-profile-col">
-            <p className="settings-profile-label">상담 상황</p>
+            <p className="settings-profile-label">성별</p>
             <div className="settings-profile-pill no-action">
-              {latestScenario
-                ? ({
-                    READ_AND_IGNORED: '읽씹 상황',
-                    GHOSTING: '잠수/고스팅',
-                    JEALOUSY: '질투/갈등',
-                    BREAKUP_CONTEMPLATION: '이별 고민',
-                    BOREDOM: '권태기',
-                    UNREQUITED_LOVE: '짝사랑',
-                    RECONNECTION: '재회 고민',
-                    FIRST_MEETING: '새로운 만남',
-                    COMMITMENT_FEAR: '관계 두려움',
-                    RELATIONSHIP_PACE: '썸/진도',
-                    ONLINE_LOVE: '온라인 연애',
-                    GENERAL: '연애 고민',
-                  } as Record<string, string>)[latestScenario] ?? '연애 고민'
-                : '아직 판단 중'}
+              {profile?.onboarding_situation === 'male' ? '남성' :
+               profile?.onboarding_situation === 'female' ? '여성' :
+               profile?.onboarding_situation === 'other' ? '선택 안 함' :
+               '미설정'}
             </div>
             <p className="settings-profile-sublabel" style={{ fontSize: '9px', color: '#9ca3af', marginTop: '2px', textAlign: 'center' }}>
-              루나와 타로냥이 판단한 상황
+              입력한 성별 정보
             </p>
           </div>
           <div className="settings-profile-col">

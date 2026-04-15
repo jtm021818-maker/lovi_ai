@@ -5,12 +5,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
-const SITUATIONS = [
-  { id: 'breakup', emoji: '💔', label: '이별/이별 후', desc: '헤어짐의 아픔을 겪고 있어요' },
-  { id: 'crush', emoji: '💗', label: '썸/짝사랑', desc: '설레면서도 불안한 마음이에요' },
-  { id: 'relationship', emoji: '💑', label: '연애 중', desc: '연애 중 고민이 있어요' },
-  { id: 'confused', emoji: '🤔', label: '헷갈리는 관계', desc: '관계가 어디로 가는지 모르겠어요' },
-  { id: 'free', emoji: '💬', label: '자유롭게 이야기', desc: '특별한 주제 없이 편하게' },
+const GENDERS = [
+  { id: 'male', emoji: '👦', label: '남성', desc: '남성이신가요?' },
+  { id: 'female', emoji: '👩', label: '여성', desc: '여성이신가요?' },
+  { id: 'other', emoji: '✨', label: '선택 안 함', desc: '알리고 싶지 않아요' },
 ];
 
 export default function OnboardingFlow() {
@@ -105,14 +103,14 @@ export default function OnboardingFlow() {
             className="w-full max-w-sm"
           >
             <h2 className="text-xl font-bold text-gray-800 text-center mb-2">
-              어떤 이야기를 하고 싶으세요?
+              성별을 알려주세요
             </h2>
             <p className="text-sm text-gray-400 text-center mb-6">
-              가볍게 골라주세요. 언제든 바꿀 수 있어요.
+              더 맞춤화된 대화를 위해 필요해요. 언제든 바꿀 수 있어요.
             </p>
 
             <div className="space-y-3">
-              {SITUATIONS.map((sit, i) => (
+              {GENDERS.map((sit, i) => (
                 <motion.button
                   key={sit.id}
                   initial={{ opacity: 0, x: -20 }}

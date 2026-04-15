@@ -360,8 +360,8 @@ export async function POST(req: NextRequest) {
           message,
           chatHistory,
           (profile?.onboarding_situation
-            ? `사용자 상황: ${profile.onboarding_situation}`
-            : '') + previousSessionContext,
+            ? `\n[사용자 성별: ${profile.onboarding_situation === 'male' ? '남성' : profile.onboarding_situation === 'female' ? '여성' : '선택하지 않음'}]`
+            : '\n[사용자 성별: 선택하지 않음]') + previousSessionContext,
           { supabase, userId: user.id },
           persona,
           turnCount,
