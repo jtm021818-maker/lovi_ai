@@ -293,8 +293,12 @@ export default function PhaseProgress({ currentPhase, progress, persona = 'luna'
   const displayText = (persona !== 'tarot' && lunaThinking) ? lunaThinking : currentStep.statusText;
   const typedStatus = useTypewriter(displayText, 70);
 
-  // 🆕 ACE v4: icon 위치에 정확히 매핑 (justify-between은 N-1개 구간으로 나뉨)
+  // 🆕 ACE v4.1: 아이콘 개수에 따라 유동적으로 시작 오프셋과 전체 너비 계산 (justify-between 대응)
   const iconCount = steps.length;
+  const slotWidth = 100 / iconCount; // 한 슬롯의 너비 (예: 5단계면 20%)
+  const startOffset = slotWidth / 2; // 첫 아이콘의 중심점 (예: 10%)
+  const barRange = 100 - slotWidth;  // 첫 아이콘 중심 ~ 마지막 아이콘 중심 거리 (예: 80%)
+
   const basePercent = (idx / (iconCount - 1)) * 100;
   const nextPercent = idx < iconCount - 1 ? ((idx + 1) / (iconCount - 1)) * 100 : basePercent;
   
@@ -315,13 +319,17 @@ export default function PhaseProgress({ currentPhase, progress, persona = 'luna'
         <div className="flex justify-between items-start w-full px-1 mb-1.5 relative">
           
           {/* 진행선 배경 (비활성) */}
-          <div className={`absolute left-[10%] right-[10%] top-[14px] h-[3px] ${persona === 'tarot' ? 'bg-violet-50/80' : 'bg-pink-50/80'} z-0 rounded-full`} />
+          <div 
+            className={`absolute top-[14px] h-[3px] ${persona === 'tarot' ? 'bg-violet-50/80' : 'bg-pink-50/80'} z-0 rounded-full`}
+            style={{ left: `${startOffset}%`, width: `${barRange}%` }}
+          />
 
           {/* 진행선 활성 (파스텔 그라디언트 + 현재 위치 글로우 점) */}
           <motion.div
-            className={`absolute left-[10%] top-[14px] h-[3px] bg-gradient-to-r ${persona === 'tarot' ? 'from-violet-300 via-purple-400 to-indigo-400' : 'from-rose-300 via-pink-400 to-violet-400'} z-[1] rounded-full`}
+            className={`absolute top-[14px] h-[3px] bg-gradient-to-r ${persona === 'tarot' ? 'from-violet-300 via-purple-400 to-indigo-400' : 'from-rose-300 via-pink-400 to-violet-400'} z-[1] rounded-full`}
             initial={{ width: 0 }}
-            animate={{ width: `${totalPercent * 0.8}%` }}
+            animate={{ width: `${totalPercent * (barRange / 100)}%` }}
+            style={{ left: `${startOffset}%` }}
             transition={{ type: 'spring', damping: 20, stiffness: 100 }}
           >
             {/* 진행 끝 글로우 dot */}

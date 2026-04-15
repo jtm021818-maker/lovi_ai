@@ -415,7 +415,7 @@ function VNScene({
 
         {/* 캐릭터 스프라이트 — 종이연극 스타일 (background-image 크롭 + 회전 전환 + 호흡) */}
         <div className="absolute inset-0 z-10 pointer-events-none">
-          {isDuo ? (
+          {isDuo && phase !== 'message' && phase !== 'choice' ? (
             <>
               {/* 나 (왼쪽) */}
               <motion.div
@@ -465,7 +465,7 @@ function VNScene({
               </motion.div>
             </>
           ) : (
-            /* Solo 모드 — 중앙, 종이연극 회전 전환 + 호흡 */
+            /* Solo 모드 혹은 특별 단계 (message/choice) — 중앙 배치 */
             <motion.div
               animate={{
                 scale: [1, 1.04, 1],
@@ -481,14 +481,41 @@ function VNScene({
               style={{ marginLeft: -(spriteSize / 2) }}
             >
               <AnimatePresence mode="wait">
-                <motion.div
-                  key={`solo-${currentFrame}`}
-                  initial={{ rotateY: 90, opacity: 0, scale: 0.8 }}
-                  animate={{ rotateY: 0, opacity: 1, scale: 1 }}
-                  exit={{ rotateY: -90, opacity: 0, scale: 0.8 }}
-                  transition={{ duration: 0.35, ease: 'easeOut' }}
-                  style={getSpriteStyle(currentFrame, mainSheet, spriteSize)}
-                />
+                {(phase === 'message' || phase === 'choice') ? (
+                  /* 🆕 v49: 해결 단계 전용 igmg.png (풀 캐릭터 스프라이트) */
+                  <motion.div
+                    key="special-luna"
+                    initial={{ scale: 0, rotate: -10, opacity: 0 }}
+                    animate={{ 
+                      scale: [0, 1.15, 1], 
+                      rotate: [-10, 5, 0], 
+                      opacity: 1 
+                    }}
+                    transition={{ 
+                      duration: 0.8, 
+                      ease: [0.34, 1.56, 0.64, 1],
+                      times: [0, 0.6, 1]
+                    }}
+                    style={{
+                      width: spriteSize,
+                      height: spriteSize * (384 / 344),
+                      backgroundImage: 'url(/char_img/igmg.png)',
+                      backgroundSize: 'contain',
+                      backgroundPosition: 'center bottom',
+                      backgroundRepeat: 'no-repeat',
+                    }}
+                  />
+                ) : (
+                  /* 일반 단계 스프라이트 */
+                  <motion.div
+                    key={`solo-${currentFrame}`}
+                    initial={{ rotateY: 90, opacity: 0, scale: 0.8 }}
+                    animate={{ rotateY: 0, opacity: 1, scale: 1 }}
+                    exit={{ rotateY: -90, opacity: 0, scale: 0.8 }}
+                    transition={{ duration: 0.35, ease: 'easeOut' }}
+                    style={getSpriteStyle(currentFrame, mainSheet, spriteSize)}
+                  />
+                )}
               </AnimatePresence>
             </motion.div>
           )}
@@ -584,13 +611,13 @@ function VNScene({
               </motion.div>
             )}
 
-            {/* Message — igmg.png 통 튀어나오는 연출 */}
+            {/* Message — 텍스트만 표시 (이미지는 하단 스피터 영역에 배치됨) */}
             {phase === 'message' && (
               <motion.div
                 key="message"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="absolute inset-0 flex flex-col items-center justify-center"
+                className="absolute inset-0 flex flex-col items-center justify-center p-6"
               >
                 {/* 배경 살짝 더 어둡게 */}
                 <motion.div
@@ -598,31 +625,15 @@ function VNScene({
                   animate={{ opacity: 1 }}
                   className="absolute inset-0 bg-black/50"
                 />
-                {/* igmg.png 통 튀어나오기 */}
-                <motion.img
-                  src="/char_img/igmg.png"
-                  alt="루나"
-                  initial={{ scale: 0, rotate: -15, opacity: 0 }}
-                  animate={{
-                    scale: [0, 1.2, 0.95, 1.05, 1],
-                    rotate: [-15, 5, -3, 1, 0],
-                    opacity: 1,
-                  }}
-                  transition={{
-                    duration: 0.7,
-                    ease: [0.34, 1.56, 0.64, 1], // bouncy overshoot
-                    times: [0, 0.4, 0.6, 0.8, 1],
-                  }}
-                  className="relative z-10 w-40 h-40 object-contain drop-shadow-2xl mb-3"
-                />
+                
                 {/* 메시지 텍스트 — 아래에서 올라옴 */}
                 <motion.div
                   initial={{ opacity: 0, y: 20, scale: 0.9 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ delay: 0.4, type: 'spring', stiffness: 300 }}
-                  className="relative z-10 px-5 py-2.5 rounded-2xl bg-white/15 backdrop-blur-md border border-white/20"
+                  className="relative z-10 px-6 py-4 rounded-3xl bg-white/10 backdrop-blur-xl border border-white/20 shadow-2xl"
                 >
-                  <p className="text-[14px] font-bold text-white text-center">
+                  <p className="text-[15px] font-bold text-white text-center leading-relaxed">
                     {data.lunaMessage}
                   </p>
                 </motion.div>
