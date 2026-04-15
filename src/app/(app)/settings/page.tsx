@@ -92,6 +92,8 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [editingNick, setEditingNick] = useState(false);
   const [nickInput, setNickInput] = useState('');
+  const [editingGender, setEditingGender] = useState(false);
+  const [genderInput, setGenderInput] = useState('other');
   const [saving, setSaving] = useState(false);
   const [confirmModal, setConfirmModal] = useState<'reset' | 'delete' | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -146,6 +148,7 @@ export default function SettingsPage() {
       if (profileData) {
         setProfile(profileData);
         setNickInput(profileData.nickname || '');
+        setGenderInput(profileData.onboarding_situation || 'other');
       }
       if (scenario) setLatestScenario(scenario);
       // 🆕 v41.1: 둘 다 반환 응답 처리 ({ luna: {raw, derived}, tarot: {raw, derived} })
@@ -364,12 +367,31 @@ export default function SettingsPage() {
           </div>
           <div className="settings-profile-col">
             <p className="settings-profile-label">성별</p>
-            <div className="settings-profile-pill no-action">
-              {profile?.onboarding_situation === 'male' ? '남성' :
-               profile?.onboarding_situation === 'female' ? '여성' :
-               profile?.onboarding_situation === 'other' ? '선택 안 함' :
-               '미설정'}
-            </div>
+            {editingGender ? (
+              <div className="settings-profile-edit">
+                <select
+                  value={genderInput}
+                  onChange={(e) => setGenderInput(e.target.value)}
+                  className="settings-profile-input"
+                  style={{ appearance: 'none', paddingRight: '20px', cursor: 'pointer' }}
+                >
+                  <option value="male">남성</option>
+                  <option value="female">여성</option>
+                  <option value="other">선택 안 함</option>
+                </select>
+                <button
+                  onClick={() => { updateProfile({ onboarding_situation: genderInput }); setEditingGender(false); }}
+                  className="settings-profile-save"
+                >✓</button>
+              </div>
+            ) : (
+              <button onClick={() => setEditingGender(true)} className="settings-profile-pill">
+                {profile?.onboarding_situation === 'male' ? '남성' :
+                 profile?.onboarding_situation === 'female' ? '여성' :
+                 profile?.onboarding_situation === 'other' ? '선택 안 함' :
+                 '미설정'} <span>›</span>
+              </button>
+            )}
             <p className="settings-profile-sublabel" style={{ fontSize: '9px', color: '#9ca3af', marginTop: '2px', textAlign: 'center' }}>
               입력한 성별 정보
             </p>
@@ -437,10 +459,10 @@ export default function SettingsPage() {
                           {p.value === 'luna' && (
                             <>
                               <p style={{ fontWeight: 700, fontSize: 14, marginBottom: 8, color: '#9c27b0' }}>
-                                🦊 루나 — 편한 언니 상담사
+                                🦊 루나 — 편한 {profile?.onboarding_situation === 'male' ? '누나' : '언니'} 상담사
                               </p>
                               <p>• 29살 연애 심리 전문가</p>
-                              <p>• 따뜻하고 현실적인 <b>언니 포지션</b></p>
+                              <p>• 따뜻하고 현실적인 <b>{profile?.onboarding_situation === 'male' ? '누나' : '언니'} 포지션</b></p>
                               <p>• 심리학 기반 공감 + 쉬운 말로 설명</p>
                               <p>• 판단 없이 네 편에서 들어줘</p>
                               <p style={{ marginTop: 8, fontStyle: 'italic', opacity: 0.85 }}>

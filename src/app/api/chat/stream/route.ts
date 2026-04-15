@@ -360,7 +360,8 @@ export async function POST(req: NextRequest) {
           message,
           chatHistory,
           (profile?.onboarding_situation
-            ? `\n[사용자 성별: ${profile.onboarding_situation === 'male' ? '남성' : profile.onboarding_situation === 'female' ? '여성' : '선택하지 않음'}]`
+            ? `\n[사용자 성별: ${profile.onboarding_situation === 'male' ? '남성' : profile.onboarding_situation === 'female' ? '여성' : '선택하지 않음'}]` +
+              (profile.onboarding_situation === 'male' ? '\n[중요 지침: 사용자가 남성이므로 당신의 포지션은 이제 "친한 언니"가 아니라 "친한 누나"입니다. 스스로를 지칭하거나 대화할 때 무조건 "누나"로 행동하세요.]' : '')
             : '\n[사용자 성별: 선택하지 않음]') + previousSessionContext,
           { supabase, userId: user.id },
           persona,

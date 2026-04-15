@@ -274,13 +274,20 @@ function VNScene({
         style={{ aspectRatio: '9/14', maxHeight: '65vh', minHeight: '380px' }}
         onClick={handleTap}
       >
-        {/* 배경 이미지 + Ken Burns */}
-        <div
+        {/* 배경 이미지 + Ken Burns (framer-motion) */}
+        <motion.div
           className="absolute inset-0 bg-cover bg-center"
-          style={{
-            ...bgStyle,
-            animation: data.backgroundImageBase64 ? 'kenBurns 25s ease-in-out infinite' : undefined,
-          }}
+          style={bgStyle}
+          animate={data.backgroundImageBase64 ? {
+            scale: [1.0, 1.08, 1.05, 1.0],
+            x: ['0%', '-1.5%', '1%', '0%'],
+            y: ['0%', '-1%', '-0.5%', '0%'],
+          } : undefined}
+          transition={data.backgroundImageBase64 ? {
+            duration: 25,
+            repeat: Infinity,
+            ease: 'easeInOut',
+          } : undefined}
         />
 
         {/* 하단 어둡게 (대사 가독성) */}
@@ -337,7 +344,7 @@ function VNScene({
                   width={300}
                   height={500}
                   className="h-full w-auto object-contain drop-shadow-2xl"
-                  priority
+                  preload
                 />
               </motion.div>
               {/* 상대 (오른쪽) */}
@@ -361,7 +368,7 @@ function VNScene({
                   width={300}
                   height={500}
                   className="h-full w-auto object-contain drop-shadow-2xl"
-                  priority
+                  preload
                 />
               </motion.div>
             </>
@@ -553,15 +560,6 @@ function VNScene({
         )}
       </AnimatePresence>
 
-      {/* Ken Burns CSS */}
-      <style jsx global>{`
-        @keyframes kenBurns {
-          0% { transform: scale(1.0) translate(0, 0); }
-          33% { transform: scale(1.08) translate(-1.5%, -1%); }
-          66% { transform: scale(1.05) translate(1%, -0.5%); }
-          100% { transform: scale(1.0) translate(0, 0); }
-        }
-      `}</style>
     </motion.div>
   );
 }
