@@ -1296,10 +1296,19 @@ WARM_WRAP 발동 후엔 **새 상담 절대 금지**. 카페 문 닫혔어.
     transitionHint = '\n\n[잠깐 점검: 이 사람 핵심 감정이 뭔지 한 문장으로 말할 수 있어? "이 사람은 ○○ 때문에 힘든 거다" — 둘 다 보이면 [SITUATION_CLEAR:상황|과제] 붙여. 아직 안 보이면 더 들어.]';
   } else if (phase === 'HOOK' && completedEvents.includes('EMOTION_THERMOMETER')) {
     transitionHint = '\n\n[마음읽기 했어. 유저 반응을 보고, 이제 자연스럽게 더 깊은 감정 탐색으로 넘어가.]';
-  } else if (phase === 'MIRROR' && turnInPhase >= 2 && !completedEvents.includes('LUNA_STORY')) {
+  } else if (phase === 'MIRROR' && completedEvents.includes('EMOTION_MIRROR') && !completedEvents.includes('LUNA_STRATEGY')) {
+    // 🆕 v49: VN 연극 후 — LUNA_STORY는 선택, STRATEGY는 빠르게
+    const storyDone = completedEvents.includes('LUNA_STORY');
+    transitionHint = storyDone
+      ? '\n\n[⚡ 감정 거울 + 자기개방 다 했어. 이제 유저가 조금이라도 행동 의지를 보이면 바로 [STRATEGY_READY] 태그. 주저하지 마.]'
+      : '\n\n[⚡ 감정 거울(1인 연극)로 핵심 감정을 짚었어. 이제 두 가지 중 네가 판단해:\n'
+        + '1. "아 이 동생한테 내 경험 하나 꺼내주면 위로가 되겠다" → [STORY_READY] 태그 (자기개방). 비슷한 경험이 떠오르고, 지금 꺼내면 동생이 "나만 이런 게 아니구나" 느낄 것 같으면.\n'
+        + '2. "감정은 충분히 짚었고, 이제 뭘 해볼지로 넘어가야겠다" → [STRATEGY_READY] 태그 (작전 모드). 유저가 "어떡하지" "해봐야겠다" 하거나, 이미 감정 정리가 된 것 같으면.\n'
+        + '인간의 판단은 빨라 — 느낌이 오면 바로 해. STORY를 굳이 안 해도 돼, 할 필요가 느껴질 때만. 대부분은 바로 STRATEGY로 가는 게 자연스러워.]';
+  } else if (phase === 'MIRROR' && turnInPhase >= 2 && !completedEvents.includes('LUNA_STORY') && !completedEvents.includes('EMOTION_MIRROR')) {
     transitionHint = '\n\n[힌트: 유저가 핵심 감정을 인정했으면, 자기개방(LUNA_STORY)으로 이어가.]';
-  } else if (phase === 'MIRROR' && completedEvents.includes('LUNA_STORY') && !completedEvents.includes('LUNA_STRATEGY')) {
-    transitionHint = '\n\n[🚨🚨 절대 금지: [STORY_READY:...] 태그를 다시 쓰지 마! 루나의 이야기는 이미 했어. 같은 이야기를 두 번 하면 어색해. 이제 관점 전환 + "그래서 어떡하지?" 변화 동기 보이면 [STRATEGY_READY] 태그로 작전회의 소집.]';
+  } else if (phase === 'MIRROR' && completedEvents.includes('LUNA_STORY') && !completedEvents.includes('LUNA_STRATEGY') && !completedEvents.includes('EMOTION_MIRROR')) {
+    transitionHint = '\n\n[🚨🚨 절대 금지: [STORY_READY:...] 태그를 다시 쓰지 마! 이제 관점 전환 + "그래서 어떡하지?" 변화 동기 보이면 [STRATEGY_READY] 태그로 작전회의 소집.]';
   } else if (phase === 'MIRROR' && completedEvents.includes('LUNA_STRATEGY')) {
     transitionHint = '\n\n[🚨🚨 절대 금지: [STORY_READY:...] 태그와 [STRATEGY_READY:...] 태그를 다시 쓰지 마! 둘 다 이미 완료됨.]';
   } else if (phase === 'BRIDGE' && turnInPhase >= 2) {

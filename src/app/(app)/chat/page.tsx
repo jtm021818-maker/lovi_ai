@@ -461,7 +461,7 @@ export default function ChatListPage() {
                         </motion.button>
                       )}
 
-                      <img src={imgSrc} className="w-full h-auto pointer-events-none drop-shadow-sm" />
+                      <img src={imgSrc} className="w-full h-auto pointer-events-none drop-shadow-sm" style={{ aspectRatio: '1327/567' }} />
 
                       <div className={`absolute ${uniformInsets} flex flex-col pointer-events-none`}>
 

@@ -293,13 +293,16 @@ export default function PhaseProgress({ currentPhase, progress, persona = 'luna'
   const displayText = (persona !== 'tarot' && lunaThinking) ? lunaThinking : currentStep.statusText;
   const typedStatus = useTypewriter(displayText, 70);
 
-  // 🆕 ACE v4: understandingLevel이 있으면 루나 이해도 기반 진행바, 없으면 기존
-  const stepSize = 100 / steps.length;
-  const basePercent = idx * stepSize;
-  const phasePercent = (persona !== 'tarot' && understandingLevel !== undefined)
-    ? (understandingLevel / 100) * stepSize  // 이해도 기반
-    : (progress / 100) * stepSize;           // 기존 턴 기반
-  const totalPercent = Math.min(100, Math.max(0, basePercent + phasePercent));
+  // 🆕 ACE v4: icon 위치에 정확히 매핑 (justify-between은 N-1개 구간으로 나뉨)
+  const iconCount = steps.length;
+  const basePercent = (idx / (iconCount - 1)) * 100;
+  const nextPercent = idx < iconCount - 1 ? ((idx + 1) / (iconCount - 1)) * 100 : basePercent;
+  
+  const intraStepProgress = (persona !== 'tarot' && understandingLevel !== undefined)
+    ? (understandingLevel / 100)
+    : (progress / 100);
+
+  const totalPercent = Math.min(100, Math.max(0, basePercent + (nextPercent - basePercent) * intraStepProgress));
 
   return (
     <div className="w-full sticky top-[60px] z-10">
@@ -318,7 +321,7 @@ export default function PhaseProgress({ currentPhase, progress, persona = 'luna'
           <motion.div
             className={`absolute left-[10%] top-[14px] h-[3px] bg-gradient-to-r ${persona === 'tarot' ? 'from-violet-300 via-purple-400 to-indigo-400' : 'from-rose-300 via-pink-400 to-violet-400'} z-[1] rounded-full`}
             initial={{ width: 0 }}
-            animate={{ width: `${Math.max(0, totalPercent - 10)}%` }}
+            animate={{ width: `${totalPercent * 0.8}%` }}
             transition={{ type: 'spring', damping: 20, stiffness: 100 }}
           >
             {/* 진행 끝 글로우 dot */}

@@ -609,14 +609,21 @@ export class CounselingPipeline {
       updatedLastEventTurn = turnCount;
     }
 
-    // 🆕 v38: LUNA_STRATEGY 폴백 발동 — 2가지 케이스 커버
-    // Case 1: MIRROR→BRIDGE 강제 전환 턴 (ABSOLUTE_MAX로 AI 태그 없이 넘어옴)
-    // Case 2: 이미 BRIDGE에 와 있지만 LUNA_STRATEGY가 아직 미완료
-    //         (이전 턴에서 전환됐지만 canFireEvent() 때문에 못 발동한 경우)
+    // 🆕 v49: LUNA_STRATEGY 발동 — 루나가 "이제 작전 짜자" 판단하는 타이밍
+    // AI가 [STRATEGY_READY] 태그로 직접 판단하는 게 1순위 (HLRE에서 처리)
+    // 안전망: EMOTION_MIRROR 완료 후 2턴 이상 지났으면 자동 발동 (빠른 판단 유도)
+    const turnsAfterMirror = updatedCompletedEvents.includes('EMOTION_MIRROR')
+      ? turnCount - (updatedLastEventTurn || 0)
+      : 0;
     const shouldFallbackStrategy = canFireEvent()
-      && newPhaseV2 === 'BRIDGE'
       && !updatedCompletedEvents.includes('LUNA_STRATEGY')
-      && persona !== 'tarot';
+      && persona !== 'tarot'
+      && (
+        // MIRROR에서 감정 거울 끝나고 2턴 지남 → 루나가 충분히 대화했으니 작전 모드
+        (newPhaseV2 === 'MIRROR' && updatedCompletedEvents.includes('EMOTION_MIRROR') && turnsAfterMirror >= 2)
+        // BRIDGE 도달했는데 아직 미완료
+        || newPhaseV2 === 'BRIDGE'
+      );
     if (shouldFallbackStrategy) {
       console.log(`[Pipeline] 🔥 LUNA_STRATEGY 폴백 발동! (BRIDGE인데 작전회의 미완료, AI 태그 누락)`);
       // 대화 맥락에서 상황 요약 생성
