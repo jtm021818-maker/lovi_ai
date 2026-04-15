@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { PhaseEvent, EmotionMirrorData, RelationshipScenario } from '@/types/engine.types';
 import type { SuggestionMeta } from '@/types/engine.types';
 import { useTypewriter } from '@/hooks/useTypewriter';
+import CinematicIntro from './CinematicIntro';
 
 /**
  * v49: 루나의 1인/2인 연극 — Visual Novel 스타일
@@ -253,13 +254,8 @@ function VNScene({
   // Portal mount (SSR 방지)
   useEffect(() => { setMounted(true); }, []);
 
-  // intro → playing 자동 전환
-  useEffect(() => {
-    if (phase === 'intro') {
-      const timer = setTimeout(() => setPhase('playing'), 1200);
-      return () => clearTimeout(timer);
-    }
-  }, [phase]);
+  // intro → playing: CinematicIntro 완료 시 전환 (콜백으로)
+  const handleIntroComplete = useCallback(() => setPhase('playing'), []);
 
   // reveal → message 자동 전환
   useEffect(() => {
@@ -374,6 +370,11 @@ function VNScene({
           className="fixed inset-0 z-50 bg-black"
           style={{ height: '100dvh' }}
         >
+          {/* 🎬 영화 필름 인트로 (intro phase에서만) */}
+          {phase === 'intro' && (
+            <CinematicIntro title={data.sceneTitle} onComplete={handleIntroComplete} />
+          )}
+
           {/* 씬 컨테이너 (풀스크린) */}
           <motion.div
             animate={phase === 'closing' ? { scale: 0.85, opacity: 0, borderRadius: '24px' } : { scale: 1, opacity: 1 }}
@@ -654,26 +655,9 @@ function VNScene({
               </motion.div>
             )}
 
-            {/* Intro 로딩 */}
+            {/* Intro — 빈 상태 (CinematicIntro가 Portal로 덮고 있음) */}
             {phase === 'intro' && (
-              <motion.div
-                key="intro"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="bg-black/50 backdrop-blur-sm rounded-t-2xl py-5 px-4"
-              >
-                <div className="flex justify-center gap-1.5">
-                  {[0, 1, 2].map((i) => (
-                    <motion.span
-                      key={i}
-                      animate={{ opacity: [0.3, 1, 0.3], y: [0, -3, 0] }}
-                      transition={{ duration: 1, repeat: Infinity, delay: i * 0.15 }}
-                      className="w-2 h-2 rounded-full bg-white/60"
-                    />
-                  ))}
-                </div>
-              </motion.div>
+              <motion.div key="intro" className="py-5" />
             )}
           </AnimatePresence>
         </div>

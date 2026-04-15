@@ -78,3 +78,35 @@ body {
 input, textarea, select {
   font-size: 16px;
 }
+
+/* 🎬 VN 영화 필름 인트로 애니메이션 */
+.film-grain-layer {
+  position: absolute;
+  inset: -50%;
+  width: 200%;
+  height: 200%;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  background-size: 128px 128px;
+  opacity: 0.08;
+  animation: grain-shift 1.2s steps(8) infinite;
+  pointer-events: none;
+}
+@keyframes grain-shift {
+  0%   { transform: translate(0, 0); }
+  12%  { transform: translate(-4%, -8%); }
+  25%  { transform: translate(5%, -12%); }
+  37%  { transform: translate(-6%, 4%); }
+  50%  { transform: translate(10%, 8%); }
+  62%  { transform: translate(-3%, 12%); }
+  75%  { transform: translate(7%, -6%); }
+  87%  { transform: translate(-8%, 3%); }
+  100% { transform: translate(0, 0); }
+}
+.film-strip-scroll {
+  animation: strip-scroll 0.6s linear infinite;
+  will-change: transform;
+}
+@keyframes strip-scroll {
+  from { transform: translateY(0); }
+  to { transform: translateY(-50%); }
+}
