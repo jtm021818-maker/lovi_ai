@@ -148,16 +148,20 @@ async function* geminiStream(
   systemPrompt: string,
   messages: { role: 'user' | 'assistant'; content: string }[],
   maxTokens: number,
-  tier: ModelTier = 'sonnet'
+  tier: ModelTier = 'sonnet',
+  onRetry?: (event: RetryStatusEvent) => void,
 ): AsyncGenerator<string> {
   const contents = messages.map((m) => ({
     role: m.role === 'assistant' ? ('model' as const) : ('user' as const),
     parts: [{ text: m.content }],
   }));
 
-  // 🆕 v48: 3회 자동 재시도 — timeout/간헐적 실패 대응 (UI 표시 포함)
-  const MAX_RETRIES = 2;  // 0,1,2 = 총 3회 시도
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  // 🆕 v49: 503은 5회 시도 (일시적 과부하), 그 외는 2회
+  const MAX_RETRIES_503 = 4;  // 0~4 = 총 5회
+  const MAX_RETRIES_OTHER = 1; // 0~1 = 총 2회
+  let currentMax = MAX_RETRIES_OTHER;
+
+  for (let attempt = 0; attempt <= currentMax; attempt++) {
     try {
       const response = await gemini.models.generateContentStream({
         model: PROVIDER_MODELS.gemini[tier],
@@ -178,24 +182,46 @@ async function* geminiStream(
         }
       }
 
-      // 빈 응답이면 재시도
-      if (!yieldedAny && attempt < MAX_RETRIES) {
-        console.warn(`[Gemini] ⚠️ 빈 응답 — 재시도 ${attempt + 1}/${MAX_RETRIES + 1}`);
+      if (!yieldedAny && attempt < currentMax) {
+        console.warn(`[Gemini] ⚠️ 빈 응답 — 재시도 ${attempt + 1}/${currentMax + 1}`);
         continue;
       }
 
       recordProviderUsage('gemini');
       return;
     } catch (err: any) {
-      if (attempt < MAX_RETRIES) {
-        // 503(과부하)은 더 길게 대기, 그 외는 짧게
-        const is503 = err?.status === 503 || err?.code === 503 || err?.message?.includes('503');
-        const delayMs = is503 ? 1500 * (attempt + 1) : 500 * (attempt + 1); // 503: 1.5초→3초, 그외: 0.5초→1초
-        console.warn(`[Gemini] ⚠️ 스트리밍 에러 → 재시도 ${attempt + 1}/${MAX_RETRIES + 1} (${delayMs}ms 대기):`, err?.message?.slice(0, 80));
+      const is503 = err?.status === 503 || err?.code === 503 || err?.message?.includes('503');
+      // 503 첫 감지 시 최대 재시도 횟수를 5회로 확장
+      if (is503 && currentMax < MAX_RETRIES_503) {
+        currentMax = MAX_RETRIES_503;
+      }
+
+      if (attempt < currentMax) {
+        const delayMs = is503
+          ? Math.min(2000 * (attempt + 1), 5000) // 503: 2초→4초→5초→5초
+          : 500 * (attempt + 1);
+        console.warn(`[Gemini] ⚠️ 스트리밍 에러 → 재시도 ${attempt + 1}/${currentMax + 1} (${delayMs}ms 대기):`, err?.message?.slice(0, 80));
+        // 🆕 v49: 503 재시도 UI 알림
+        if (is503 && onRetry) {
+          const RETRY_503_MESSAGES = [
+            '루나가 생각을 정리하고 있어... 🦊',
+            '서버가 좀 바쁜가봐, 잠시만...! 💭',
+            '거의 다 됐어! 조금만 더... ✨',
+            '포기 안 해! 기다려줘~! 💜',
+            '마지막으로 한번 더...! 🔥',
+          ];
+          onRetry({
+            provider: 'gemini',
+            attempt: attempt + 1,
+            maxAttempts: currentMax + 1,
+            reason: 'error',
+            message: RETRY_503_MESSAGES[Math.min(attempt, RETRY_503_MESSAGES.length - 1)],
+          });
+        }
         await new Promise(r => setTimeout(r, delayMs));
         continue;
       }
-      throw err; // 재시도 소진 → 캐스케이드 폴백으로 전달
+      throw err;
     }
   }
 }
@@ -353,11 +379,12 @@ export async function* streamWithProvider(
   messages: { role: 'user' | 'assistant'; content: string }[],
   tier: ModelTier = 'sonnet',
   maxTokens: number = 1024,
-  modelOverride?: string
+  modelOverride?: string,
+  onRetry?: (event: RetryStatusEvent) => void,
 ): AsyncGenerator<string> {
   switch (provider) {
     case 'gemini':
-      yield* geminiStream(systemPrompt, messages, maxTokens, tier);
+      yield* geminiStream(systemPrompt, messages, maxTokens, tier, onRetry);
       break;
     case 'groq':
       yield* groqStream(systemPrompt, messages, maxTokens, tier, modelOverride);
@@ -468,7 +495,7 @@ export async function* streamWithCascade(
     const startTime = Date.now();
     let ttfbMs: number | undefined;
     try {
-      const gen = streamWithProvider(provider, systemPrompt, messages, tier, maxTokens, modelOverride);
+      const gen = streamWithProvider(provider, systemPrompt, messages, tier, maxTokens, modelOverride, onRetry);
       const TTFB_TIMEOUT_MS = 30000;
 
       for await (const chunk of wrapWithTTFBTimeout(gen, TTFB_TIMEOUT_MS, `${provider}/${tier}`)) {
@@ -515,26 +542,12 @@ export async function* streamWithCascade(
     }
   }
 
-  // 모든 폴백 실패 → 마지막 강제 (실패해도 에러 대신 사용자 친화 메시지)
-  const last = chain[chain.length - 1];
-  const lastModel = last.modelOverride || PROVIDER_MODELS[last.provider][last.tier];
-  const t0 = Date.now();
-  logAttempt({ provider: last.provider, tier: last.tier, model: lastModel, status: 'retry', error: '모든 폴백 실패 → 최후 강제 시도' });
-  try {
-    const gen = streamWithProvider(last.provider, systemPrompt, messages, last.tier, maxTokens, last.modelOverride);
-    let yieldedAny = false;
-    for await (const chunk of gen) {
-      yieldedAny = true;
-      yield chunk;
-    }
-    if (!yieldedAny) throw new Error('빈 응답');
-    logAttempt({ provider: last.provider, tier: last.tier, model: lastModel, status: 'success', totalMs: Date.now() - t0, error: '최후 강제 시도 성공' });
-  } catch (lastErr: any) {
-    console.error(`[Cascade] ❌ 모든 프로바이더 실패:`, lastErr?.message?.slice(0, 100));
-    logAttempt({ provider: last.provider, tier: last.tier, model: lastModel, status: 'error', totalMs: Date.now() - t0, error: `최후 시도 실패: ${lastErr?.message?.slice(0, 60)}` });
-    // 에러 throw 대신 사용자 친화 메시지 yield
-    yield '잠깐 서버가 바빠서 응답이 어려워... 다시 말해줄 수 있어? 💜';
-  }
+  // 🆕 v49: 모든 캐스케이드 실패 — 에러 대신 사용자 친화 메시지
+  // (Gemini 503이면 이미 geminiStream에서 5회 시도했으므로 추가 시도 불필요)
+  console.error(`[Cascade] ❌❌ 모든 프로바이더 실패`);
+  const lastEntry = chain[chain.length - 1];
+  logAttempt({ provider: lastEntry.provider, tier: lastEntry.tier, model: PROVIDER_MODELS[lastEntry.provider][lastEntry.tier], status: 'error', error: '모든 시도 소진' });
+  yield '잠깐 서버가 바빠서 응답이 어려워... 💜|||조금 뒤에 다시 말해줄 수 있어?';
 }
 
 /**
