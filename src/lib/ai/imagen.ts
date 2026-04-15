@@ -7,12 +7,25 @@
  * 무료 티어: ~10-20 RPD → 시나리오 7개 + 기본 3개 = 최대 10개/일 (cold start)
  */
 
-import { GoogleGenAI } from '@google/genai';
 import type { RelationshipScenario } from '@/types/engine.types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-
 const IMAGEN_MODEL = 'imagen-4.0-generate-001';
+
+/** Lazy SDK 초기화 — import 시점에 크래시 방지 */
+let _ai: any = null;
+function getAI() {
+  if (!_ai) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { GoogleGenAI } = require('@google/genai');
+      _ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+    } catch (e) {
+      console.warn('[Imagen] GoogleGenAI SDK 로드 실패:', e);
+      return null;
+    }
+  }
+  return _ai;
+}
 
 // ============================================================
 // 시나리오별 배경 프롬프트
@@ -121,6 +134,12 @@ export async function generateSceneBackground(
 
   // 2. 프롬프트 생성
   const prompt = getScenarioVisualPrompt(scenario, emotionScore);
+
+  const ai = getAI();
+  if (!ai) {
+    console.warn('[Imagen] ⚠️ SDK 사용 불가 — 폴백 사용');
+    return null;
+  }
 
   console.log(`[Imagen] 🎨 배경 생성 시작: ${cacheKey} (${prompt.slice(0, 60)}...)`);
   const t0 = Date.now();

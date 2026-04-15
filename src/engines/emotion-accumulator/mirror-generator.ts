@@ -15,7 +15,7 @@ import type { RelationshipScenario } from '@/types/engine.types';
 import { generateWithCascade } from '@/lib/ai/provider-registry';
 import { getProviderCascade } from '@/lib/ai/smart-router';
 import { safeParseLLMJson } from '@/lib/utils/safe-json';
-import { generateSceneBackground } from '@/lib/ai/imagen';
+// Imagen은 lazy import — SDK 로드 실패해도 pipeline 안 죽게
 
 /**
  * LLM을 사용하여 1인 연극 스타일 감정 거울 생성
@@ -150,9 +150,10 @@ ${recentUserMessages.map((m, i) => `[${i + 1}] ${m}`).join('\n')}
 
     console.log(`[MirrorGenerator] 🎭 ${isDuo ? '2인' : '1인'} 연극 생성: "${parsed.sceneTitle}" (${sceneLines.length}줄) reveal="${parsed.reveal}"`);
 
-    // 🆕 v49: Imagen 배경 이미지 생성 (fire-and-forget 아님 — 이벤트 데이터에 포함해야 함)
+    // 🆕 v49: Imagen 배경 이미지 생성 — dynamic import로 SDK 실패해도 pipeline 안전
     let backgroundImageBase64: string | undefined;
     try {
+      const { generateSceneBackground } = await import('@/lib/ai/imagen');
       const bg = await generateSceneBackground(scenario, parsed.sceneTitle);
       if (bg) backgroundImageBase64 = bg;
     } catch (e: any) {
