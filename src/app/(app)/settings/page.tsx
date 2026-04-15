@@ -34,7 +34,7 @@ const SITUATION_OPTIONS = [
 ];
 
 const PERSONA_OPTIONS: { value: PersonaMode; label: string; icon: string; image: string; desc: string; bg: string }[] = [
-  { value: 'luna', label: '루나', icon: '🦊', image: '/ui/sangdam_luna.png', desc: '편한 언니처럼', bg: '#e8daf5' },
+  { value: 'luna', label: '루나', icon: '🦊', image: '/ui/sangdam_luna.png', desc: '편한 친구처럼', bg: '#e8daf5' },
   // { value: 'counselor', label: '상담사', icon: '👩‍⚕️', image: '/personas/counselor_cushion.png', desc: '전문적으로', bg: '#c5ddf5' },
   { value: 'tarot', label: '타로냥', icon: '🔮', image: '/ui/sangdam_taromiao.png', desc: '카드로 읽는 마음', bg: '#1a1a3e' },
 ];
@@ -459,10 +459,10 @@ export default function SettingsPage() {
                           {p.value === 'luna' && (
                             <>
                               <p style={{ fontWeight: 700, fontSize: 14, marginBottom: 8, color: '#9c27b0' }}>
-                                🦊 루나 — 편한 {profile?.onboarding_situation === 'male' ? '누나' : '언니'} 상담사
+                                🦊 루나 — 편한 친구 같은 상담사
                               </p>
                               <p>• 29살 연애 심리 전문가</p>
-                              <p>• 따뜻하고 현실적인 <b>{profile?.onboarding_situation === 'male' ? '누나' : '언니'} 포지션</b></p>
+                              <p>• 따뜻하고 현실적인 <b>친구 같은 포지션</b></p>
                               <p>• 심리학 기반 공감 + 쉬운 말로 설명</p>
                               <p>• 판단 없이 네 편에서 들어줘</p>
                               <p style={{ marginTop: 8, fontStyle: 'italic', opacity: 0.85 }}>

@@ -156,7 +156,7 @@ ${contextLines.join('\n\n')}
 
 ⚠️ 주의:
 - 300자 이내로 간결하게
-- 이건 내부 참고용이므로 학자/논문 이름 OK (루나가 다시 누나 말투로 번역할 것)
+- 이건 내부 참고용이므로 학자/논문 이름 OK (루나가 다시 자기 말투로 번역할 것)
 - 루나는 이걸 "방금 떠올린 내 경험/내 생각"처럼 출력할 예정`;
 }
 
@@ -188,7 +188,7 @@ export async function runDeepResearch(
     const prompt = buildResearchPrompt(params);
 
     const response = await gemini.models.generateContent({
-      model: 'gemini-3.1-flash-lite-preview', // 상담 메인 모델 통일
+      model: 'gemini-2.5-flash-lite-preview', // v52: 전체 1순위 통일
       config: {
         tools: [{ googleSearch: {} }], // 🔍 Google Search grounding 활성화
         maxOutputTokens: 600,

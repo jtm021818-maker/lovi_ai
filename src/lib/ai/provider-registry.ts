@@ -1,21 +1,22 @@
 /**
  * AI 프로바이더 레지스트리 (Gemini 전용)
  *
- * [v51 — Gemini 멀티모델 캐스케이드]
+ * [v52 — Gemini 멀티모델 캐스케이드]
  * 무료 Rate Limit 기반 최적 분배:
- * - 3.1 Flash-Lite: 메인 상담 1순위 (품질 최강, RPD 150K)
- * - 2.5 Flash:      메인 상담 폴백 (RPD 10K)
- * - 2 Flash-Lite:   분석/검증/라운지 (RPD 무제한)
- * - 2 Flash:        최종 폴백 (RPD 무제한)
+ * - 2.5 Flash-Lite: 전체 1순위 (메인 상담 + 이벤트 + 분석)
+ * - 2 Flash:        폴백 (RPD 무제한)
+ * - 2 Flash-Lite:   경량 분석/검증 (RPD 무제한)
  */
 
 import { GoogleGenAI } from '@google/genai';
+import Groq from 'groq-sdk';
 import { checkProviderRateLimit, recordProviderUsage } from '@/lib/utils/rate-limit';
 
 // ============================================================
 // SDK 초기화
 // ============================================================
 const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! });
 
 // ============================================================
 // 프로바이더 + 모델 타입
@@ -23,23 +24,31 @@ const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 export type Provider = 'gemini' | 'groq' | 'cerebras';
 export type ModelTier = 'haiku' | 'sonnet' | 'opus';
 
-/** Gemini 모델 ID 상수 */
 export const GEMINI_MODELS = {
-  FLASH_LITE_31: 'gemini-3.1-flash-lite-preview',  // 품질 최강, RPD 150K
-  FLASH_25: 'gemini-2.5-flash',                     // 품질 좋음, RPD 10K
-  FLASH_LITE_20: 'gemini-2.0-flash-lite',           // RPD 무제한, 가벼운 작업
-  FLASH_20: 'gemini-2.0-flash',                     // RPD 무제한, 중간 품질
+  FLASH_LITE_25: 'gemini-2.5-flash-lite-preview',   // 1순위: 전체 메인
+  FLASH_20: 'gemini-2.0-flash',                     // 폴백: RPD 무제한
+  FLASH_LITE_20: 'gemini-2.0-flash-lite',           // 경량 분석/검증
+  FLASH_25: 'gemini-2.5-flash',                     // 프리미엄 폴백
+  FLASH_LITE_31: 'gemini-3.1-flash-lite-preview',   // 비활성 (에러 발생 중)
 } as const;
 
 /** 프로바이더별 모델 매핑 (기본 — modelOverride로 재정의 가능) */
 const PROVIDER_MODELS: Record<Provider, Record<ModelTier, string>> = {
   gemini: {
-    haiku: GEMINI_MODELS.FLASH_LITE_20,       // 분석/검증: 2 Flash-Lite (무제한)
-    sonnet: GEMINI_MODELS.FLASH_LITE_31,      // 메인 상담: 3.1 Flash-Lite (최고 품질)
-    opus: GEMINI_MODELS.FLASH_25,             // 프리미엄 폴백: 2.5 Flash
+    haiku: GEMINI_MODELS.FLASH_LITE_20,       // 경량 분석/검증: 2 Flash-Lite
+    sonnet: GEMINI_MODELS.FLASH_LITE_25,      // 메인 상담: 2.5 Flash-Lite (1순위)
+    opus: GEMINI_MODELS.FLASH_20,             // 폴백: 2 Flash (무제한)
   },
-  groq: { haiku: '', sonnet: '', opus: '' },
-  cerebras: { haiku: '', sonnet: '', opus: '' },
+  groq: { 
+    haiku: 'llama-3.1-8b-instant', 
+    sonnet: 'llama-3.3-70b-versatile', 
+    opus: 'llama-3.3-70b-versatile' 
+  },
+  cerebras: { 
+    haiku: 'llama3.1-8b', 
+    sonnet: 'llama3.1-70b', 
+    opus: 'llama3.1-70b' 
+  },
 };
 
 /** 전략별 temperature */
@@ -124,6 +133,74 @@ async function geminiGenerate(
     }
   }
   return ''; // 여기 도달하면 빈 문자열(캐스케이드가 처리)
+}
+
+/** Groq 호출 (v44) */
+async function groqGenerate(
+  systemPrompt: string,
+  messages: { role: 'user' | 'assistant'; content: string }[],
+  maxTokens: number,
+  tier: ModelTier = 'sonnet',
+  modelOverride?: string
+): Promise<string> {
+  const model = modelOverride || PROVIDER_MODELS.groq[tier];
+  try {
+    const response = await groq.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...messages
+      ],
+      max_tokens: maxTokens,
+      temperature: TEMPERATURE[tier],
+    });
+    recordProviderUsage('groq');
+    return response.choices[0]?.message?.content || '';
+  } catch (err: any) {
+    console.error(`[Groq] Error (${model}):`, err?.message);
+    throw err;
+  }
+}
+
+/** Cerebras 호출 (v47) */
+async function cerebrasGenerate(
+  systemPrompt: string,
+  messages: { role: 'user' | 'assistant'; content: string }[],
+  maxTokens: number,
+  tier: ModelTier = 'sonnet',
+  modelOverride?: string
+): Promise<string> {
+  const model = modelOverride || PROVIDER_MODELS.cerebras[tier];
+  try {
+    const response = await fetch('https://api.cerebras.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.CEREBRAS_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...messages
+        ],
+        max_tokens: maxTokens,
+        temperature: TEMPERATURE[tier],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`Cerebras API Error: ${response.status} ${JSON.stringify(errorData)}`);
+    }
+
+    const data = await response.json();
+    recordProviderUsage('cerebras');
+    return data.choices?.[0]?.message?.content || '';
+  } catch (err: any) {
+    console.error(`[Cerebras] Error (${model}):`, err?.message);
+    throw err;
+  }
 }
 
 async function* geminiStream(
@@ -215,13 +292,19 @@ async function* geminiStream(
 
 /** 특정 프로바이더로 생성 (Gemini 전용, modelOverride로 모델 지정 가능) */
 export async function generateWithProvider(
-  _provider: Provider,
+  provider: Provider,
   systemPrompt: string,
   messages: { role: 'user' | 'assistant'; content: string }[],
   tier: ModelTier = 'sonnet',
   maxTokens: number = 1024,
   modelOverride?: string
 ): Promise<string> {
+  if (provider === 'groq') {
+    return groqGenerate(systemPrompt, messages, maxTokens, tier, modelOverride);
+  }
+  if (provider === 'cerebras') {
+    return cerebrasGenerate(systemPrompt, messages, maxTokens, tier, modelOverride);
+  }
   return geminiGenerate(systemPrompt, messages, maxTokens, tier, modelOverride);
 }
 

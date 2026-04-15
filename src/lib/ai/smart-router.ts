@@ -1,17 +1,16 @@
 /**
  * 스마트 라우터 — 태스크별 Gemini 멀티모델 캐스케이드 체인 결정
  *
- * [v51 — 무료 Rate Limit 최적 분배]
+ * [v52 — 무료 Rate Limit 최적 분배]
  *
  * 모델별 무료 한도:
- *   3.1 Flash-Lite  — RPM 4K, TPM 4M, RPD 150K (품질 최강)
- *   2.5 Flash       — RPM 1K, TPM 1M, RPD 10K  (품질 좋음)
- *   2 Flash-Lite    — RPM 4K, TPM 4M, RPD 무제한 (가벼운 작업)
- *   2 Flash         — RPM 2K, TPM 4M, RPD 무제한 (중간 품질)
+ *   2.5 Flash-Lite  — 전체 1순위 (메인 + 이벤트 + 분석)
+ *   2 Flash         — RPD 무제한 (폴백)
+ *   2 Flash-Lite    — RPD 무제한 (경량 분석/검증)
  *
  * 전략:
- *   메인 상담/이벤트 → 3.1 Flash-Lite (1순위) → 2.5 Flash (폴백)
- *   분석/검증/라운지/요약 → 2 Flash-Lite (1순위) → 2 Flash (폴백)
+ *   전체 → 2.5 Flash-Lite (1순위) → 2 Flash (폴백)
+ *   경량 분석 → 2 Flash-Lite (1순위) → 2 Flash (폴백)
  */
 
 import type { Provider, ModelTier } from './provider-registry';
@@ -46,25 +45,23 @@ export function getProviderCascade(
 ): CascadeItem[] {
   switch (task) {
     // ──────────────────────────────────────────
-    // 메인 상담: 품질 최우선
-    // 1순위: 3.1 Flash-Lite (품질 최강)
-    // 2순위: 2.5 Flash (고품질 폴백)
+    // 메인 상담: 2.5 Flash-Lite 1순위
+    // 1순위: 2.5 Flash-Lite
+    // 2순위: 2 Flash (무제한 폴백)
     // ──────────────────────────────────────────
     case 'main_response':
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_31 },
-        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
+        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_20 },
       ];
 
     // ──────────────────────────────────────────
-    // 이벤트 (VN연극, 감정거울 등): 품질 필요
-    // 1순위: 3.1 Flash-Lite
-    // 2순위: 2.5 Flash
+    // 이벤트 (VN연극, 감정거울 등): 2.5 Flash-Lite
     // ──────────────────────────────────────────
     case 'event_generation':
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_31 },
-        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
+        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_20 },
       ];
 
     // ──────────────────────────────────────────
@@ -105,14 +102,15 @@ export function getProviderCascade(
     // ──────────────────────────────────────────
     case 'lounge_generation':
       return [
+        { provider: 'cerebras', tier: 'haiku' },    // 1순위: Cerebras 8B (초고속/무료)
+        { provider: 'groq', tier: 'haiku' },        // 2순위: Groq 8B
         { provider: 'gemini', tier: 'haiku', modelOverride: GEMINI_MODELS.FLASH_LITE_20 },
-        { provider: 'gemini', tier: 'haiku', modelOverride: GEMINI_MODELS.FLASH_20 },
       ];
 
     default:
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_31 },
-        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
+        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_20 },
       ];
   }
 }
