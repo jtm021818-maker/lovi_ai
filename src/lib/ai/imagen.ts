@@ -1,31 +1,13 @@
 /**
- * v49: Google Imagen API 래퍼
+ * v49: 씬 배경 이미지 생성기 (Pollinations.ai)
  *
- * 루나의 1인 연극에서 사용할 배경 이미지를 Imagen 4.0으로 생성.
- * 시나리오별 프롬프트 매핑 + 인메모리 캐시로 무료 티어 보호.
+ * 루나의 1인 연극에서 사용할 배경 이미지 생성.
+ * Pollinations.ai: 무료, API 키 불필요, FLUX 모델, 애니메이션 스타일 지원.
  *
- * 무료 티어: ~10-20 RPD → 시나리오 7개 + 기본 3개 = 최대 10개/일 (cold start)
+ * 한도: IP 기반 rate limit, 일 100개+ 가능 (시나리오 캐시로 실제 7-10개/일)
  */
 
 import type { RelationshipScenario } from '@/types/engine.types';
-
-const IMAGEN_MODEL = 'imagen-4.0-generate-001';
-
-/** Lazy SDK 초기화 — import 시점에 크래시 방지 */
-let _ai: any = null;
-function getAI() {
-  if (!_ai) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { GoogleGenAI } = require('@google/genai');
-      _ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-    } catch (e) {
-      console.warn('[Imagen] GoogleGenAI SDK 로드 실패:', e);
-      return null;
-    }
-  }
-  return _ai;
-}
 
 // ============================================================
 // 시나리오별 배경 프롬프트
@@ -69,7 +51,7 @@ const DEFAULT_PROMPTS: Record<string, string> = {
 };
 
 const STYLE_SUFFIX =
-  ', anime illustration style, Korean webtoon art, soft emotional lighting, cinematic composition, Makoto Shinkai color palette, no text, no characters, no people, portrait orientation 9:16, high quality digital art';
+  ', anime illustration style, Korean webtoon art, soft emotional lighting, cinematic composition, Makoto Shinkai color palette, no text, no characters, no people, high quality digital art';
 
 // ============================================================
 // 인메모리 캐시 (시나리오 기반)
@@ -95,7 +77,6 @@ function getCached(key: string): string | null {
 }
 
 function setCache(key: string, base64: string): void {
-  // LRU: 초과 시 가장 오래된 엔트리 제거
   if (imageCache.size >= MAX_CACHE_SIZE) {
     const oldestKey = imageCache.keys().next().value;
     if (oldestKey) imageCache.delete(oldestKey);
@@ -112,12 +93,11 @@ export function getScenarioVisualPrompt(scenario: RelationshipScenario, emotionS
   const base = SCENARIO_PROMPTS[scenario];
   if (base) return base + STYLE_SUFFIX;
 
-  // 시나리오 매핑 없으면 감정 점수 기반 기본 프롬프트
   const tier = (emotionScore ?? 0) <= -3 ? 'negative' : (emotionScore ?? 0) >= 3 ? 'positive' : 'neutral';
   return DEFAULT_PROMPTS[tier] + STYLE_SUFFIX;
 }
 
-/** Imagen 4.0으로 씬 배경 이미지 생성 (캐시 우선) */
+/** Pollinations.ai로 씬 배경 이미지 생성 (캐시 우선, API 키 불필요) */
 export async function generateSceneBackground(
   scenario: RelationshipScenario,
   sceneTitle?: string,
@@ -128,47 +108,55 @@ export async function generateSceneBackground(
   // 1. 캐시 히트
   const cached = getCached(cacheKey);
   if (cached) {
-    console.log(`[Imagen] ✅ 캐시 히트: ${cacheKey}`);
+    console.log(`[SceneBG] ✅ 캐시 히트: ${cacheKey}`);
     return cached;
   }
 
   // 2. 프롬프트 생성
   const prompt = getScenarioVisualPrompt(scenario, emotionScore);
+  const encodedPrompt = encodeURIComponent(prompt);
+  const seed = Math.abs(hashCode(cacheKey)); // 같은 시나리오 = 같은 seed = 일관된 이미지
+  const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=576&height=1024&seed=${seed}&nologo=true`;
 
-  const ai = getAI();
-  if (!ai) {
-    console.warn('[Imagen] ⚠️ SDK 사용 불가 — 폴백 사용');
-    return null;
-  }
-
-  console.log(`[Imagen] 🎨 배경 생성 시작: ${cacheKey} (${prompt.slice(0, 60)}...)`);
+  console.log(`[SceneBG] 🎨 배경 생성 시작: ${cacheKey}`);
   const t0 = Date.now();
 
   try {
-    const response = await ai.models.generateImages({
-      model: IMAGEN_MODEL,
-      prompt,
-      config: {
-        numberOfImages: 1,
-        includeRaiReason: true,
-      },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000); // 15초 타임아웃
 
-    const imageBytes = response?.generatedImages?.[0]?.image?.imageBytes;
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
 
-    if (!imageBytes) {
-      const reason = response?.generatedImages?.[0]?.raiFilteredReason;
-      console.warn(`[Imagen] ⚠️ 이미지 없음 (reason: ${reason || 'unknown'})`);
+    if (!response.ok) {
+      console.warn(`[SceneBG] ⚠️ HTTP ${response.status}`);
       return null;
     }
 
-    console.log(`[Imagen] ✅ 배경 생성 완료: ${cacheKey} (${Date.now() - t0}ms, ${Math.round(imageBytes.length / 1024)}KB)`);
+    const arrayBuffer = await response.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString('base64');
+
+    console.log(`[SceneBG] ✅ 배경 생성 완료: ${cacheKey} (${Date.now() - t0}ms, ${Math.round(base64.length / 1024)}KB)`);
 
     // 3. 캐시 저장
-    setCache(cacheKey, imageBytes);
-    return imageBytes;
+    setCache(cacheKey, base64);
+    return base64;
   } catch (err: any) {
-    console.error(`[Imagen] ❌ 배경 생성 실패: ${cacheKey}`, err?.message?.slice(0, 100));
+    if (err?.name === 'AbortError') {
+      console.warn(`[SceneBG] ⏰ 타임아웃: ${cacheKey} (15초 초과)`);
+    } else {
+      console.error(`[SceneBG] ❌ 배경 생성 실패: ${cacheKey}`, err?.message?.slice(0, 100));
+    }
     return null;
   }
+}
+
+/** 문자열 해시 (시드 생성용) */
+function hashCode(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash;
 }
