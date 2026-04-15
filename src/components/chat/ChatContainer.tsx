@@ -655,12 +655,14 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
                 onSend={sendMessage}
                 onImageAttach={activePersona !== 'tarot' ? handleImageAttach : undefined}
                 disabled={isLoading || pendingEventLock}
-                placeholder={pendingEventLock
-                  ? '위 질문에 답해줘 ↑'
-                  : isLoading
-                  ? (activePersona === 'tarot' ? '타로냥이 카드 보는 중...' : '루나가 생각하고 있어...')
-                  : '마음 편하게 다 말해봐...'}
-                typingPlaceholder={activePersona !== 'tarot' && openingVideoEnded && messages.length === 0 ? '무슨 고민이야? 연애 얘긴 나한테 다 말해!' : undefined}
+                placeholder={pendingEventLock ? '위 질문에 답해줘 ↑' : '마음 편하게 다 말해봐...'}
+                typingPlaceholder={
+                  isLoading 
+                    ? (activePersona === 'tarot' ? '타로냥이 카드를 읽고 있어' : '루나가 답장을 고민하고 있어') 
+                    : (activePersona !== 'tarot' && openingVideoEnded && messages.length === 0 
+                        ? '무슨 고민이야? 연애 얘긴 나한테 다 말해!' 
+                        : undefined)
+                }
               />
             </div>
           )}
