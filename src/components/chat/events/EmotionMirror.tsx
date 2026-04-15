@@ -287,6 +287,12 @@ function VNScene({
     setTimeout(() => setPhase('closing'), 300);
   }, [onSelect]);
 
+  // 스프라이트 시트 결정 — [남자] → man, [여자] → girl 고정 매핑
+  const gender = data.characterSetup?.userGender || 'female';
+  const mainSheet = SPRITE_SHEET[gender] || SPRITE_SHEET.female;
+  const maleSheet = SPRITE_SHEET.male;   // event1_luna_man.png
+  const femaleSheet = SPRITE_SHEET.female; // event1_luna_girl.png
+
   // 현재 대사의 파싱 결과 (speaker + 성별 확인용)
   const currentParsed = phase === 'playing' ? parseSceneLine(lines[lineIndex]) : null;
   // 현재 대사의 캐릭터가 어느 쪽인지 (성별 기반 스프라이트 선택)
@@ -310,12 +316,6 @@ function VNScene({
   const bgStyle = data.backgroundImageBase64
     ? { backgroundImage: `url(data:image/jpeg;base64,${data.backgroundImageBase64})` }
     : { background: (scenario && SCENARIO_GRADIENTS[scenario]) || DEFAULT_GRADIENT };
-
-  // 스프라이트 시트 결정 — [남자] → man, [여자] → girl 고정 매핑
-  const gender = data.characterSetup?.userGender || 'female';
-  const mainSheet = SPRITE_SHEET[gender] || SPRITE_SHEET.female;
-  const maleSheet = SPRITE_SHEET.male;   // event1_luna_man.png
-  const femaleSheet = SPRITE_SHEET.female; // event1_luna_girl.png
 
   // 겉감정/속마음 라인 구분 (전환점 기준)
   const transitionIdx = Math.max(Math.floor(lines.length * 0.6), 2);
