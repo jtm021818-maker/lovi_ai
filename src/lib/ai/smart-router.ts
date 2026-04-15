@@ -1,12 +1,12 @@
 /**
  * 스마트 라우터 — 태스크×전략별 프로바이더 캐스케이드 체인 결정
  *
- * [v48 원칙 — 무료 100명/일 설계]
- * 1. 상담 메인: Gemini 2.5 Flash (한국어 최강) → Groq Llama-3.3-70B → Cerebras GPT-OSS 120B
- * 2. 라운지: Groq Llama-3.3-70B (한도 절약) → Cerebras 120B → Gemini 2.0-flash-lite
- * 3. 이벤트(거울/패턴): Gemini 2.5 Flash (임팩트 순간 집중)
- * 4. 상태분석/검증: 8B 모델 (15,000+/일)
- * 5. 위기/감정거울: Gemini 2.5 Flash
+ * [v50 원칙 — Gemini 전용]
+ * 모든 태스크를 Gemini로 통일 (Groq/Cerebras 제거)
+ * - 상담 메인: Gemini Flash
+ * - 라운지: Gemini Flash-Lite
+ * - 이벤트: Gemini Flash
+ * - 상태분석/검증: Gemini Flash-Lite
  */
 
 import type { Provider, ModelTier } from './provider-registry';
@@ -42,9 +42,7 @@ export function getProviderCascade(
     // ──────────────────────────────────────────
     case 'state_analysis':
       return [
-        { provider: 'cerebras', tier: 'haiku' },    // 1순위: Cerebras 8B (1M 토큰/일)
-        { provider: 'groq', tier: 'haiku' },         // 2순위: Groq 8B (14,400 RPD)
-        { provider: 'gemini', tier: 'haiku' },       // 3순위: Gemini 2.5 Flash-Lite
+        { provider: 'gemini', tier: 'haiku' },       // Gemini Flash-Lite
       ];
 
     // ──────────────────────────────────────────
@@ -65,9 +63,7 @@ export function getProviderCascade(
     // ──────────────────────────────────────────
     case 'session_summary':
       return [
-        { provider: 'cerebras', tier: 'haiku' },    // 1순위: Cerebras 8B (초고속)
-        { provider: 'groq', tier: 'haiku' },         // 2순위: Groq 8B
-        { provider: 'gemini', tier: 'haiku' },       // 3순위: Gemini 2.5 Flash-Lite
+        { provider: 'gemini', tier: 'haiku' },       // Gemini Flash-Lite
       ];
 
     // ──────────────────────────────────────────
@@ -75,8 +71,7 @@ export function getProviderCascade(
     // ──────────────────────────────────────────
     case 'response_validation':
       return [
-        { provider: 'cerebras', tier: 'haiku' },    // 1순위: Cerebras 8B
-        { provider: 'groq', tier: 'haiku' },         // 2순위: Groq 8B
+        { provider: 'gemini', tier: 'haiku' },       // Gemini Flash-Lite
       ];
 
     // ──────────────────────────────────────────
@@ -85,16 +80,12 @@ export function getProviderCascade(
     // ──────────────────────────────────────────
     case 'lounge_generation':
       return [
-        { provider: 'groq', tier: 'sonnet' },             // v48: Llama-3.3-70B (qwen3 413 대체)
-        { provider: 'cerebras', tier: 'sonnet' },          // gpt-oss-120b
-        { provider: 'gemini', tier: 'haiku' },             // Gemini 2.0-flash-lite (최후)
+        { provider: 'gemini', tier: 'sonnet' },            // Gemini Flash
       ];
 
     default:
       return [
-        { provider: 'gemini', tier: 'sonnet' },            // Gemini 2.5 Flash
-        { provider: 'groq', tier: 'sonnet' },              // v48: Llama-3.3-70B
-        { provider: 'cerebras', tier: 'sonnet' },          // gpt-oss-120b
+        { provider: 'gemini', tier: 'sonnet' },            // Gemini Flash
       ];
   }
 }
@@ -105,23 +96,12 @@ export function getProviderCascade(
  * 위기도 Gemini Flash 우선
  */
 function getMainResponseCascade(
-  strategy?: StrategyType,
-  riskLevel?: RiskLevel
+  _strategy?: StrategyType,
+  _riskLevel?: RiskLevel
 ): CascadeItem[] {
-  // ① CRITICAL 위기 → Gemini 2.5 Flash (감정 깊이 필요)
-  if (riskLevel === 'CRITICAL' || riskLevel === 'HIGH' || strategy === 'CRISIS_SUPPORT') {
-    return [
-      { provider: 'gemini', tier: 'sonnet' },         // Gemini 2.5 Flash (한국어 최강)
-      { provider: 'groq', tier: 'sonnet' },            // v48: Llama-3.3-70B (안정, qwen3 413 대체)
-      { provider: 'cerebras', tier: 'sonnet' },        // gpt-oss-120b 최후 폴백
-    ];
-  }
-
-  // ② v48: Gemini 2.5 Flash → Groq Llama-3.3-70B → Cerebras 120B
+  // v50: Gemini 전용
   return [
-    { provider: 'gemini', tier: 'sonnet' },            // Gemini 2.5 Flash (한국어 최강, ~1,000 RPD)
-    { provider: 'groq', tier: 'sonnet' },              // v48: Llama-3.3-70B (안정 폴백, qwen3 413 해결)
-    { provider: 'cerebras', tier: 'sonnet' },          // gpt-oss-120b 최종 폴백 (1M 토큰/일)
+    { provider: 'gemini', tier: 'sonnet' },            // Gemini Flash
   ];
 }
 
@@ -130,21 +110,11 @@ function getMainResponseCascade(
  * Gemini 2.5 Flash (임팩트 순간 품질 집중)
  */
 function getEventCascade(
-  riskLevel?: RiskLevel
+  _riskLevel?: RiskLevel
 ): CascadeItem[] {
-  // 위기 상황의 이벤트 → Gemini 2.5 Flash
-  if (riskLevel === 'CRITICAL' || riskLevel === 'HIGH') {
-    return [
-      { provider: 'gemini', tier: 'sonnet' },         // Gemini 2.5 Flash
-      { provider: 'groq', tier: 'sonnet' },            // v48: Llama-3.3-70B 폴백
-    ];
-  }
-
-  // 일반 이벤트 → Gemini 2.5 Flash
+  // v50: Gemini 전용
   return [
-    { provider: 'gemini', tier: 'sonnet' },            // Gemini 2.5 Flash (이벤트 전용)
-    { provider: 'groq', tier: 'sonnet' },              // v48: Llama-3.3-70B 폴백
-    { provider: 'cerebras', tier: 'sonnet' },          // gpt-oss-120b 최후 폴백
+    { provider: 'gemini', tier: 'sonnet' },            // Gemini Flash
   ];
 }
 

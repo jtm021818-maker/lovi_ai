@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { PhaseEvent, EmotionMirrorData, RelationshipScenario } from '@/types/engine.types';
 import type { SuggestionMeta } from '@/types/engine.types';
 import { useTypewriter } from '@/hooks/useTypewriter';
-import CinematicIntro from './CinematicIntro';
+import TheaterOpening from './TheaterOpening';
 
 /**
  * v49: 루나의 1인/2인 연극 — Visual Novel 스타일
@@ -254,7 +254,7 @@ function VNScene({
   // Portal mount (SSR 방지)
   useEffect(() => { setMounted(true); }, []);
 
-  // intro → playing: CinematicIntro 완료 시 전환 (콜백으로)
+  // intro → playing: TheaterOpening 완료 시 전환 (콜백으로)
   const handleIntroComplete = useCallback(() => setPhase('playing'), []);
 
   // reveal → message 자동 전환
@@ -358,7 +358,7 @@ function VNScene({
     );
   }
 
-  // 풀스크린 VN 씬 (Portal → document.body)
+  // 풀스크린 VN 씬 (Portal → document.body) — v50 영화관 컨셉
   const vnContent = (
     <AnimatePresence>
         <motion.div
@@ -370,9 +370,9 @@ function VNScene({
           className="fixed inset-0 z-50 bg-black"
           style={{ height: '100dvh' }}
         >
-          {/* 🎬 영화 필름 인트로 (intro phase에서만) */}
+          {/* 🎬 오프닝 영상 (intro phase에서만) */}
           {phase === 'intro' && (
-            <CinematicIntro title={data.sceneTitle} onComplete={handleIntroComplete} />
+            <TheaterOpening onComplete={handleIntroComplete} />
           )}
 
           {/* 씬 컨테이너 (풀스크린) */}
@@ -398,47 +398,82 @@ function VNScene({
           } : undefined}
         />
 
-        {/* 하단 어둡게 (대사 가독성) */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" />
+        {/* 🎬 시네마 비네팅 (영화관 느낌) */}
+        <div
+          className="absolute inset-0 pointer-events-none z-[1]"
+          style={{ background: 'radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.7) 100%)' }}
+        />
 
-        {/* Reveal 시 추가 어둡게 */}
+        {/* 하단 어둡게 (대사 가독성) — 더 영화적으로 */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/20" />
+
+        {/* 🎬 시네마 레터박스 (상단/하단 검은 바) */}
+        <motion.div
+          initial={{ height: 0 }}
+          animate={{ height: phase === 'intro' ? 0 : 28 }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
+          className="absolute top-0 left-0 right-0 z-[2] bg-black"
+        />
+        <motion.div
+          initial={{ height: 0 }}
+          animate={{ height: phase === 'intro' ? 0 : 28 }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
+          className="absolute bottom-0 left-0 right-0 z-[2] bg-black"
+        />
+
+        {/* Reveal 시 스포트라이트 효과 */}
         <AnimatePresence>
           {(phase === 'reveal' || phase === 'message') && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/30"
+              className="absolute inset-0"
+              style={{ background: 'radial-gradient(ellipse at 50% 60%, rgba(147,51,234,0.15) 0%, rgba(0,0,0,0.6) 70%)' }}
             />
           )}
         </AnimatePresence>
 
-        {/* 장면 타이틀 배지 */}
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="absolute top-3 left-3 right-3 z-20"
-        >
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/50 backdrop-blur-sm border border-white/10">
-            <span className="text-[11px]">🎭</span>
-            <span className="text-[11px] font-bold text-white/90">
-              {data.sceneTitle || '너의 그 순간'}
-            </span>
-          </div>
-        </motion.div>
+        {/* 🎬 장면 타이틀 — 영화 자막 스타일 */}
+        <AnimatePresence>
+          {phase !== 'intro' && phase !== 'closing' && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ delay: 0.5, duration: 0.6 }}
+              className="absolute top-[34px] left-0 right-0 z-20 flex justify-center"
+            >
+              <div className="flex items-center gap-2 px-4 py-1.5"
+                style={{
+                  background: 'linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.7) 20%, rgba(0,0,0,0.7) 80%, transparent 100%)',
+                }}>
+                <div className="w-5 h-[1px] bg-gradient-to-r from-transparent to-amber-400/60" />
+                <span className="text-[9px] tracking-[0.25em] uppercase text-amber-300/70 font-medium">
+                  Scene
+                </span>
+                <span className="text-[12px] font-bold text-white/90 tracking-wide">
+                  {data.sceneTitle || '너의 그 순간'}
+                </span>
+                <div className="w-5 h-[1px] bg-gradient-to-l from-transparent to-amber-400/60" />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        {/* 캐릭터 스프라이트 — 종이연극 스타일 (background-image 크롭 + 회전 전환 + 호흡) */}
+        {/* 캐릭터 스프라이트 — 종이연극 스타일 */}
         <div className="absolute inset-0 z-10 pointer-events-none">
           {isDuo && phase !== 'message' && phase !== 'choice' ? (
             <>
-              {/* 남자 (왼쪽) */}
+              {/* 남자 (왼쪽) — 스포트라이트 효과 추가 */}
               <motion.div
                 animate={{
                   scale: currentLineGender === 'male' ? [1, 1.03, 1] : [1, 0.97, 1],
                   y: currentLineGender === 'male' ? [0, -6, 0] : [0, 2, 0],
-                  opacity: currentLineGender === 'male' ? 1 : 0.5,
-                  filter: currentLineGender === 'male' ? 'brightness(1) saturate(1)' : 'brightness(0.5) saturate(0.7)',
+                  opacity: currentLineGender === 'male' ? 1 : 0.4,
+                  filter: currentLineGender === 'male'
+                    ? 'brightness(1.1) saturate(1.1) drop-shadow(0 0 20px rgba(96,165,250,0.3))'
+                    : 'brightness(0.4) saturate(0.5)',
                 }}
                 transition={{
                   scale: { duration: 3, repeat: Infinity, ease: 'easeInOut' },
@@ -446,7 +481,7 @@ function VNScene({
                   opacity: { duration: 0.5 },
                   filter: { duration: 0.5 },
                 }}
-                className="absolute bottom-[2%] left-[2%] drop-shadow-2xl"
+                className="absolute bottom-[2%] left-[2%]"
               >
                 <AnimatePresence mode="wait">
                   <motion.div
@@ -464,8 +499,10 @@ function VNScene({
                 animate={{
                   scale: currentLineGender === 'female' ? [1, 1.03, 1] : [1, 0.97, 1],
                   y: currentLineGender === 'female' ? [0, -6, 0] : [0, 2, 0],
-                  opacity: currentLineGender === 'female' ? 1 : 0.5,
-                  filter: currentLineGender === 'female' ? 'brightness(1) saturate(1)' : 'brightness(0.5) saturate(0.7)',
+                  opacity: currentLineGender === 'female' ? 1 : 0.4,
+                  filter: currentLineGender === 'female'
+                    ? 'brightness(1.1) saturate(1.1) drop-shadow(0 0 20px rgba(244,114,182,0.3))'
+                    : 'brightness(0.4) saturate(0.5)',
                 }}
                 transition={{
                   scale: { duration: 3, repeat: Infinity, ease: 'easeInOut', delay: 0.3 },
@@ -473,14 +510,14 @@ function VNScene({
                   opacity: { duration: 0.5 },
                   filter: { duration: 0.5 },
                 }}
-                className="absolute bottom-[2%] right-[2%] drop-shadow-2xl"
+                className="absolute bottom-[2%] right-[2%]"
                 style={{ transform: 'scaleX(-1)' }}
               >
                 <div style={getSpriteStyle(0, femaleSheet, spriteSize)} />
               </motion.div>
             </>
           ) : (
-            /* Solo 모드 혹은 특별 단계 (message/choice) — 중앙 배치 */
+            /* Solo 모드 — 중앙 배치 + 시네마 라이팅 */
             <motion.div
               animate={{
                 scale: [1, 1.04, 1],
@@ -492,22 +529,24 @@ function VNScene({
                 y: { duration: 3, repeat: Infinity, ease: 'easeInOut' },
                 rotate: { duration: 5, repeat: Infinity, ease: 'easeInOut' },
               }}
-              className="absolute bottom-[2%] left-1/2 drop-shadow-2xl"
-              style={{ marginLeft: -(spriteSize / 2) }}
+              className="absolute bottom-[2%] left-1/2"
+              style={{
+                marginLeft: -(spriteSize / 2),
+                filter: 'drop-shadow(0 8px 30px rgba(0,0,0,0.5))',
+              }}
             >
               <AnimatePresence mode="wait">
                 {(phase === 'message' || phase === 'choice') ? (
-                  /* 🆕 v49: 해결 단계 전용 igmg.png (풀 캐릭터 스프라이트) */
                   <motion.div
                     key="special-luna"
                     initial={{ scale: 0, rotate: -10, opacity: 0 }}
-                    animate={{ 
-                      scale: [0, 1.15, 1], 
-                      rotate: [-10, 5, 0], 
-                      opacity: 1 
+                    animate={{
+                      scale: [0, 1.15, 1],
+                      rotate: [-10, 5, 0],
+                      opacity: 1
                     }}
-                    transition={{ 
-                      duration: 0.8, 
+                    transition={{
+                      duration: 0.8,
                       ease: [0.34, 1.56, 0.64, 1],
                       times: [0, 0.6, 1]
                     }}
@@ -521,7 +560,6 @@ function VNScene({
                     }}
                   />
                 ) : (
-                  /* 일반 단계 스프라이트 */
                   <motion.div
                     key={`solo-${currentFrame}`}
                     initial={{ rotateY: 90, opacity: 0, scale: 0.8 }}
@@ -536,97 +574,134 @@ function VNScene({
           )}
         </div>
 
-        {/* 대화 영역 */}
-        <div className="absolute bottom-0 left-0 right-0 z-20">
+        {/* 🎬 대화 영역 — 시네마 자막 패널 */}
+        <div className="absolute bottom-[28px] left-0 right-0 z-20">
           <AnimatePresence mode="wait">
-            {/* Playing: 대사 */}
+            {/* Playing: 대사 — 영화 자막 스타일 */}
             {phase === 'playing' && (
               <motion.div
                 key={`line-${lineIndex}`}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -5 }}
-                transition={{ duration: 0.25 }}
-                className="bg-black/60 backdrop-blur-md rounded-t-2xl pt-3 pb-4"
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.3 }}
+                className="mx-3 rounded-2xl overflow-hidden"
                 style={{
-                  borderTop: `2px solid ${isSurfaceLine ? 'rgba(244,114,182,0.4)' : 'rgba(168,85,247,0.4)'}`,
+                  background: 'linear-gradient(180deg, rgba(10,6,15,0.85) 0%, rgba(15,10,25,0.95) 100%)',
+                  backdropFilter: 'blur(16px)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  boxShadow: '0 -8px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)',
                 }}
               >
-                {/* 진행 인디케이터 */}
-                <div className="flex items-center justify-between px-4 mb-2">
-                  <div className="flex gap-1">
+                {/* 필름 프레임 카운터 상단 바 */}
+                <div className="flex items-center justify-between px-4 pt-2.5 pb-1.5">
+                  {/* 필름 스트립 프로그레스 */}
+                  <div className="flex items-center gap-1">
                     {lines.map((_, i) => (
-                      <div
+                      <motion.div
                         key={i}
-                        className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${
-                          i < lineIndex ? 'bg-purple-400' : i === lineIndex ? 'bg-white' : 'bg-white/20'
-                        }`}
+                        animate={{
+                          backgroundColor: i < lineIndex ? 'rgba(251,191,36,0.8)' : i === lineIndex ? '#ffffff' : 'rgba(255,255,255,0.12)',
+                          scale: i === lineIndex ? 1.3 : 1,
+                        }}
+                        className="w-1.5 h-1.5 rounded-full"
+                        transition={{ duration: 0.3 }}
                       />
                     ))}
                   </div>
-                  <span className="text-[10px] text-white/40 font-medium">
-                    {lineIndex + 1}/{lines.length}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                    <span className="text-[9px] font-mono text-amber-300/60 tracking-wider">
+                      {String(lineIndex + 1).padStart(2, '0')}/{String(lines.length).padStart(2, '0')}
+                    </span>
+                  </div>
                 </div>
 
-                <DialogueLine
-                  key={`dl-${lineIndex}`}
-                  line={lines[lineIndex]}
-                  isActive={true}
-                  isDuo={isDuo}
-                />
+                {/* 구분선 */}
+                <div className="mx-4 h-[1px]" style={{ background: 'linear-gradient(90deg, transparent, rgba(251,191,36,0.2), transparent)' }} />
 
-                {/* 탭 힌트 */}
+                {/* 대사 */}
+                <div className="pt-2 pb-1">
+                  <DialogueLine
+                    key={`dl-${lineIndex}`}
+                    line={lines[lineIndex]}
+                    isActive={true}
+                    isDuo={isDuo}
+                  />
+                </div>
+
+                {/* 탭 힌트 — 시네마틱 */}
                 <motion.div
-                  animate={{ y: [0, 3, 0] }}
-                  transition={{ duration: 1.2, repeat: Infinity }}
-                  className="flex justify-center mt-1"
+                  animate={{ opacity: [0.3, 0.7, 0.3] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                  className="flex items-center justify-center gap-1.5 pb-2.5"
                 >
-                  <span className="text-white/30 text-[10px]">▼ 탭하여 진행</span>
+                  <div className="w-3 h-[1px] bg-white/20" />
+                  <span className="text-white/30 text-[9px] tracking-widest uppercase font-medium">tap</span>
+                  <div className="w-3 h-[1px] bg-white/20" />
                 </motion.div>
               </motion.div>
             )}
 
-            {/* Reveal */}
+            {/* Reveal — 스포트라이트 + 시네마 프레임 */}
             {phase === 'reveal' && (
               <motion.div
                 key="reveal"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="bg-black/70 backdrop-blur-lg rounded-t-2xl pt-4 pb-5 px-4"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="mx-3 rounded-2xl overflow-hidden"
                 style={{
-                  borderTop: '2px solid rgba(168,85,247,0.5)',
-                  boxShadow: '0 -4px 30px rgba(147,51,234,0.25)',
+                  background: 'linear-gradient(180deg, rgba(15,5,30,0.9) 0%, rgba(25,10,50,0.95) 100%)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(168,85,247,0.3)',
+                  boxShadow: '0 0 60px rgba(147,51,234,0.2), inset 0 1px 0 rgba(255,255,255,0.05)',
                 }}
               >
-                <motion.div
-                  initial={{ scale: 0.5, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ type: 'spring', stiffness: 300, delay: 0.2 }}
-                  className="text-center mb-3"
-                >
-                  <span className="text-4xl">{data.deepEmoji}</span>
-                </motion.div>
-                <motion.p
-                  initial={{ opacity: 0, y: 10, filter: 'blur(6px)' }}
-                  animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                  transition={{ delay: 0.5, duration: 0.6 }}
-                  className="text-[11px] font-bold text-purple-300 text-center mb-2"
-                >
-                  루나가 느끼기에...
-                </motion.p>
-                <motion.p
-                  initial={{ opacity: 0, scale: 0.92, filter: 'blur(4px)' }}
-                  animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-                  transition={{ delay: 0.8, duration: 0.6, type: 'spring' }}
-                  className="text-[15px] font-bold text-white text-center leading-relaxed"
-                >
-                  &ldquo;{data.reveal}&rdquo;
-                </motion.p>
+                <div className="px-5 py-5">
+                  {/* 이모지 — 프로젝터 빔 효과 */}
+                  <motion.div
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: 'spring', stiffness: 300, delay: 0.2 }}
+                    className="text-center mb-3 relative"
+                  >
+                    <motion.div
+                      animate={{ opacity: [0.3, 0.6, 0.3], scale: [1, 1.2, 1] }}
+                      transition={{ duration: 3, repeat: Infinity }}
+                      className="absolute inset-0 flex items-center justify-center"
+                    >
+                      <div className="w-20 h-20 rounded-full" style={{ background: 'radial-gradient(circle, rgba(168,85,247,0.3) 0%, transparent 70%)' }} />
+                    </motion.div>
+                    <span className="relative text-4xl">{data.deepEmoji}</span>
+                  </motion.div>
+
+                  {/* 라벨 */}
+                  <motion.div
+                    initial={{ opacity: 0, scaleX: 0 }}
+                    animate={{ opacity: 1, scaleX: 1 }}
+                    transition={{ delay: 0.4, duration: 0.4 }}
+                    className="flex items-center justify-center gap-2 mb-3"
+                  >
+                    <div className="flex-1 h-[1px]" style={{ background: 'linear-gradient(90deg, transparent, rgba(168,85,247,0.4))' }} />
+                    <span className="text-[9px] tracking-[0.3em] uppercase text-purple-300/70 font-medium">insight</span>
+                    <div className="flex-1 h-[1px]" style={{ background: 'linear-gradient(270deg, transparent, rgba(168,85,247,0.4))' }} />
+                  </motion.div>
+
+                  {/* Reveal 텍스트 */}
+                  <motion.p
+                    initial={{ opacity: 0, y: 10, filter: 'blur(6px)' }}
+                    animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                    transition={{ delay: 0.6, duration: 0.6 }}
+                    className="text-[15px] font-bold text-white text-center leading-relaxed"
+                    style={{ textShadow: '0 0 30px rgba(168,85,247,0.3)' }}
+                  >
+                    &ldquo;{data.reveal}&rdquo;
+                  </motion.p>
+                </div>
               </motion.div>
             )}
 
-            {/* Message — 텍스트만 표시 (이미지는 하단 스피터 영역에 배치됨) */}
+            {/* Message — 시네마 중앙 텍스트 */}
             {phase === 'message' && (
               <motion.div
                 key="message"
@@ -634,64 +709,98 @@ function VNScene({
                 animate={{ opacity: 1 }}
                 className="absolute inset-0 flex flex-col items-center justify-center p-6"
               >
-                {/* 배경 살짝 더 어둡게 */}
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   className="absolute inset-0 bg-black/50"
                 />
-                
-                {/* 메시지 텍스트 — 아래에서 올라옴 */}
                 <motion.div
                   initial={{ opacity: 0, y: 20, scale: 0.9 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ delay: 0.4, type: 'spring', stiffness: 300 }}
-                  className="relative z-10 px-6 py-4 rounded-3xl bg-white/10 backdrop-blur-xl border border-white/20 shadow-2xl"
+                  className="relative z-10 px-7 py-5 rounded-2xl overflow-hidden"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(15,5,30,0.9), rgba(25,10,50,0.95))',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(147,51,234,0.15)',
+                  }}
                 >
-                  <p className="text-[15px] font-bold text-white text-center leading-relaxed">
+                  <div className="flex items-center justify-center gap-2 mb-3">
+                    <div className="w-4 h-[1px] bg-amber-400/40" />
+                    <span className="text-[8px] tracking-[0.3em] uppercase text-amber-300/50 font-medium">luna says</span>
+                    <div className="w-4 h-[1px] bg-amber-400/40" />
+                  </div>
+                  <p className="text-[15px] font-bold text-white text-center leading-relaxed"
+                    style={{ textShadow: '0 2px 10px rgba(0,0,0,0.3)' }}>
                     {data.lunaMessage}
                   </p>
                 </motion.div>
               </motion.div>
             )}
 
-            {/* Intro — 빈 상태 (CinematicIntro가 Portal로 덮고 있음) */}
+            {/* Intro — 빈 상태 (TheaterOpening이 덮고 있음) */}
             {phase === 'intro' && (
               <motion.div key="intro" className="py-5" />
             )}
           </AnimatePresence>
         </div>
 
-        {/* 선택 버튼 (풀스크린 하단, safe area 대응) */}
+        {/* 🎬 선택 버튼 — 시네마 티켓 스타일 */}
         <AnimatePresence>
           {phase === 'choice' && (
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
-              className="absolute bottom-0 left-0 right-0 z-30 flex gap-2.5 p-4 bg-gradient-to-t from-black/90 via-black/60 to-transparent"
-              style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+              transition={{ type: 'spring', stiffness: 200 }}
+              className="absolute bottom-[28px] left-0 right-0 z-30 px-4"
+              style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
             >
-              {data.choices.map((choice, idx) => (
-                <motion.button
-                  key={choice.value}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 + idx * 0.1 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => handleChoice(choice.value)}
-                  disabled={disabled || submitted}
-                  className={`py-3.5 rounded-2xl font-bold text-[13px] transition-all ${
-                    idx === 0
-                      ? 'flex-1 bg-white/15 backdrop-blur-sm text-white/90 border border-white/20'
-                      : 'flex-[1.5] bg-purple-500 text-white border border-purple-400 shadow-lg shadow-purple-500/30'
-                  } ${disabled || submitted ? 'opacity-50' : 'active:scale-[0.97]'}`}
-                >
-                  {choice.label}
-                </motion.button>
-              ))}
+              <div className="flex gap-3">
+                {data.choices.map((choice, idx) => (
+                  <motion.button
+                    key={choice.value}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.15 + idx * 0.12, type: 'spring', stiffness: 300 }}
+                    whileTap={{ scale: 0.93 }}
+                    onClick={() => handleChoice(choice.value)}
+                    disabled={disabled || submitted}
+                    className={`py-3.5 rounded-xl font-bold text-[13px] transition-all relative overflow-hidden ${
+                      idx === 0
+                        ? 'flex-1 text-white/80'
+                        : 'flex-[1.5] text-white'
+                    } ${disabled || submitted ? 'opacity-50' : ''}`}
+                    style={{
+                      background: idx === 0
+                        ? 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04))'
+                        : 'linear-gradient(135deg, #7c3aed, #9333ea)',
+                      border: idx === 0
+                        ? '1px solid rgba(255,255,255,0.15)'
+                        : '1px solid rgba(168,85,247,0.5)',
+                      boxShadow: idx === 0
+                        ? 'none'
+                        : '0 4px 20px rgba(147,51,234,0.4), inset 0 1px 0 rgba(255,255,255,0.15)',
+                    }}
+                  >
+                    {choice.label}
+                  </motion.button>
+                ))}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* 🎬 필름 그레인 오버레이 (전체 씬에 항상 적용) */}
+        <div className="pointer-events-none absolute inset-0 z-[3] opacity-[0.04]"
+          style={{
+            backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.5) 2px, rgba(255,255,255,0.5) 4px)',
+          }}
+        />
+
+        {/* 비네팅 상단 */}
+        <div className="pointer-events-none absolute inset-0 z-[3]"
+          style={{ background: 'radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.6) 100%)' }}
+        />
 
           </motion.div>
         </motion.div>
