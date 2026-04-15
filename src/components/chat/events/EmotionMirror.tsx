@@ -323,8 +323,8 @@ function VNScene({
     }
     return 0;
   })();
-  // Solo: 220px, Duo: 160px
-  const spriteSize = isDuo ? 160 : 220;
+  // Solo: 480px, Duo: 300px (화면 꽉 채우기 - VN 느낌 극대화)
+  const spriteSize = isDuo ? 300 : 480;
 
   // closed 상태 → 인라인 요약 카드 (채팅에 남김)
   if (phase === 'closed') {
@@ -431,7 +431,7 @@ function VNScene({
                   opacity: { duration: 0.5 },
                   filter: { duration: 0.5 },
                 }}
-                className="absolute bottom-[15%] left-[3%] drop-shadow-2xl"
+                className="absolute bottom-[2%] left-[2%] drop-shadow-2xl"
               >
                 <AnimatePresence mode="wait">
                   <motion.div
@@ -458,7 +458,7 @@ function VNScene({
                   opacity: { duration: 0.5 },
                   filter: { duration: 0.5 },
                 }}
-                className="absolute bottom-[15%] right-[3%] drop-shadow-2xl"
+                className="absolute bottom-[2%] right-[2%] drop-shadow-2xl"
                 style={{ transform: 'scaleX(-1)' }}
               >
                 <div style={getSpriteStyle(0, opponentSheet, spriteSize)} />
@@ -477,7 +477,7 @@ function VNScene({
                 y: { duration: 3, repeat: Infinity, ease: 'easeInOut' },
                 rotate: { duration: 5, repeat: Infinity, ease: 'easeInOut' },
               }}
-              className="absolute bottom-[15%] left-1/2 drop-shadow-2xl"
+              className="absolute bottom-[2%] left-1/2 drop-shadow-2xl"
               style={{ marginLeft: -(spriteSize / 2) }}
             >
               <AnimatePresence mode="wait">
