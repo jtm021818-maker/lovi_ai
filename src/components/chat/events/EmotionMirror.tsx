@@ -539,10 +539,11 @@ function VNScene({
                 {(phase === 'message' || phase === 'choice') ? (
                   <motion.div
                     key="special-luna"
-                    initial={{ scale: 0, rotate: -10, opacity: 0 }}
+                    initial={{ scale: 0, rotate: -10, opacity: 0, y: 20 }}
                     animate={{
-                      scale: [0, 1.15, 1],
+                      scale: [0, 1.05, 0.85],
                       rotate: [-10, 5, 0],
+                      y: [20, -20, -50],
                       opacity: 1
                     }}
                     transition={{
