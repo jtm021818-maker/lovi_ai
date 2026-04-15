@@ -351,7 +351,6 @@ function VNScene({
   // 풀스크린 VN 씬 (Portal → document.body)
   const vnContent = (
     <AnimatePresence>
-      {phase !== 'closed' && (
         <motion.div
           key="vn-fullscreen"
           initial={{ opacity: 0 }}
@@ -687,7 +686,6 @@ function VNScene({
 
           </motion.div>
         </motion.div>
-      )}
     </AnimatePresence>
   );
 
