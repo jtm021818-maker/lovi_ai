@@ -13,8 +13,8 @@ const API_KEYS = [
 
 const FALLBACK_MODELS = [
   'gemini-3.1-flash-lite-preview',    // 1순위: 50 RPD 확인됨
-  'gemini-2.5-flash-lite',            // 2순위: 별도 쿼터
-  'gemini-2.0-flash',                 // 3순위: 구세대 별도 쿼터
+  'gemini-3.1-flash-lite-preview',            // 상담 메인 모델 통일
+  'gemini-3.1-flash-lite-preview',            // 3순위: 메인 모델 통일
 ];
 
 const XRAY_PROMPT = `당신은 연애 심리 전문가 '루나'입니다.
