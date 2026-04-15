@@ -1428,35 +1428,36 @@ ${researchResult.insight}
 
           // 🆕 ACE v4: AI가 [MIND_READ_READY] 태그를 출력했으면 → 마음읽기 이벤트 발동
           if (hlrePost.mindReadReady && canFireEventType('EMOTION_THERMOMETER')) {
-            const avgScore = emotionBaseline !== undefined
-              ? (emotionBaseline + stateResult.emotionScore) / 2
-              : stateResult.emotionScore;
-            // 🆕 GTC: 감정 누적기 우선 활용
-            const surface = updatedAccumulator.surfaceEmotion?.label
-              ?? (avgScore <= -2 ? '많이 힘들고 불안한' : avgScore <= 0 ? '답답하고 서운한' : '복잡한');
-            const deep = updatedAccumulator.deepEmotionHypothesis?.primaryEmotion
-              ?? (stateResult.emotionReason
-                ? stateResult.emotionReason.replace(/느껴졌어요|보여요|것 같아요/g, '').trim()
-                : '');
-            // 🆕 v48: 상황 재연 1인 연극 (마음읽기 → 상황 연극)
-            const sitSummary = hlrePost.situationSummary ?? surface;
-            const sitProblem = hlrePost.coreProblem ?? deep;
-            // 최근 유저 메시지 추출 (연극 대사 생성용)
-            const recentUserMsgs = chatHistory
-              .filter((m: { role: string }) => m.role === 'user')
-              .slice(-4)
-              .map((m: { content: string }) => m.content);
-            // 1인 연극 씬 생성 (실패 시 null → 기존 텍스트 폴백)
-            let sceneData: { sceneTitle: string; sceneLines: string[]; problemReveal: string } | null = null;
-            try {
-              sceneData = await generateSituationScene(sitSummary, sitProblem, recentUserMsgs);
-            } catch (err) {
-              console.warn('[Pipeline] 🎭 상황 연극 생성 실패, 텍스트 폴백:', err);
-            }
-            eventsToFire.push(createSituationSummary(sitSummary, sitProblem, avgScore, undefined, sceneData));
+            // 🆕 v49: MIND_READING 대신 EMOTION_MIRROR(VN 연극)를 바로 발동
             updatedCompletedEvents.push('EMOTION_THERMOMETER');
             updatedLastEventTurn = turnCount;
-            console.log(`[Pipeline] 📋 AI 자율 상황파악 발동! "${sitSummary}" | 핵심: "${sitProblem}"`);
+
+            // 🆕 v49: VN 연극 준비 로딩 UI
+            yield { type: 'luna_thinking_deep', data: {
+              status: 'started',
+              keyword: '연극',
+              phrases: ['🎭 잠깐, 너 상황 한번 연기해볼게', '📝 대본 쓰는 중...', '🎨 무대 꾸미는 중...'],
+            }};
+            const dramaT0 = Date.now();
+
+            // EMOTION_MIRROR 직접 생성 (VN 비주얼 노벨 스타일)
+            let mirrorData: EmotionMirrorData | null = null;
+            if (isReadyForMirror(updatedAccumulator)) {
+              try {
+                const userGender = (memoryProfile as any)?.basicInfo?.gender;
+                mirrorData = await generateDynamicMirror(updatedAccumulator, currentScenario, chatHistory, userGender);
+                console.log(`[Pipeline] 🎭 VN 연극 생성 성공: "${mirrorData?.sceneTitle}" (${mirrorData?.sceneLines?.length}줄)`);
+              } catch (e) {
+                console.warn('[Pipeline] 🎭 VN 연극 생성 실패, 폴백:', e);
+              }
+            }
+
+            // 로딩 완료
+            yield { type: 'luna_thinking_deep', data: { status: 'done', durationMs: Date.now() - dramaT0 }};
+
+            eventsToFire.push(createEmotionMirror(stateResult, currentScenario, mirrorData));
+            updatedCompletedEvents.push('EMOTION_MIRROR');
+            console.log(`[Pipeline] 📋 AI 자율 → EMOTION_MIRROR(VN) 발동! (${Date.now() - dramaT0}ms)`);
           } else if (hlrePost.mindReadReady) {
             console.log(`[Pipeline] ⚠️ MIND_READ 차단: canFire=${canFireEvent()}, completed=${updatedCompletedEvents.includes('EMOTION_THERMOMETER')}, inQueue=${eventsToFire.some(e => e.type === 'EMOTION_THERMOMETER')}`);
           }
@@ -1466,22 +1467,31 @@ ${researchResult.insight}
           if (!hlrePost.mindReadReady && canFireEventType('EMOTION_THERMOMETER') && turnInPhase >= 2) {
             const formulationCheck = hlre.isFormulationReady();
             if (formulationCheck.ready) {
-              const avgScore = emotionBaseline !== undefined
-                ? (emotionBaseline + stateResult.emotionScore) / 2
-                : stateResult.emotionScore;
-              // 🆕 v48: 안전망도 연극 시도
-              const recentMsgsForScene = chatHistory
-                .filter((m: { role: string }) => m.role === 'user')
-                .slice(-4)
-                .map((m: { content: string }) => m.content);
-              let fallbackScene: { sceneTitle: string; sceneLines: string[]; problemReveal: string } | null = null;
-              try {
-                fallbackScene = await generateSituationScene(formulationCheck.summary, formulationCheck.problem, recentMsgsForScene);
-              } catch (_) { /* 텍스트 폴백 */ }
-              eventsToFire.push(createSituationSummary(formulationCheck.summary, formulationCheck.problem, avgScore, undefined, fallbackScene));
+              // 🆕 v49: 안전망도 MIND_READING 대신 EMOTION_MIRROR(VN) 발동
               updatedCompletedEvents.push('EMOTION_THERMOMETER');
               updatedLastEventTurn = turnCount;
-              console.log(`[Pipeline] 📋 코드 안전망 상황파악 발동! "${formulationCheck.summary}" | "${formulationCheck.problem}" (formulation 기반, scene=${!!fallbackScene})`);
+
+              // VN 연극 준비 로딩 UI
+              yield { type: 'luna_thinking_deep', data: {
+                status: 'started',
+                keyword: '연극',
+                phrases: ['🎭 잠깐, 너 상황 한번 연기해볼게', '📝 대본 쓰는 중...', '🎨 무대 꾸미는 중...'],
+              }};
+              const dramaT0f = Date.now();
+
+              let mirrorData: EmotionMirrorData | null = null;
+              if (isReadyForMirror(updatedAccumulator)) {
+                try {
+                  const userGender = (memoryProfile as any)?.basicInfo?.gender;
+                  mirrorData = await generateDynamicMirror(updatedAccumulator, currentScenario, chatHistory, userGender);
+                } catch (_) { /* 폴백 */ }
+              }
+
+              yield { type: 'luna_thinking_deep', data: { status: 'done', durationMs: Date.now() - dramaT0f }};
+
+              eventsToFire.push(createEmotionMirror(stateResult, currentScenario, mirrorData));
+              updatedCompletedEvents.push('EMOTION_MIRROR');
+              console.log(`[Pipeline] 📋 코드 안전망 → EMOTION_MIRROR(VN) 발동! "${formulationCheck.summary}" | "${formulationCheck.problem}" (${Date.now() - dramaT0f}ms)`);
             }
           }
 
