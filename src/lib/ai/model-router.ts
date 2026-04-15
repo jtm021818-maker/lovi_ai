@@ -37,7 +37,7 @@ export function routeModel(
   if (riskLevel === RiskLevel.CRITICAL || riskLevel === RiskLevel.HIGH) {
     return {
       tier: 'sonnet',
-      reason: '🔴 위기 대응: Gemini Flash',
+      reason: '🔴 위기 대응: 3.1 Flash-Lite → 2.5 Flash',
       maxTokens: 512,
       cascade,
     };
@@ -47,7 +47,7 @@ export function routeModel(
   if (strategy === StrategyType.CRISIS_SUPPORT) {
     return {
       tier: 'sonnet',
-      reason: '🆘 위기 지원: Gemini Flash',
+      reason: '🆘 위기 지원: 3.1 Flash-Lite → 2.5 Flash',
       maxTokens: 512,
       cascade,
     };
@@ -55,25 +55,25 @@ export function routeModel(
 
   // 🆕 v25: 모든 일반 전략 → Gemini Flash 우선 (한국어 품질 최우선)
   const reasonMap: Record<StrategyType, string> = {
-    [StrategyType.CALMING]: '🧊 안정화: Gemini Flash',
-    [StrategyType.CBT]: '🧠 CBT: Gemini Flash',
-    [StrategyType.ACT]: '💎 ACT: Gemini Flash',
-    [StrategyType.MI]: '⚖️ MI: Gemini Flash',
-    [StrategyType.SUPPORT]: '🤗 공감: Gemini Flash',
-    [StrategyType.CRISIS_SUPPORT]: '🆘 위기: Gemini Flash',
+    [StrategyType.CALMING]: '🧊 안정화: 3.1 Flash-Lite → 2.5 Flash',
+    [StrategyType.CBT]: '🧠 CBT: 3.1 Flash-Lite → 2.5 Flash',
+    [StrategyType.ACT]: '💎 ACT: 3.1 Flash-Lite → 2.5 Flash',
+    [StrategyType.MI]: '⚖️ MI: 3.1 Flash-Lite → 2.5 Flash',
+    [StrategyType.SUPPORT]: '🤗 공감: 3.1 Flash-Lite → 2.5 Flash',
+    [StrategyType.CRISIS_SUPPORT]: '🆘 위기: 3.1 Flash-Lite → 2.5 Flash',
   };
 
   return {
     tier: 'sonnet',
-    reason: reasonMap[strategy] || '🤗 공감: Gemini Flash',
+    reason: reasonMap[strategy] || '🤗 공감: 3.1 Flash-Lite → 2.5 Flash',
     maxTokens,
     cascade,
   };
 }
 
-/** 모델 티어별 표시 이름 (v50 — Gemini 전용) */
+/** 모델 티어별 표시 이름 (v51 — 멀티모델) */
 export const MODEL_TIER_DISPLAY: Record<ModelTier, string> = {
-  haiku: 'Gemini Flash-Lite (분석용)',
-  sonnet: 'Gemini Flash (상담 메인)',
-  opus: 'Gemini Flash (위기/이벤트)',
+  haiku: '2 Flash-Lite (분석/라운지)',
+  sonnet: '3.1 Flash-Lite (상담 메인)',
+  opus: '2.5 Flash (폴백)',
 };

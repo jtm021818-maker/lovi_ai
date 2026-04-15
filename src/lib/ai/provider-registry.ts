@@ -1,10 +1,12 @@
 /**
  * AI 프로바이더 레지스트리 (Gemini 전용)
  *
- * [v50 — Gemini 전용]
- * 모든 태스크를 Gemini로 통일
- * - sonnet/opus: Gemini Flash (메인 상담)
- * - haiku: Gemini Flash-Lite (상태분석/검증)
+ * [v51 — Gemini 멀티모델 캐스케이드]
+ * 무료 Rate Limit 기반 최적 분배:
+ * - 3.1 Flash-Lite: 메인 상담 1순위 (품질 최강, RPD 150K)
+ * - 2.5 Flash:      메인 상담 폴백 (RPD 10K)
+ * - 2 Flash-Lite:   분석/검증/라운지 (RPD 무제한)
+ * - 2 Flash:        최종 폴백 (RPD 무제한)
  */
 
 import { GoogleGenAI } from '@google/genai';
@@ -21,12 +23,20 @@ const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 export type Provider = 'gemini' | 'groq' | 'cerebras';
 export type ModelTier = 'haiku' | 'sonnet' | 'opus';
 
-/** 프로바이더별 모델 매핑 (Gemini 전용 — groq/cerebras는 타입 호환용 빈 매핑) */
+/** Gemini 모델 ID 상수 */
+export const GEMINI_MODELS = {
+  FLASH_LITE_31: 'gemini-3.1-flash-lite-preview',  // 품질 최강, RPD 150K
+  FLASH_25: 'gemini-2.5-flash',                     // 품질 좋음, RPD 10K
+  FLASH_LITE_20: 'gemini-2.0-flash-lite',           // RPD 무제한, 가벼운 작업
+  FLASH_20: 'gemini-2.0-flash',                     // RPD 무제한, 중간 품질
+} as const;
+
+/** 프로바이더별 모델 매핑 (기본 — modelOverride로 재정의 가능) */
 const PROVIDER_MODELS: Record<Provider, Record<ModelTier, string>> = {
   gemini: {
-    haiku: 'gemini-3.1-flash-lite-preview',
-    sonnet: 'gemini-3.1-flash-lite-preview',
-    opus: 'gemini-3.1-flash-lite-preview',
+    haiku: GEMINI_MODELS.FLASH_LITE_20,       // 분석/검증: 2 Flash-Lite (무제한)
+    sonnet: GEMINI_MODELS.FLASH_LITE_31,      // 메인 상담: 3.1 Flash-Lite (최고 품질)
+    opus: GEMINI_MODELS.FLASH_25,             // 프리미엄 폴백: 2.5 Flash
   },
   groq: { haiku: '', sonnet: '', opus: '' },
   cerebras: { haiku: '', sonnet: '', opus: '' },
@@ -74,19 +84,20 @@ async function geminiGenerate(
   systemPrompt: string,
   messages: { role: 'user' | 'assistant'; content: string }[],
   maxTokens: number,
-  tier: ModelTier = 'sonnet'
+  tier: ModelTier = 'sonnet',
+  modelOverride?: string
 ): Promise<string> {
+  const model = modelOverride || PROVIDER_MODELS.gemini[tier];
   const contents = messages.map((m) => ({
     role: m.role === 'assistant' ? ('model' as const) : ('user' as const),
     parts: [{ text: m.content }],
   }));
 
-  // 🆕 v45.5: 1회 자동 재시도 — preview 모델 간헐적 실패 대응
   const MAX_RETRIES = 1;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const response = await gemini.models.generateContent({
-        model: PROVIDER_MODELS.gemini[tier],
+        model,
         config: {
           systemInstruction: systemPrompt,
           maxOutputTokens: maxTokens,
@@ -121,21 +132,22 @@ async function* geminiStream(
   maxTokens: number,
   tier: ModelTier = 'sonnet',
   onRetry?: (event: RetryStatusEvent) => void,
+  modelOverride?: string,
 ): AsyncGenerator<string> {
+  const model = modelOverride || PROVIDER_MODELS.gemini[tier];
   const contents = messages.map((m) => ({
     role: m.role === 'assistant' ? ('model' as const) : ('user' as const),
     parts: [{ text: m.content }],
   }));
 
-  // 🆕 v49: 503은 5회 시도 (일시적 과부하), 그 외는 2회
-  const MAX_RETRIES_503 = 4;  // 0~4 = 총 5회
-  const MAX_RETRIES_OTHER = 1; // 0~1 = 총 2회
+  const MAX_RETRIES_503 = 4;
+  const MAX_RETRIES_OTHER = 1;
   let currentMax = MAX_RETRIES_OTHER;
 
   for (let attempt = 0; attempt <= currentMax; attempt++) {
     try {
       const response = await gemini.models.generateContentStream({
-        model: PROVIDER_MODELS.gemini[tier],
+        model,
         config: {
           systemInstruction: systemPrompt,
           maxOutputTokens: maxTokens,
@@ -201,29 +213,29 @@ async function* geminiStream(
 // Public API — Gemini 전용
 // ============================================================
 
-/** 특정 프로바이더로 생성 (Gemini 전용) */
+/** 특정 프로바이더로 생성 (Gemini 전용, modelOverride로 모델 지정 가능) */
 export async function generateWithProvider(
   _provider: Provider,
   systemPrompt: string,
   messages: { role: 'user' | 'assistant'; content: string }[],
   tier: ModelTier = 'sonnet',
   maxTokens: number = 1024,
-  _modelOverride?: string
+  modelOverride?: string
 ): Promise<string> {
-  return geminiGenerate(systemPrompt, messages, maxTokens, tier);
+  return geminiGenerate(systemPrompt, messages, maxTokens, tier, modelOverride);
 }
 
-/** 특정 프로바이더로 스트리밍 (Gemini 전용) */
+/** 특정 프로바이더로 스트리밍 (Gemini 전용, modelOverride로 모델 지정 가능) */
 export async function* streamWithProvider(
   _provider: Provider,
   systemPrompt: string,
   messages: { role: 'user' | 'assistant'; content: string }[],
   tier: ModelTier = 'sonnet',
   maxTokens: number = 1024,
-  _modelOverride?: string,
+  modelOverride?: string,
   onRetry?: (event: RetryStatusEvent) => void,
 ): AsyncGenerator<string> {
-  yield* geminiStream(systemPrompt, messages, maxTokens, tier, onRetry);
+  yield* geminiStream(systemPrompt, messages, maxTokens, tier, onRetry, modelOverride);
 }
 
 /** 🆕 v31: 타임아웃 헬퍼 — Promise.race로 최대 대기시간 제한 */
@@ -390,7 +402,7 @@ export async function* streamWithCascade(
   console.error(`[Cascade] ❌❌ 모든 프로바이더 실패`);
   const lastEntry = chain[chain.length - 1];
   logAttempt({ provider: lastEntry.provider, tier: lastEntry.tier, model: PROVIDER_MODELS[lastEntry.provider][lastEntry.tier], status: 'error', error: '모든 시도 소진' });
-  yield '잠깐 서버가 바빠서 응답이 어려워... 💜|||조금 뒤에 다시 말해줄 수 있어?';
+  yield '아 미안...! 지금 루나 머리가 좀 복잡한가봐 💜\n잠깐만 기다렸다가 다시 말해줄래? 금방 돌아올게!';
 }
 
 /**
