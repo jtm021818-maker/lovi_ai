@@ -140,26 +140,45 @@ export default function ChatInput({ onSend, disabled, placeholder, typingPlaceho
         )}
 
         {/* 텍스트 입력 */}
-        <div className="flex-1 bg-gray-50/80 rounded-[22px] border border-gray-100 focus-within:border-purple-200 focus-within:bg-purple-50/20 transition-all duration-200 overflow-hidden relative min-h-[42px]">
+        <div className={`flex-1 bg-gray-50/80 rounded-[22px] border transition-all duration-300 overflow-hidden relative min-h-[42px] ${disabled ? 'border-purple-300/50 bg-gradient-to-r from-purple-50/50 via-pink-50/50 to-purple-50/50' : 'border-gray-100 focus-within:border-purple-200 focus-within:bg-purple-50/20'}`}>
+          
+          {/* AI 타이핑 중일 때 오버레이 */}
           <AnimatePresence>
-            {showCustomPlaceholder && (
+            {disabled && typingPlaceholder && (
               <motion.div
-                initial="hidden"
-                animate="visible"
-                exit="hidden"
-                className="absolute left-4 top-0 bottom-0 py-[11px] flex items-start pointer-events-none text-[14px] text-gray-400 whitespace-nowrap overflow-hidden w-[calc(100%-32px)]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 z-20 flex items-center px-4 bg-white/40 backdrop-blur-sm pointer-events-none"
               >
-                {typingPlaceholder.split('').map((char, index) => (
-                  <motion.span
-                    key={index}
-                    variants={{
-                      hidden: { opacity: 0, y: 3 },
-                      visible: { opacity: 1, y: 0, transition: { duration: 0.2, delay: index * 0.035 } }
-                    }}
+                {/* 반짝이는 그라디언트 배경 애니메이션 */}
+                <motion.div
+                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-transparent"
+                  animate={{ x: ['-100%', '200%'] }}
+                  transition={{ repeat: Infinity, duration: 1.5, ease: 'linear' }}
+                />
+                
+                {/* 말풍선/펜싱크 아이콘 및 텍스트 */}
+                <div className="flex items-center gap-2 relative z-10 text-purple-600 font-medium text-[14px]">
+                  <motion.div
+                    animate={{ y: [0, -3, 0] }}
+                    transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }}
+                    className="flex text-[16px]"
                   >
-                    {char === ' ' ? '\u00A0' : char}
-                  </motion.span>
-                ))}
+                    ✨
+                  </motion.div>
+                  <span>{typingPlaceholder}</span>
+                  <div className="flex gap-[2px] ml-1">
+                    {[0, 1, 2].map((i) => (
+                      <motion.div
+                        key={i}
+                        animate={{ opacity: [0.3, 1, 0.3], y: [0, -2, 0] }}
+                        transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }}
+                        className="w-1 h-1 bg-purple-500 rounded-full"
+                      />
+                    ))}
+                  </div>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -170,10 +189,10 @@ export default function ChatInput({ onSend, disabled, placeholder, typingPlaceho
             onChange={(e) => setText(e.target.value)}
             onInput={handleInput}
             onKeyDown={handleKeyDown}
-            placeholder={showCustomPlaceholder ? '' : (placeholder || '마음 편하게 다 말해봐...')}
+            placeholder={disabled ? '' : (placeholder || '마음 편하게 다 말해봐...')}
             disabled={disabled}
             rows={1}
-            className="w-full resize-none bg-transparent px-4 py-[11px] text-[14px] text-gray-800 placeholder-gray-400 focus:outline-none max-h-[120px] leading-relaxed relative z-10"
+            className="w-full resize-none bg-transparent px-4 py-[11px] text-[14px] text-gray-800 placeholder-gray-400 focus:outline-none max-h-[120px] leading-relaxed relative z-10 disabled:opacity-0"
           />
         </div>
 
