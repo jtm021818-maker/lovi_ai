@@ -207,8 +207,16 @@ export interface EmotionMirrorData {
 
   // 🆕 v48: 1인 연극 모드
   sceneTitle?: string;        // 장면 제목 (예: "읽씹 당하는 그 순간")
-  sceneLines?: string[];      // 연극 대사 3~5줄 (지문+대사 혼합, 예: "(폰 들고 씩씩대며) 분명 읽었잖아...")
-  reveal?: string;            // 속마음 reveal 대사 (예: "...근데 사실 화가 나는 게 아니라, 나한테 관심 없을까봐 무서운 거잖아")
+  sceneLines?: string[];      // 연극 대사 5~6줄 ("[speaker] (지문) 대사" 형식)
+  reveal?: string;            // 속마음 reveal 대사
+
+  // 🆕 v49: VN 비주얼 노벨 모드
+  backgroundImageBase64?: string;   // Imagen 생성 base64 JPEG
+  backgroundPrompt?: string;        // 디버깅용 프롬프트
+  characterSetup?: {
+    mode: 'solo' | 'duo';           // 혼자/둘이 연극
+    userGender?: 'male' | 'female'; // 캐릭터 스프라이트 선택
+  };
 }
 
 /** 🆕 ACE v4: 루나의 이야기 데이터 (자기개방 + 클리프행어) */

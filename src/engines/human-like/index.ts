@@ -213,7 +213,10 @@ export class HumanLikeEngine {
 
         // 🆕 v41.1: intimacy 구조만 보장. 세션 시작 훅은 pipeline이 persona 알면서 호출.
         this.ensureIntimacyShape();
-      } catch { /* 무시 */ }
+        console.log(`[ACE] 📂 userModel 로드 완료 | intimacy.luna.sessions=${this.userModel.intimacy?.luna?.totalSessions ?? '?'} intimacy.tarot.sessions=${this.userModel.intimacy?.tarot?.totalSessions ?? '?'}`);
+      } catch (e) {
+        console.error('[ACE] ❌ userModel 로드 실패 — 기본값 사용됨 (친밀도 데이터 손실 위험!):', (e as Error).message);
+      }
     }
 
     // ⑥ 유저 메시지 누적

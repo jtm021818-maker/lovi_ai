@@ -575,7 +575,7 @@ export async function POST(req: NextRequest) {
               const intimacyPersonaKey = (event.data as any).intimacyPersonaKey as 'luna' | 'tarot' | undefined;
               const intimacyLevelUp = (event.data as any).intimacyLevelUp;
               if (intimacyAll && intimacyPersonaKey) {
-                // fire-and-forget DB 저장 — 전체 intimacy 객체를 그대로 저장
+                // fire-and-forget DB 저장 — 기존 데이터 보호 + 활성 페르소나만 업데이트
                 (async () => {
                   try {
                     const { data: prof } = await supabase
@@ -584,9 +584,21 @@ export async function POST(req: NextRequest) {
                       .eq('id', user.id)
                       .single();
                     const curr = (prof?.user_model as any) ?? {};
+                    const existingIntimacy = curr.intimacy ?? {};
+
+                    // 🛡️ 핵심 방어: HLRE가 기본값을 반환한 경우 기존 DB를 덮어쓰지 않음
+                    // 활성 페르소나만 새 데이터로 교체, 비활성은 기존 DB 데이터 유지
+                    const safeIntimacy = {
+                      luna: intimacyPersonaKey === 'luna' && intimacyAll.luna
+                        ? intimacyAll.luna   // 이번 세션에서 실제 업데이트된 루나 데이터
+                        : (existingIntimacy.luna ?? intimacyAll.luna),  // DB 기존 데이터 유지
+                      tarot: intimacyPersonaKey === 'tarot' && intimacyAll.tarot
+                        ? intimacyAll.tarot  // 이번 세션에서 실제 업데이트된 타로냥 데이터
+                        : (existingIntimacy.tarot ?? intimacyAll.tarot),  // DB 기존 데이터 유지
+                    };
 
                     // 레거시 lunaRelationship 미러 — 루나 기준으로만 업데이트
-                    const lunaDims = intimacyAll.luna?.dimensions;
+                    const lunaDims = safeIntimacy.luna?.dimensions;
                     const legacyMirror = lunaDims
                       ? {
                           intimacyScore: Math.round(
@@ -598,7 +610,7 @@ export async function POST(req: NextRequest) {
 
                     const nextUserModel = {
                       ...curr,
-                      intimacy: intimacyAll, // { luna, tarot } 전체 저장
+                      intimacy: safeIntimacy, // { luna, tarot } 안전하게 머지된 데이터
                       lunaRelationship: {
                         ...(curr.lunaRelationship ?? {}),
                         ...legacyMirror,
@@ -611,7 +623,7 @@ export async function POST(req: NextRequest) {
 
                     if (intimacyState) {
                       console.log(
-                        `[Intimacy:${intimacyPersonaKey}] 💾 저장: Lv.${intimacyState.level} ${intimacyState.levelName} | 🛡️${intimacyState.dimensions.trust.toFixed(0)} 💜${intimacyState.dimensions.openness.toFixed(0)} 🦊${intimacyState.dimensions.bond.toFixed(0)} ⭐${intimacyState.dimensions.respect.toFixed(0)}`,
+                        `[Intimacy:${intimacyPersonaKey}] 💾 저장: Lv.${intimacyState.level} ${intimacyState.levelName} | 🛡️${intimacyState.dimensions.trust.toFixed(0)} 💜${intimacyState.dimensions.openness.toFixed(0)} 🦊${intimacyState.dimensions.bond.toFixed(0)} ⭐${intimacyState.dimensions.respect.toFixed(0)} | 비활성 페르소나: DB 기존값 유지`,
                       );
                     }
                   } catch (e) {

@@ -85,7 +85,16 @@ export async function GET(req: NextRequest) {
     }
 
     const userModel = (data?.user_model as any) ?? {};
-    const shape = normalizeIntimacyShape(userModel.intimacy);
+    const rawIntimacy = userModel.intimacy;
+    
+    // 🔍 디버그: DB에 실제 저장된 intimacy 구조 확인
+    const dbFormat = !rawIntimacy ? 'MISSING' 
+      : (rawIntimacy.luna && rawIntimacy.tarot) ? 'SPLIT'
+      : rawIntimacy.dimensions ? 'SINGLE_OLD'
+      : 'UNKNOWN';
+    console.log(`[Intimacy API] 📊 DB 형태: ${dbFormat} | luna.sessions=${rawIntimacy?.luna?.totalSessions ?? 'N/A'} tarot.sessions=${rawIntimacy?.tarot?.totalSessions ?? 'N/A'} | luna.dims=${JSON.stringify(rawIntimacy?.luna?.dimensions ?? 'N/A').slice(0, 80)} | tarot.dims=${JSON.stringify(rawIntimacy?.tarot?.dimensions ?? 'N/A').slice(0, 80)}`);
+
+    const shape = normalizeIntimacyShape(rawIntimacy);
 
     // 단일 페르소나 요청
     if (requestedPersona) {

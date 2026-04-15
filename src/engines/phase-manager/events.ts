@@ -588,6 +588,8 @@ export function createEmotionMirror(
     sceneTitle: scene.sceneTitle,
     sceneLines: scene.sceneLines,
     reveal: scene.reveal,
+    // 🆕 v49: VN 모드 — 폴백에서는 Imagen 없이 CSS 그라디언트 사용
+    characterSetup: { mode: 'solo' },
     choices: [
       { label: '엇 맞아...', value: 'confirm' },
       { label: '아 좀 다른데ㅋㅋ', value: 'different' },

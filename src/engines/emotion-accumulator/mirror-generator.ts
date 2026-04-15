@@ -15,6 +15,7 @@ import type { RelationshipScenario } from '@/types/engine.types';
 import { generateWithCascade } from '@/lib/ai/provider-registry';
 import { getProviderCascade } from '@/lib/ai/smart-router';
 import { safeParseLLMJson } from '@/lib/utils/safe-json';
+import { generateSceneBackground } from '@/lib/ai/imagen';
 
 /**
  * LLM을 사용하여 1인 연극 스타일 감정 거울 생성
@@ -23,6 +24,7 @@ export async function generateDynamicMirror(
   accState: EmotionAccumulatorState,
   scenario: RelationshipScenario,
   chatHistory: { role: 'user' | 'ai'; content: string }[],
+  userGender?: string,
 ): Promise<EmotionMirrorData | null> {
   const { signals, deepEmotionHypothesis, surfaceEmotion } = accState;
 
@@ -47,7 +49,11 @@ export async function generateDynamicMirror(
       evidence: s.evidence,
     }));
 
-  const systemPrompt = `너는 20대 여자 여우 캐릭터 "루나"야. 사용자의 연애 상황을 1인 연극처럼 재연해서 공감을 보여줘.
+  // 🆕 v49: 커플 갈등 시나리오는 duo 모드 (상대방 대사 포함)
+  const DUO_SCENARIOS = ['JEALOUSY', 'INFIDELITY', 'BOREDOM', 'READ_AND_IGNORED', 'GHOSTING'];
+  const isDuo = DUO_SCENARIOS.includes(scenario);
+
+  const systemPrompt = `너는 20대 여자 여우 캐릭터 "루나"야. 사용자의 연애 상황을 ${isDuo ? '2인 연극' : '1인 연극'}처럼 재연해서 공감을 보여줘.
 
 ## 핵심 컨셉
 사용자가 말한 상황을 루나가 직접 연기하듯이 재현해. 처음엔 겉감정(화, 짜증 등)을 연기하다가, 마지막에 "...근데 사실은" 하면서 속마음(진짜 감정)을 reveal.
@@ -58,18 +64,23 @@ export async function generateDynamicMirror(
 - 상황을 한줄로 요약 (8~15자)
 - 예: "읽씹 당하는 그 순간", "새벽 3시 답장 기다리기", "연락 뜸해진 그 사람"
 
-### sceneLines (정확히 4줄)
-- 루나가 사용자 입장이 되어 연기하는 대사 4줄
-- 각 줄은 (지문) + 대사 형식
-- 1~2줄: 겉감정 연기 (화남, 짜증, 무심한 척 등)
-- 3줄: 전환점 ("...근데 있잖아" 느낌)
-- 4줄: 속마음 살짝 비침 (아직 완전 reveal 아님)
+### sceneLines (5~6줄)
+- 각 줄 형식: "[speaker] (지문) 대사"
+- speaker는 "나" (사용자 역할) 또는 "상대" (상대방 역할)
+${isDuo ? `- 이 상황은 커플 갈등이므로 [나]와 [상대]를 번갈아 사용해
+- 예: "[나] (폰 확 던지며) 아 진짜 왜 읽고 씹어?"
+      "[상대] (무심하게) 아 바빠서 못 봤어"
+      "[나] (씁쓸하게) 아 그래? ㅋㅋ 그래"
+      "[나] (혼잣말로) ...바쁘면 왜 인스타는 올려"
+      "[나] (작은 목소리) 나한테 관심 없어진 거 아닌지..."` : `- 혼자 내면 갈등이므로 [나]만 사용해
+- 예: "[나] (폰 확 던지며) 아 진짜 왜 읽고 씹어? 바쁘면 바쁘다고 하든가"
+      "[나] (근데 또 폰 슬쩍 확인하면서) ...혹시 답장 왔나"
+      "[나] (한숨) ...솔직히 화가 나는 게 아니라"
+      "[나] (작은 목소리로) 나한테 관심 없어진 건 아닌지... 그게 무서운 거야"`}
+- 1~3줄: 겉감정 연기 (화남, 짜증, 무심한 척 등)
+- 4줄: 전환점 ("...근데 있잖아" 느낌)
+- 5~6줄: 속마음 살짝 비침 (아직 완전 reveal 아님)
 - 사용자가 실제로 한 말이나 상황을 녹여서 연기해
-- 예시:
-  "(폰 확 던지며) 아 진짜 왜 읽고 씹어? 바쁘면 바쁘다고 하든가"
-  "(근데 또 폰 슬쩍 확인하면서) ...혹시 답장 왔나"
-  "(한숨) ...솔직히 화가 나는 게 아니라"
-  "(작은 목소리로) 나한테 관심 없어진 건 아닌지... 그게 무서운 거야"
 
 ### reveal
 - 루나가 파악한 핵심 속마음 한줄 (20~40자)
@@ -95,7 +106,7 @@ export async function generateDynamicMirror(
 - 유머 살짝 섞어도 됨 (but 감정은 진지하게)
 
 ## 출력 (JSON만, 코드블록 없이)
-{"sceneTitle":"...","sceneLines":["...","...","...","..."],"reveal":"...","surfaceEmotion":"...","surfaceEmoji":"...","deepEmotion":"...","deepEmoji":"..."}`;
+{"sceneTitle":"...","sceneLines":["...","...","...","...","..."],"reveal":"...","surfaceEmotion":"...","surfaceEmoji":"...","deepEmotion":"...","deepEmoji":"..."}`;
 
   const userPrompt = `## 턴별 감정 신호
 ${JSON.stringify(signalSummary, null, 2)}
@@ -137,7 +148,19 @@ ${recentUserMessages.map((m, i) => `[${i + 1}] ${m}`).join('\n')}
       ? parsed.sceneLines.slice(0, 5)
       : [parsed.sceneLines];
 
-    console.log(`[MirrorGenerator] 🎭 1인 연극 생성: "${parsed.sceneTitle}" (${sceneLines.length}줄) reveal="${parsed.reveal}"`);
+    console.log(`[MirrorGenerator] 🎭 ${isDuo ? '2인' : '1인'} 연극 생성: "${parsed.sceneTitle}" (${sceneLines.length}줄) reveal="${parsed.reveal}"`);
+
+    // 🆕 v49: Imagen 배경 이미지 생성 (fire-and-forget 아님 — 이벤트 데이터에 포함해야 함)
+    let backgroundImageBase64: string | undefined;
+    try {
+      const bg = await generateSceneBackground(scenario, parsed.sceneTitle);
+      if (bg) backgroundImageBase64 = bg;
+    } catch (e: any) {
+      console.warn('[MirrorGenerator] Imagen 배경 생성 실패 (폴백 사용):', e?.message?.slice(0, 80));
+    }
+
+    // gender 정규화
+    const normalizedGender = (userGender === 'male' || userGender === 'female') ? userGender : undefined;
 
     return {
       surfaceEmotion: parsed.surfaceEmotion || surfaceEmotion.label,
@@ -148,6 +171,11 @@ ${recentUserMessages.map((m, i) => `[${i + 1}] ${m}`).join('\n')}
       sceneTitle: parsed.sceneTitle || '너의 그 순간',
       sceneLines,
       reveal: parsed.reveal,
+      backgroundImageBase64,
+      characterSetup: {
+        mode: isDuo ? 'duo' : 'solo',
+        userGender: normalizedGender,
+      },
       choices: [
         { label: '엇 맞아...', value: 'confirm' },
         { label: '아 좀 다른데ㅋㅋ', value: 'different' },

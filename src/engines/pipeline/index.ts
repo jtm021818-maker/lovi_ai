@@ -597,7 +597,8 @@ export class CounselingPipeline {
       let mirrorData: EmotionMirrorData | null = null;
       if (isReadyForMirror(updatedAccumulator)) {
         try {
-          mirrorData = await generateDynamicMirror(updatedAccumulator, currentScenario, chatHistory);
+          const userGender = (memoryProfile as any)?.basicInfo?.gender;
+          mirrorData = await generateDynamicMirror(updatedAccumulator, currentScenario, chatHistory, userGender);
           console.log(`[Pipeline] 🪞 동적 거울 생성 성공: 겉="${mirrorData?.surfaceEmotion}" / 속="${mirrorData?.deepEmotion}"`);
         } catch (e) {
           console.warn('[Pipeline] 🪞 동적 거울 생성 실패, 폴백 사용:', e);
