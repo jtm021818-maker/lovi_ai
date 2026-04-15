@@ -188,8 +188,11 @@ async function* geminiStream(
       return;
     } catch (err: any) {
       if (attempt < MAX_RETRIES) {
-        console.warn(`[Gemini] ⚠️ 스트리밍 에러 → 재시도 ${attempt + 1}/${MAX_RETRIES + 1}:`, err?.message);
-        await new Promise(r => setTimeout(r, 500 * (attempt + 1))); // 점진적 대기 (500ms, 1000ms)
+        // 503(과부하)은 더 길게 대기, 그 외는 짧게
+        const is503 = err?.status === 503 || err?.code === 503 || err?.message?.includes('503');
+        const delayMs = is503 ? 1500 * (attempt + 1) : 500 * (attempt + 1); // 503: 1.5초→3초, 그외: 0.5초→1초
+        console.warn(`[Gemini] ⚠️ 스트리밍 에러 → 재시도 ${attempt + 1}/${MAX_RETRIES + 1} (${delayMs}ms 대기):`, err?.message?.slice(0, 80));
+        await new Promise(r => setTimeout(r, delayMs));
         continue;
       }
       throw err; // 재시도 소진 → 캐스케이드 폴백으로 전달
@@ -490,33 +493,48 @@ export async function* streamWithCascade(
         totalMs: Date.now() - startTime,
         error: err?.message?.slice(0, 100),
       });
-      // 🆕 v48: 재시도 UI 이벤트 — timeout/error 시 다음 폴백으로 넘어감을 알림
-      if (cascadeAttempt < totalProviders) {
-        const RETRY_MESSAGES = [
-          '음... 잠깐만, 다시 생각해볼게',
-          '어, 잠시만! 다시 정리해볼게',
-          '기다려줘, 조금만 더 생각해볼게',
-        ];
-        onRetry?.({
-          provider, attempt: cascadeAttempt, maxAttempts: totalProviders,
-          reason: isTimeout ? 'timeout' : is429 ? 'rate_limit' : 'error',
-          message: RETRY_MESSAGES[Math.min(cascadeAttempt - 1, RETRY_MESSAGES.length - 1)],
-        });
-      }
+      // 🆕 v49: 재시도 UI 이벤트 — 에러 유형별 메시지
+      const is503 = err?.status === 503 || err?.code === 503 || err?.message?.includes('503');
+      const RETRY_MESSAGES_NORMAL = [
+        '음... 잠깐만, 다시 생각해볼게',
+        '어, 잠시만! 다시 정리해볼게',
+        '기다려줘, 조금만 더 생각해볼게',
+      ];
+      const RETRY_MESSAGES_503 = [
+        '어... 지금 좀 머리가 복잡한데, 잠시만 기다려줘 💭',
+        '으으 서버가 바쁜가봐... 조금만 더 기다려줘!',
+        '거의 다 됐어, 조금만 더...!',
+      ];
+      const msgs = is503 ? RETRY_MESSAGES_503 : RETRY_MESSAGES_NORMAL;
+      onRetry?.({
+        provider, attempt: cascadeAttempt, maxAttempts: totalProviders,
+        reason: isTimeout ? 'timeout' : is429 ? 'rate_limit' : 'error',
+        message: msgs[Math.min(cascadeAttempt - 1, msgs.length - 1)],
+      });
       continue;
     }
   }
 
-  // 모든 폴백 실패 → 마지막 강제
+  // 모든 폴백 실패 → 마지막 강제 (실패해도 에러 대신 사용자 친화 메시지)
   const last = chain[chain.length - 1];
   const lastModel = last.modelOverride || PROVIDER_MODELS[last.provider][last.tier];
   const t0 = Date.now();
   logAttempt({ provider: last.provider, tier: last.tier, model: lastModel, status: 'retry', error: '모든 폴백 실패 → 최후 강제 시도' });
-  const gen = streamWithProvider(last.provider, systemPrompt, messages, last.tier, maxTokens, last.modelOverride);
-  for await (const chunk of gen) {
-    yield chunk;
+  try {
+    const gen = streamWithProvider(last.provider, systemPrompt, messages, last.tier, maxTokens, last.modelOverride);
+    let yieldedAny = false;
+    for await (const chunk of gen) {
+      yieldedAny = true;
+      yield chunk;
+    }
+    if (!yieldedAny) throw new Error('빈 응답');
+    logAttempt({ provider: last.provider, tier: last.tier, model: lastModel, status: 'success', totalMs: Date.now() - t0, error: '최후 강제 시도 성공' });
+  } catch (lastErr: any) {
+    console.error(`[Cascade] ❌ 모든 프로바이더 실패:`, lastErr?.message?.slice(0, 100));
+    logAttempt({ provider: last.provider, tier: last.tier, model: lastModel, status: 'error', totalMs: Date.now() - t0, error: `최후 시도 실패: ${lastErr?.message?.slice(0, 60)}` });
+    // 에러 throw 대신 사용자 친화 메시지 yield
+    yield '잠깐 서버가 바빠서 응답이 어려워... 다시 말해줄 수 있어? 💜';
   }
-  logAttempt({ provider: last.provider, tier: last.tier, model: lastModel, status: 'success', totalMs: Date.now() - t0, error: '최후 강제 시도 성공' });
 }
 
 /**
