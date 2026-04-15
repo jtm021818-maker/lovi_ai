@@ -100,13 +100,32 @@ ${isDuo ? `- 이 상황은 커플 갈등이므로 [나]와 [상대]를 번갈아
 - 한국 문화: 체면 때문에 진짜 감정 숨기는 경향
 - 절대 단정 금지. 추측형만.
 
+## 캐릭터 표정 연출 (sceneFrames)
+각 대사마다 캐릭터의 표정을 숫자(0~7)로 지정해. 연극 연출가처럼 판단해.
+- 0: 기본/평온 — 담담하게 말할 때
+- 1: 슬픔/울적 — 서운하거나 아플 때
+- 2: 화남/짜증 — 분노, 답답할 때
+- 3: 생각/깨달음 — 뭔가 알아챘을 때, reveal 순간
+- 4: 놀람/충격 — 헐! 뭐?! 할 때
+- 5: 웃음/행복 — 가볍게 웃거나 긍정적일 때
+- 6: 걱정/불안 — 초조하거나 무서울 때
+- 7: 당당/자신감 — 확신에 찬 순간
+
+sceneFrames 배열은 sceneLines와 1:1 대응. revealFrame은 reveal 순간의 표정.
+상황 흐름에 맞게 자연스럽게 표정이 변하도록 연출해.
+예: 화남(2)→화남(2)→놀람(4)→슬픔(1)→깨달음(3)
+
+## 사용자 성별
+${userGender === 'male' ? '남성 — 남자 캐릭터 스프라이트 사용' : userGender === 'female' ? '여성 — 여자 캐릭터 스프라이트 사용' : '미확인 — 기본 여자 캐릭터 사용'}
+연극에서 "나" 역할은 이 성별에 맞게 연기해.
+
 ## 톤
 - 20대 여자 말투, 자연스러운 반말
 - 연극이지만 너무 오버하지 않게, 진짜 친구가 "아 너 이런 느낌이지?" 하는 톤
 - 유머 살짝 섞어도 됨 (but 감정은 진지하게)
 
 ## 출력 (JSON만, 코드블록 없이)
-{"sceneTitle":"...","sceneLines":["...","...","...","...","..."],"reveal":"...","surfaceEmotion":"...","surfaceEmoji":"...","deepEmotion":"...","deepEmoji":"..."}`;
+{"sceneTitle":"...","sceneLines":["...","...","...","...","..."],"sceneFrames":[2,2,4,1,3],"reveal":"...","revealFrame":3,"surfaceEmotion":"...","surfaceEmoji":"...","deepEmotion":"...","deepEmoji":"..."}`;
 
   const userPrompt = `## 턴별 감정 신호
 ${JSON.stringify(signalSummary, null, 2)}
@@ -171,7 +190,9 @@ ${recentUserMessages.map((m, i) => `[${i + 1}] ${m}`).join('\n')}
       lunaMessage: '이런 느낌이지? 🦊',
       sceneTitle: parsed.sceneTitle || '너의 그 순간',
       sceneLines,
+      sceneFrames: Array.isArray(parsed.sceneFrames) ? parsed.sceneFrames.map((f: any) => Math.min(7, Math.max(0, Number(f) || 0))) : undefined,
       reveal: parsed.reveal,
+      revealFrame: typeof parsed.revealFrame === 'number' ? Math.min(7, Math.max(0, parsed.revealFrame)) : 3,
       backgroundImageBase64,
       characterSetup: {
         mode: isDuo ? 'duo' : 'solo',

@@ -208,10 +208,12 @@ export interface EmotionMirrorData {
   // 🆕 v48: 1인 연극 모드
   sceneTitle?: string;        // 장면 제목 (예: "읽씹 당하는 그 순간")
   sceneLines?: string[];      // 연극 대사 5~6줄 ("[speaker] (지문) 대사" 형식)
+  sceneFrames?: number[];     // 대사별 캐릭터 표정 프레임 (0-7), LLM이 연출 판단
   reveal?: string;            // 속마음 reveal 대사
+  revealFrame?: number;       // reveal 시 표정 프레임
 
   // 🆕 v49: VN 비주얼 노벨 모드
-  backgroundImageBase64?: string;   // Imagen 생성 base64 JPEG
+  backgroundImageBase64?: string;   // 배경 이미지 base64 JPEG
   backgroundPrompt?: string;        // 디버깅용 프롬프트
   characterSetup?: {
     mode: 'solo' | 'duo';           // 혼자/둘이 연극

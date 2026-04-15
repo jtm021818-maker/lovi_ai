@@ -69,15 +69,18 @@ function pickSpriteFrame(emotion: string, isReveal: boolean): SpriteFrame {
   return 0; // 기본
 }
 
-/** CSS object-position으로 스프라이트 시트에서 특정 프레임 표시 */
-function getSpriteStyle(frame: SpriteFrame): React.CSSProperties {
+/** CSS background-image로 스프라이트 시트에서 특정 프레임 표시 (div 기반, 크롭 확실) */
+function getSpriteStyle(frame: SpriteFrame, sheet: string, displaySize: number): React.CSSProperties {
   const col = frame % SPRITE_COLS;
   const row = Math.floor(frame / SPRITE_COLS);
+  const scale = displaySize / 344; // 원본 344px 기준 스케일
   return {
-    objectFit: 'none' as const,
-    objectPosition: `-${col * 344}px -${row * 384}px`,
-    width: 344,
-    height: 384,
+    width: displaySize,
+    height: displaySize * (384 / 344), // 비율 유지
+    backgroundImage: `url(${sheet})`,
+    backgroundSize: `${1376 * scale}px ${768 * scale}px`, // 전체 시트 스케일
+    backgroundPosition: `-${col * 344 * scale}px -${row * 384 * scale}px`,
+    backgroundRepeat: 'no-repeat',
   };
 }
 
@@ -308,13 +311,20 @@ function VNScene({
   const transitionIdx = Math.max(Math.floor(lines.length * 0.6), 2);
   const isSurfaceLine = lineIndex < transitionIdx;
 
-  // 대사별 스프라이트 프레임 결정 (루나가 상황에 맞게 표정 변경)
-  const currentFrame = phase === 'reveal'
-    ? pickSpriteFrame(data.deepEmotion, true)
-    : phase === 'playing'
-      ? pickSpriteFrame(parseSceneLine(lines[lineIndex]).dialog, false)
-      : 0; // intro/message/choice = 기본 표정
-  const mainSpriteStyle = getSpriteStyle(currentFrame);
+  // 대사별 스프라이트 프레임 결정 (LLM 지정 우선, 없으면 키워드 폴백)
+  const currentFrame: SpriteFrame = (() => {
+    if (phase === 'reveal') {
+      return (data.revealFrame ?? pickSpriteFrame(data.deepEmotion, true)) as SpriteFrame;
+    }
+    if (phase === 'playing') {
+      const llmFrame = data.sceneFrames?.[lineIndex];
+      if (llmFrame !== undefined) return Math.min(7, Math.max(0, llmFrame)) as SpriteFrame;
+      return pickSpriteFrame(parseSceneLine(lines[lineIndex]).dialog, false);
+    }
+    return 0;
+  })();
+  // Solo: 220px, Duo: 160px
+  const spriteSize = isDuo ? 160 : 220;
 
   // closed 상태 → 인라인 요약 카드 (채팅에 남김)
   if (phase === 'closed') {
@@ -404,7 +414,7 @@ function VNScene({
           </div>
         </motion.div>
 
-        {/* 캐릭터 스프라이트 — 종이연극 스타일 (프레임 교체 시 회전 + 호흡 애니메이션) */}
+        {/* 캐릭터 스프라이트 — 종이연극 스타일 (background-image 크롭 + 회전 전환 + 호흡) */}
         <div className="absolute inset-0 z-10 pointer-events-none">
           {isDuo ? (
             <>
@@ -412,7 +422,7 @@ function VNScene({
               <motion.div
                 animate={{
                   scale: isCurrentOpponent ? [1, 0.97, 1] : [1, 1.03, 1],
-                  y: isCurrentOpponent ? [0, 2, 0] : [0, -4, 0],
+                  y: isCurrentOpponent ? [0, 2, 0] : [0, -6, 0],
                   opacity: isCurrentOpponent ? 0.5 : 1,
                   filter: isCurrentOpponent ? 'brightness(0.5) saturate(0.7)' : 'brightness(1) saturate(1)',
                 }}
@@ -422,23 +432,16 @@ function VNScene({
                   opacity: { duration: 0.5 },
                   filter: { duration: 0.5 },
                 }}
-                className="absolute bottom-[18%] left-[2%] overflow-hidden drop-shadow-2xl"
-                style={{ width: 172, height: 192 }}
+                className="absolute bottom-[15%] left-[3%] drop-shadow-2xl"
               >
                 <AnimatePresence mode="wait">
-                  <motion.img
+                  <motion.div
                     key={`main-${currentFrame}`}
-                    src={mainSheet}
-                    alt="나"
                     initial={{ rotateY: 90, opacity: 0 }}
                     animate={{ rotateY: 0, opacity: 1 }}
                     exit={{ rotateY: -90, opacity: 0 }}
                     transition={{ duration: 0.3, ease: 'easeOut' }}
-                    style={{
-                      ...mainSpriteStyle,
-                      transform: `scale(${172/344})`,
-                      transformOrigin: `${(currentFrame % SPRITE_COLS) * 344}px ${Math.floor(currentFrame / SPRITE_COLS) * 384}px`,
-                    }}
+                    style={getSpriteStyle(currentFrame, mainSheet, spriteSize)}
                   />
                 </AnimatePresence>
               </motion.div>
@@ -446,7 +449,7 @@ function VNScene({
               <motion.div
                 animate={{
                   scale: isCurrentOpponent ? [1, 1.03, 1] : [1, 0.97, 1],
-                  y: isCurrentOpponent ? [0, -4, 0] : [0, 2, 0],
+                  y: isCurrentOpponent ? [0, -6, 0] : [0, 2, 0],
                   opacity: isCurrentOpponent ? 1 : 0.5,
                   filter: isCurrentOpponent ? 'brightness(1) saturate(1)' : 'brightness(0.5) saturate(0.7)',
                 }}
@@ -456,18 +459,10 @@ function VNScene({
                   opacity: { duration: 0.5 },
                   filter: { duration: 0.5 },
                 }}
-                className="absolute bottom-[18%] right-[2%] overflow-hidden drop-shadow-2xl"
-                style={{ width: 172, height: 192, transform: 'scaleX(-1)' }}
+                className="absolute bottom-[15%] right-[3%] drop-shadow-2xl"
+                style={{ transform: 'scaleX(-1)' }}
               >
-                <img
-                  src={opponentSheet}
-                  alt="상대"
-                  style={{
-                    ...getSpriteStyle(0),
-                    transform: `scale(${172/344})`,
-                    transformOrigin: '0px 0px',
-                  }}
-                />
+                <div style={getSpriteStyle(0, opponentSheet, spriteSize)} />
               </motion.div>
             </>
           ) : (
@@ -483,23 +478,17 @@ function VNScene({
                 y: { duration: 3, repeat: Infinity, ease: 'easeInOut' },
                 rotate: { duration: 5, repeat: Infinity, ease: 'easeInOut' },
               }}
-              className="absolute bottom-[18%] left-1/2 overflow-hidden drop-shadow-2xl"
-              style={{ width: 220, height: 246, marginLeft: -110 }}
+              className="absolute bottom-[15%] left-1/2 drop-shadow-2xl"
+              style={{ marginLeft: -(spriteSize / 2) }}
             >
               <AnimatePresence mode="wait">
-                <motion.img
+                <motion.div
                   key={`solo-${currentFrame}`}
-                  src={mainSheet}
-                  alt="캐릭터"
                   initial={{ rotateY: 90, opacity: 0, scale: 0.8 }}
                   animate={{ rotateY: 0, opacity: 1, scale: 1 }}
                   exit={{ rotateY: -90, opacity: 0, scale: 0.8 }}
                   transition={{ duration: 0.35, ease: 'easeOut' }}
-                  style={{
-                    ...mainSpriteStyle,
-                    transform: `scale(${220/344})`,
-                    transformOrigin: `${(currentFrame % SPRITE_COLS) * 344}px ${Math.floor(currentFrame / SPRITE_COLS) * 384}px`,
-                  }}
+                  style={getSpriteStyle(currentFrame, mainSheet, spriteSize)}
                 />
               </AnimatePresence>
             </motion.div>
@@ -596,21 +585,48 @@ function VNScene({
               </motion.div>
             )}
 
-            {/* Message */}
+            {/* Message — igmg.png 통 튀어나오는 연출 */}
             {phase === 'message' && (
               <motion.div
                 key="message"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="bg-black/60 backdrop-blur-md rounded-t-2xl py-4 px-4"
+                className="absolute inset-0 flex flex-col items-center justify-center"
               >
-                <motion.p
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="text-[13px] font-bold text-white/80 text-center"
+                {/* 배경 살짝 더 어둡게 */}
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="absolute inset-0 bg-black/50"
+                />
+                {/* igmg.png 통 튀어나오기 */}
+                <motion.img
+                  src="/char_img/igmg.png"
+                  alt="루나"
+                  initial={{ scale: 0, rotate: -15, opacity: 0 }}
+                  animate={{
+                    scale: [0, 1.2, 0.95, 1.05, 1],
+                    rotate: [-15, 5, -3, 1, 0],
+                    opacity: 1,
+                  }}
+                  transition={{
+                    duration: 0.7,
+                    ease: [0.34, 1.56, 0.64, 1], // bouncy overshoot
+                    times: [0, 0.4, 0.6, 0.8, 1],
+                  }}
+                  className="relative z-10 w-40 h-40 object-contain drop-shadow-2xl mb-3"
+                />
+                {/* 메시지 텍스트 — 아래에서 올라옴 */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ delay: 0.4, type: 'spring', stiffness: 300 }}
+                  className="relative z-10 px-5 py-2.5 rounded-2xl bg-white/15 backdrop-blur-md border border-white/20"
                 >
-                  {data.lunaMessage}
-                </motion.p>
+                  <p className="text-[14px] font-bold text-white text-center">
+                    {data.lunaMessage}
+                  </p>
+                </motion.div>
               </motion.div>
             )}
 
