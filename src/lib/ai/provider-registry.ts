@@ -466,12 +466,14 @@ export interface RetryStatusEvent {
 }
 
 /** 캐스케이드 스트리밍 — 4단계 폴백 체인 (🆕 v48: 재시도 UI 이벤트, TTFB 30초 타임아웃) */
+/** yield 타입: 문자열(텍스트 청크) 또는 RetryStatusEvent(재시도 알림) */
+export type CascadeStreamChunk = string | { __retry: RetryStatusEvent };
+
 export async function* streamWithCascade(
   chain: { provider: Provider; tier: ModelTier; modelOverride?: string }[],
   systemPrompt: string,
   messages: { role: 'user' | 'assistant'; content: string }[],
-  maxTokens: number = 1024,
-  onRetry?: (event: RetryStatusEvent) => void
+  maxTokens: number = 1024
 ): AsyncGenerator<string> {
   let cascadeAttempt = 0;
   const totalProviders = chain.length;
@@ -482,23 +484,29 @@ export async function* streamWithCascade(
     const limit = checkProviderRateLimit(provider);
     if (!limit.allowed) {
       logAttempt({ provider, tier, model: actualModel, status: 'rate_limit' });
-      // 🆕 v48: 재시도 UI 이벤트 — rate limit
-      onRetry?.({
+      yield { __retry: {
         provider, attempt: cascadeAttempt, maxAttempts: totalProviders,
-        reason: 'rate_limit',
+        reason: 'rate_limit' as const,
         message: '잠깐, 다시 정리해볼게...',
-      });
+      }};
       continue;
     }
 
     let hasYieldedAny = false;
     const startTime = Date.now();
     let ttfbMs: number | undefined;
+    // 🆕 v49: Gemini 내부 503 재시도 이벤트를 수집하는 버퍼
+    const internalRetryBuf: RetryStatusEvent[] = [];
+    const internalRetryCallback = (evt: RetryStatusEvent) => { internalRetryBuf.push(evt); };
     try {
-      const gen = streamWithProvider(provider, systemPrompt, messages, tier, maxTokens, modelOverride, onRetry);
+      const gen = streamWithProvider(provider, systemPrompt, messages, tier, maxTokens, modelOverride, internalRetryCallback);
       const TTFB_TIMEOUT_MS = 30000;
 
       for await (const chunk of wrapWithTTFBTimeout(gen, TTFB_TIMEOUT_MS, `${provider}/${tier}`)) {
+        // 내부 재시도 이벤트 먼저 flush (Gemini 503 재시도 후 성공 시)
+        while (internalRetryBuf.length > 0) {
+          yield { __retry: internalRetryBuf.shift()! };
+        }
         if (!hasYieldedAny) {
           ttfbMs = Date.now() - startTime;
         }
@@ -520,7 +528,11 @@ export async function* streamWithCascade(
         totalMs: Date.now() - startTime,
         error: err?.message?.slice(0, 100),
       });
-      // 🆕 v49: 재시도 UI 이벤트 — 에러 유형별 메시지
+      // 🆕 v49: Gemini 내부 503 재시도 이벤트 flush (실패했어도 UI에 표시)
+      while (internalRetryBuf.length > 0) {
+        yield { __retry: internalRetryBuf.shift()! };
+      }
+      // 재시도 UI 이벤트 — 에러 유형별 메시지
       const is503 = err?.status === 503 || err?.code === 503 || err?.message?.includes('503');
       const RETRY_MESSAGES_NORMAL = [
         '음... 잠깐만, 다시 생각해볼게',
@@ -533,11 +545,11 @@ export async function* streamWithCascade(
         '거의 다 됐어, 조금만 더...!',
       ];
       const msgs = is503 ? RETRY_MESSAGES_503 : RETRY_MESSAGES_NORMAL;
-      onRetry?.({
+      yield { __retry: {
         provider, attempt: cascadeAttempt, maxAttempts: totalProviders,
-        reason: isTimeout ? 'timeout' : is429 ? 'rate_limit' : 'error',
+        reason: (isTimeout ? 'timeout' : is429 ? 'rate_limit' : 'error') as 'timeout' | 'rate_limit' | 'error',
         message: msgs[Math.min(cascadeAttempt - 1, msgs.length - 1)],
-      });
+      }};
       continue;
     }
   }

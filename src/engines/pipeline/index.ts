@@ -13,7 +13,7 @@ import { generateSituationScene } from '@/engines/situation-scene-generator';
 import { matchSolutions, calculateReadiness, getSolutionDictionaryPrompt, parseAxesFromMessage, analyzeAxesState, generateDiagnosticPrompt, mergeLLMAxes, markAxisAsked, generateAxisChoices } from '@/engines/solution-dictionary';
 import type { ReadIgnoredAxes, AxisChoice } from '@/engines/solution-dictionary';
 import type { PersonaMode, PanelResponse } from '@/types/persona.types';
-import { generateWithCascade, streamWithCascade, type RetryStatusEvent } from '@/lib/ai/provider-registry';
+import { generateWithCascade, streamWithCascade, type RetryStatusEvent, type CascadeStreamChunk } from '@/lib/ai/provider-registry';
 import { runDeepResearch, generateThinkingPhrases, extractKeyword } from '@/lib/ai/deep-research';
 import { saveMemory } from '@/engines/human-like/memory-engine';
 import { routeModel } from '@/lib/ai/model-router';
@@ -1341,14 +1341,12 @@ ${researchResult.insight}
     } else {
       // 상담사/친구 모드: 스트리밍 — 3사 캐스케이드
       let fullText = '';
-      // 🆕 v48: 재시도 이벤트 버퍼 — cascade 실패 시 UI에 알림
-      const retryEventBuffer: RetryStatusEvent[] = [];
+      // 🆕 v49: streamWithCascade가 텍스트 + 재시도 이벤트를 직접 yield
       const stream = streamWithCascade(
         modelRoute.cascade,
         systemPrompt,
         recentMessages,
         modelRoute.maxTokens,
-        (retryEvt) => { retryEventBuffer.push(retryEvt); }
       );
 
       // <think>...</think> 태그 스트리밍 필터 (qwen3-32b thinking mode)
@@ -1356,13 +1354,13 @@ ${researchResult.insight}
       let stripLeadingWhitespace = false; // </think> 직후 다음 청크 공백 제거용
 
       for await (const chunk of stream) {
-        // 🆕 v48: 재시도 이벤트 플러시 — cascade 폴백 전환 시 UI에 즉시 알림
-        while (retryEventBuffer.length > 0) {
-          const retryEvt = retryEventBuffer.shift()!;
-          yield { type: 'retry_status', data: retryEvt };
+        // 🆕 v49: 재시도 이벤트는 즉시 SSE로 전달
+        if (typeof chunk === 'object' && '__retry' in chunk) {
+          yield { type: 'retry_status', data: chunk.__retry };
+          continue;
         }
 
-        let text = chunk;
+        let text = chunk as string;
 
         // 이전 청크에서 </think> 나왔으면 이번 청크 앞 공백 제거
         if (stripLeadingWhitespace && !insideThink) {

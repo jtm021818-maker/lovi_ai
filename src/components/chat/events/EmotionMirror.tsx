@@ -22,13 +22,22 @@ import { useTypewriter } from '@/hooks/useTypewriter';
 // ============================================================
 
 /** [speaker] (지문) 대사 파싱 */
-function parseSceneLine(line: string): { speaker?: string; action?: string; dialog: string } {
+function parseSceneLine(line: string): { speaker?: string; gender?: 'male' | 'female'; action?: string; dialog: string } {
   const speakerMatch = line.match(/^\[([^\]]+)\]\s*/);
   const speaker = speakerMatch?.[1];
   const rest = speaker ? line.slice(speakerMatch![0].length) : line;
   const actionMatch = rest.match(/^\(([^)]+)\)\s*(.*)$/);
-  if (actionMatch) return { speaker, action: actionMatch[1], dialog: actionMatch[2] };
-  return { speaker, dialog: rest };
+
+  // speaker → 성별 매핑 ([남자] → male, [여자] → female)
+  let gender: 'male' | 'female' | undefined;
+  if (speaker) {
+    const s = speaker.trim();
+    if (s === '남자' || s === '남' || s.includes('남')) gender = 'male';
+    else if (s === '여자' || s === '여' || s.includes('여')) gender = 'female';
+  }
+
+  if (actionMatch) return { speaker, gender, action: actionMatch[1], dialog: actionMatch[2] };
+  return { speaker, gender, dialog: rest };
 }
 
 /** 시나리오별 CSS 그라디언트 폴백 */
@@ -115,7 +124,7 @@ function DialogueLine({
 
   return (
     <div className="px-4 pb-3">
-      {/* Speaker 태그 */}
+      {/* Speaker 태그 — 성별 기반 */}
       {isDuo && parsed.speaker && (
         <motion.div
           initial={{ opacity: 0 }}
@@ -124,12 +133,12 @@ function DialogueLine({
         >
           <span
             className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              isOpponent
+              parsed.gender === 'male'
                 ? 'bg-blue-500/30 text-blue-200'
                 : 'bg-rose-500/30 text-rose-200'
             }`}
           >
-            {isOpponent ? '💬 상대' : '🎭 나'}
+            {parsed.gender === 'male' ? '👦 남자' : '👧 여자'}
           </span>
         </motion.div>
       )}
@@ -282,9 +291,13 @@ function VNScene({
     setTimeout(() => setPhase('closing'), 300);
   }, [onSelect]);
 
-  // 현재 대사의 파싱 결과 (speaker 확인용)
+  // 현재 대사의 파싱 결과 (speaker + 성별 확인용)
   const currentParsed = phase === 'playing' ? parseSceneLine(lines[lineIndex]) : null;
-  const isCurrentOpponent = currentParsed?.speaker === '상대';
+  // 현재 대사의 캐릭터가 어느 쪽인지 (성별 기반 스프라이트 선택)
+  const currentLineGender = currentParsed?.gender;
+  const isCurrentOpponent = isDuo && currentLineGender !== undefined && currentLineGender !== gender;
+  // 현재 표시할 스프라이트 시트 (대사별 성별에 따라)
+  const activeSheet = currentLineGender === 'male' ? SPRITE_SHEET.male : currentLineGender === 'female' ? SPRITE_SHEET.female : mainSheet;
 
   // 탭으로 진행
   const handleTap = useCallback(() => {
@@ -302,10 +315,11 @@ function VNScene({
     ? { backgroundImage: `url(data:image/jpeg;base64,${data.backgroundImageBase64})` }
     : { background: (scenario && SCENARIO_GRADIENTS[scenario]) || DEFAULT_GRADIENT };
 
-  // 스프라이트 시트 결정
+  // 스프라이트 시트 결정 — [남자] → man, [여자] → girl 고정 매핑
   const gender = data.characterSetup?.userGender || 'female';
   const mainSheet = SPRITE_SHEET[gender] || SPRITE_SHEET.female;
-  const opponentSheet = gender === 'male' ? SPRITE_SHEET.female : SPRITE_SHEET.male;
+  const maleSheet = SPRITE_SHEET.male;   // event1_luna_man.png
+  const femaleSheet = SPRITE_SHEET.female; // event1_luna_girl.png
 
   // 겉감정/속마음 라인 구분 (전환점 기준)
   const transitionIdx = Math.max(Math.floor(lines.length * 0.6), 2);
@@ -417,13 +431,13 @@ function VNScene({
         <div className="absolute inset-0 z-10 pointer-events-none">
           {isDuo && phase !== 'message' && phase !== 'choice' ? (
             <>
-              {/* 나 (왼쪽) */}
+              {/* 남자 (왼쪽) */}
               <motion.div
                 animate={{
-                  scale: isCurrentOpponent ? [1, 0.97, 1] : [1, 1.03, 1],
-                  y: isCurrentOpponent ? [0, 2, 0] : [0, -6, 0],
-                  opacity: isCurrentOpponent ? 0.5 : 1,
-                  filter: isCurrentOpponent ? 'brightness(0.5) saturate(0.7)' : 'brightness(1) saturate(1)',
+                  scale: currentLineGender === 'male' ? [1, 1.03, 1] : [1, 0.97, 1],
+                  y: currentLineGender === 'male' ? [0, -6, 0] : [0, 2, 0],
+                  opacity: currentLineGender === 'male' ? 1 : 0.5,
+                  filter: currentLineGender === 'male' ? 'brightness(1) saturate(1)' : 'brightness(0.5) saturate(0.7)',
                 }}
                 transition={{
                   scale: { duration: 3, repeat: Infinity, ease: 'easeInOut' },
@@ -440,17 +454,17 @@ function VNScene({
                     animate={{ rotateY: 0, opacity: 1 }}
                     exit={{ rotateY: -90, opacity: 0 }}
                     transition={{ duration: 0.3, ease: 'easeOut' }}
-                    style={getSpriteStyle(currentFrame, mainSheet, spriteSize)}
+                    style={getSpriteStyle(currentFrame, maleSheet, spriteSize)}
                   />
                 </AnimatePresence>
               </motion.div>
-              {/* 상대 (오른쪽) */}
+              {/* 여자 (오른쪽) */}
               <motion.div
                 animate={{
-                  scale: isCurrentOpponent ? [1, 1.03, 1] : [1, 0.97, 1],
-                  y: isCurrentOpponent ? [0, -6, 0] : [0, 2, 0],
-                  opacity: isCurrentOpponent ? 1 : 0.5,
-                  filter: isCurrentOpponent ? 'brightness(1) saturate(1)' : 'brightness(0.5) saturate(0.7)',
+                  scale: currentLineGender === 'female' ? [1, 1.03, 1] : [1, 0.97, 1],
+                  y: currentLineGender === 'female' ? [0, -6, 0] : [0, 2, 0],
+                  opacity: currentLineGender === 'female' ? 1 : 0.5,
+                  filter: currentLineGender === 'female' ? 'brightness(1) saturate(1)' : 'brightness(0.5) saturate(0.7)',
                 }}
                 transition={{
                   scale: { duration: 3, repeat: Infinity, ease: 'easeInOut', delay: 0.3 },
@@ -461,7 +475,7 @@ function VNScene({
                 className="absolute bottom-[2%] right-[2%] drop-shadow-2xl"
                 style={{ transform: 'scaleX(-1)' }}
               >
-                <div style={getSpriteStyle(0, opponentSheet, spriteSize)} />
+                <div style={getSpriteStyle(0, femaleSheet, spriteSize)} />
               </motion.div>
             </>
           ) : (
