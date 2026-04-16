@@ -1,16 +1,9 @@
-/**
- * 스마트 라우터 — 태스크별 Gemini 멀티모델 캐스케이드 체인 결정
- *
- * [v52 — 무료 Rate Limit 최적 분배]
- *
  * 모델별 무료 한도:
  *   2.5 Flash-Lite  — 전체 1순위 (메인 + 이벤트 + 분석)
- *   2 Flash         — RPD 무제한 (폴백)
- *   2 Flash-Lite    — RPD 무제한 (경량 분석/검증)
+ *   2.5 Flash       — 폴백 (안정적 품질)
  *
  * 전략:
- *   전체 → 2.5 Flash-Lite (1순위) → 2 Flash (폴백)
- *   경량 분석 → 2 Flash-Lite (1순위) → 2 Flash (폴백)
+ *   전체 → 2.5 Flash-Lite (1순위) → 2.5 Flash (폴백)
  */
 
 import type { Provider, ModelTier } from './provider-registry';
@@ -47,14 +40,13 @@ export function getProviderCascade(
     // ──────────────────────────────────────────
     // 메인 상담: Claude Sonnet 4.6 + 프롬프트 캐싱 (30~40% 절감)
     // 1순위: Claude Sonnet 4.6 (한국어 공감 품질 최강)
-    // 2순위: Gemini 3 Flash (무료 폴백, Claude 장애 시)
-    // 3순위: Gemini 1.5 Flash (최종 폴백)
+    // 2순위: Gemini 2.5 Flash Lite (무료 폴백)
     // ──────────────────────────────────────────
     case 'main_response':
       return [
         { provider: 'anthropic', tier: 'sonnet', modelOverride: ANTHROPIC_MODELS.SONNET_4_6 },
-        { provider: 'gemini',    tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_3 },
-        { provider: 'gemini',    tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_15 },
+        { provider: 'gemini',    tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
+        { provider: 'gemini',    tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },
       ];
 
     // ──────────────────────────────────────────
@@ -62,8 +54,8 @@ export function getProviderCascade(
     // ──────────────────────────────────────────
     case 'event_generation':
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_3 },
-        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_15 },
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
+        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },
       ];
 
     // ──────────────────────────────────────────
@@ -73,8 +65,8 @@ export function getProviderCascade(
     // ──────────────────────────────────────────
     case 'state_analysis':
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_3 },
-        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_15 },
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
+        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },
       ];
 
     // ──────────────────────────────────────────
@@ -84,8 +76,8 @@ export function getProviderCascade(
     // ──────────────────────────────────────────
     case 'response_validation':
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_3 },
-        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_15 },
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
+        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },
       ];
 
     // ──────────────────────────────────────────
@@ -93,8 +85,8 @@ export function getProviderCascade(
     // ──────────────────────────────────────────
     case 'session_summary':
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_3 },
-        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_15 },
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
+        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },
       ];
 
     // ──────────────────────────────────────────
@@ -110,8 +102,8 @@ export function getProviderCascade(
 
     default:
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_3 },
-        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_15 },
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
+        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },
       ];
   }
 }

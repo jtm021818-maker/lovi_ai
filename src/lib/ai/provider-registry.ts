@@ -32,19 +32,24 @@ export const ANTHROPIC_MODELS = {
 } as const;
 
 export const GEMINI_MODELS = {
-  FLASH_3:       'gemini-3-flash',          // 전체 1순위 (신규 고성능 모델)
-  FLASH_15:      'gemini-1.5-flash',        // 안정적 폴백
-  FLASH_25:      'gemini-3-flash',          // 하위 호환 매핑
-  FLASH_LITE_25: 'gemini-3-flash',          // 하위 호환 매핑
-  FLASH_LITE_31: 'gemini-1.5-flash',        // 임시 폴백
+  // 🔥 전체 모델 2.5 Flash Lite로 통일 (사용자 요청: 1.5 Flash 제거)
+  FLASH_LITE_25: 'gemini-2.5-flash-lite',           // 메인 베이스
+  FLASH_25:      'gemini-2.5-flash',                // 프리미엄/폴백
+  
+  // 하위 호환 및 폴백 매핑 -> 모두 2.5 Flash Lite/Flash로 유도
+  FLASH_3:       'gemini-2.5-flash-lite',
+  FLASH_15:      'gemini-2.5-flash-lite',
+  FLASH_LITE_31: 'gemini-2.5-flash-lite',
+  FLASH_20:      'gemini-2.5-flash',
+  FLASH_LITE_20: 'gemini-2.5-flash-lite',
 } as const;
 
 /** 프로바이더별 모델 매핑 (기본 — modelOverride로 재정의 가능) */
 const PROVIDER_MODELS: Record<Provider, Record<ModelTier, string>> = {
   gemini: {
-    haiku: GEMINI_MODELS.FLASH_3,             // 전체 1순위 고정
-    sonnet: GEMINI_MODELS.FLASH_3,            // 전체 1순위 고정
-    opus: GEMINI_MODELS.FLASH_15,             // 안정적 폴백: 1.5 Flash
+    haiku: GEMINI_MODELS.FLASH_LITE_25,       // 전체 1순위: 2.5 Flash Lite
+    sonnet: GEMINI_MODELS.FLASH_LITE_25,      // 전체 1순위: 2.5 Flash Lite
+    opus: GEMINI_MODELS.FLASH_25,             // 안정적 폴백: 2.5 Flash
   },
   groq: {
     haiku: 'llama-3.1-8b-instant',
