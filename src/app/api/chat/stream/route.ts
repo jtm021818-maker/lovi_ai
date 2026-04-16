@@ -32,8 +32,10 @@ function buildEmotionalMemorySummary(
   return parts.join(' | ');
 }
 
-/** 🆕 v61: Supabase fetch failed 대응 재시도 헬퍼 */
-async function safeSupabaseRetry(fn: () => Promise<any>, maxRetries = 2, delay = 500) {
+/** 🆕 v61: Supabase fetch failed 대응 재시도 헬퍼
+ *  PostgrestBuilder는 PromiseLike(thenable)지만 Promise가 아니므로 PromiseLike로 받음
+ */
+async function safeSupabaseRetry(fn: () => PromiseLike<any>, maxRetries = 2, delay = 500) {
   let lastErr;
   for (let i = 0; i <= maxRetries; i++) {
     try {
