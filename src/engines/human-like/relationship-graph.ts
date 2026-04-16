@@ -103,14 +103,16 @@ export function createEpisode(
  * 관계 그래프 → 프롬프트 주입 (~30토큰)
  */
 export function buildRelationshipPrompt(rels: RelationshipEntity[]): string {
-  if (rels.length === 0) return '';
+  if (!rels || rels.length === 0) return '';
   const lines = rels.slice(0, 3).map(r => {
-    let line = `${r.name} (${r.role}, ${r.status})`;
-    if (r.keyEvents.length > 0) {
+    if (!r) return null;
+    let line = `${r.name || '알 수 없음'} (${r.role || '관계'}, ${r.status || '상태'})`;
+    if (r.keyEvents && r.keyEvents.length > 0) {
       const latest = r.keyEvents[r.keyEvents.length - 1];
-      line += ` — 최근: ${latest.event}`;
+      if (latest) line += ` — 최근: ${latest.event}`;
     }
     return line;
-  });
+  }).filter(Boolean);
+  if (lines.length === 0) return '';
   return `[관계] ${lines.join(' | ')}`;
 }

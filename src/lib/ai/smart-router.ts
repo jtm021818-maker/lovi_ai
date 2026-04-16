@@ -51,8 +51,8 @@ export function getProviderCascade(
     // ──────────────────────────────────────────
     case 'main_response':
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
-        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_20 },
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_3 },
+        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_15 },
       ];
 
     // ──────────────────────────────────────────
@@ -60,8 +60,8 @@ export function getProviderCascade(
     // ──────────────────────────────────────────
     case 'event_generation':
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
-        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_20 },
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_3 },
+        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_15 },
       ];
 
     // ──────────────────────────────────────────
@@ -71,7 +71,7 @@ export function getProviderCascade(
     // ──────────────────────────────────────────
     case 'state_analysis':
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_3 },
         { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_15 },
       ];
 
@@ -82,7 +82,7 @@ export function getProviderCascade(
     // ──────────────────────────────────────────
     case 'response_validation':
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_3 },
         { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_15 },
       ];
 
@@ -91,7 +91,7 @@ export function getProviderCascade(
     // ──────────────────────────────────────────
     case 'session_summary':
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_3 },
         { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_15 },
       ];
 
@@ -104,7 +104,6 @@ export function getProviderCascade(
       return [
         { provider: 'cerebras', tier: 'haiku' },    // 1순위: Cerebras 8B (초고속/무료)
         { provider: 'groq', tier: 'haiku' },        // 2순위: Groq 8B
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
       ];
 
     default:

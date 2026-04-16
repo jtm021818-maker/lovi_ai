@@ -449,7 +449,7 @@ export class HumanLikeEngine {
       emotionScore,
 
       lunaEmotion: this.lunaEmotion,
-      lunaRecentActions: this.lunaRecentSummaries.slice(-3),
+      lunaRecentActions: (this.lunaRecentSummaries || []).slice(-3),
 
       turnInSession: this.turnCount,
       recentExchange: this.getRecentExchange(),
@@ -474,9 +474,9 @@ export class HumanLikeEngine {
 
       relationshipsPrompt: buildRelationshipPrompt(this.userModel?.relationships ?? []),
       sharedLanguagePrompt: buildSharedLanguagePrompt(
-        (this.userModel?.lunaRelationship?.sharedLanguage ?? []).map(
-          (s: { term: string; meaning: string }) => ({ ...s, createdBy: 'user' as const })
-        ),
+        (this.userModel?.lunaRelationship?.sharedLanguage ?? [])
+          .filter((s: any) => s && s.term)
+          .map((s: { term: string; meaning: string }) => ({ ...s, createdBy: 'user' as const }))
       ),
 
       triggeredMemory: this.lastMemoryResult?.injection ?? null,
@@ -512,9 +512,9 @@ export class HumanLikeEngine {
     const unspokenHint = buildUnspokenHint({
       userMessage,
       sessionTheme: this.sessionStory.sessionTheme,
-      recentUserMessages: this.userMessages.slice(-3),
-      fears: this.sessionStory.formulation.fears ? [this.sessionStory.formulation.fears] : [],
-      wants: this.sessionStory.formulation.wants ? [this.sessionStory.formulation.wants] : [],
+      recentUserMessages: (this.userMessages || []).slice(-3),
+      fears: this.sessionStory?.formulation?.fears ? [this.sessionStory.formulation.fears] : [],
+      wants: this.sessionStory?.formulation?.wants ? [this.sessionStory.formulation.wants] : [],
     });
     if (unspokenHint) parts.push(unspokenHint);
 

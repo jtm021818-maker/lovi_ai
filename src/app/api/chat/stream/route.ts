@@ -32,6 +32,27 @@ function buildEmotionalMemorySummary(
   return parts.join(' | ');
 }
 
+/** 🆕 v61: Supabase fetch failed 대응 재시도 헬퍼 */
+async function safeSupabaseRetry(fn: () => Promise<any>, maxRetries = 2, delay = 500) {
+  let lastErr;
+  for (let i = 0; i <= maxRetries; i++) {
+    try {
+      const result = await fn();
+      if (!result.error) return result;
+      lastErr = result.error;
+    } catch (e: any) {
+      lastErr = e;
+      if (e.message?.includes('fetch failed')) {
+        console.warn(`[Supabase Retry] 시도 ${i + 1}/${maxRetries + 1} 실패: fetch failed`);
+      } else {
+        throw e; // 예상치 못한 에러는 즉시 중단
+      }
+    }
+    if (i < maxRetries) await new Promise(res => setTimeout(res, delay));
+  }
+  return { error: lastErr };
+}
+
 export async function POST(req: NextRequest) {
   const t0 = Date.now(); // 🆕 v31: 성능 측정
   const supabase = await createServerSupabaseClient();
@@ -487,12 +508,16 @@ export async function POST(req: NextRequest) {
                 encoder.encode(`data: ${JSON.stringify({ type: 'phase_event', data: event.data })}\n\n`)
               );
               // 🆕 v28: 이벤트를 messages 테이블에 저장 (재진입 시 복원용)
-              supabase.from('messages').insert({
-                session_id: sessionId,
-                user_id: user.id,
-                sender_type: 'event',
-                content: JSON.stringify(event.data),
-              }).then(({ error: evtErr }: any) => { if (evtErr) console.error('[Chat] ❌ 이벤트 저장 실패:', evtErr.message); });
+              safeSupabaseRetry(() => 
+                supabase.from('messages').insert({
+                  session_id: sessionId,
+                  user_id: user.id,
+                  sender_type: 'event',
+                  content: JSON.stringify(event.data),
+                })
+              ).then(({ error: evtErr }: any) => { 
+                if (evtErr) console.error('[Chat] ❌ 이벤트 저장 최종 실패:', evtErr.message || evtErr); 
+              });
               // 🆕 v23: TAROT_DRAW 카드 데이터를 running metadata에 저장 + 히스토리 기록
               if ((event.data as any)?.type === 'TAROT_DRAW' && persona === 'tarot') {
                 const drawnCards = (event.data as any)?.data?.cards ?? [];

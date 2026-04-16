@@ -124,8 +124,12 @@ export function detectSharedLanguage(
  * 우리만의 언어 → 프롬프트 힌트
  */
 export function buildSharedLanguagePrompt(terms: SharedTerm[]): string {
-  if (terms.length === 0) return '';
-  const list = terms.map(t => `"${t.term}"=${t.meaning}`).join(', ');
+  if (!terms || terms.length === 0) return '';
+  const list = terms
+    .filter(t => t && t.term)
+    .map(t => `"${t.term}"=${t.meaning || '의미 미지정'}`)
+    .join(', ');
+  if (!list) return '';
   return `[우리만의 표현] ${list} — 자연스럽게 써도 돼.`;
 }
 
