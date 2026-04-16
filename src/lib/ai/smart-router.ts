@@ -14,7 +14,7 @@
  */
 
 import type { Provider, ModelTier } from './provider-registry';
-import { GEMINI_MODELS } from './provider-registry';
+import { GEMINI_MODELS, ANTHROPIC_MODELS } from './provider-registry';
 import type { StrategyType, RiskLevel } from '@/types/engine.types';
 
 /** 캐스케이드 체인 아이템 */
@@ -45,14 +45,16 @@ export function getProviderCascade(
 ): CascadeItem[] {
   switch (task) {
     // ──────────────────────────────────────────
-    // 메인 상담: 2.5 Flash-Lite 1순위
-    // 1순위: 2.5 Flash-Lite
-    // 2순위: 2 Flash (무제한 폴백)
+    // 메인 상담: Claude Sonnet 4.6 + 프롬프트 캐싱 (30~40% 절감)
+    // 1순위: Claude Sonnet 4.6 (한국어 공감 품질 최강)
+    // 2순위: Gemini 3 Flash (무료 폴백, Claude 장애 시)
+    // 3순위: Gemini 1.5 Flash (최종 폴백)
     // ──────────────────────────────────────────
     case 'main_response':
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_3 },
-        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_15 },
+        { provider: 'anthropic', tier: 'sonnet', modelOverride: ANTHROPIC_MODELS.SONNET_4_6 },
+        { provider: 'gemini',    tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_3 },
+        { provider: 'gemini',    tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_15 },
       ];
 
     // ──────────────────────────────────────────
@@ -108,8 +110,8 @@ export function getProviderCascade(
 
     default:
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
-        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_20 },
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_3 },
+        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_15 },
       ];
   }
 }

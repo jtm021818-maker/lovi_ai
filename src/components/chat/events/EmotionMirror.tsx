@@ -297,9 +297,9 @@ function VNScene({
   const currentParsed = phase === 'playing' ? parseSceneLine(lines[lineIndex]) : null;
   // 현재 대사의 캐릭터가 어느 쪽인지 (성별 기반 스프라이트 선택)
   const currentLineGender = currentParsed?.gender;
-  const isCurrentOpponent = isDuo && currentLineGender !== undefined && currentLineGender !== gender;
-  // 현재 표시할 스프라이트 시트 (대사별 성별에 따라)
-  const activeSheet = currentLineGender === 'male' ? SPRITE_SHEET.male : currentLineGender === 'female' ? SPRITE_SHEET.female : mainSheet;
+  // (보존: 추후 좌우 반전/스프라이트 결정용)
+  void (isDuo && currentLineGender !== undefined && currentLineGender !== gender);
+  void (currentLineGender === 'male' ? SPRITE_SHEET.male : currentLineGender === 'female' ? SPRITE_SHEET.female : mainSheet);
 
   // 탭으로 진행
   const handleTap = useCallback(() => {

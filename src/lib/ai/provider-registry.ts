@@ -10,6 +10,7 @@
 
 import { GoogleGenAI } from '@google/genai';
 import Groq from 'groq-sdk';
+import Anthropic from '@anthropic-ai/sdk';
 import { checkProviderRateLimit, recordProviderUsage } from '@/lib/utils/rate-limit';
 
 // ============================================================
@@ -17,12 +18,18 @@ import { checkProviderRateLimit, recordProviderUsage } from '@/lib/utils/rate-li
 // ============================================================
 const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! });
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
 // ============================================================
 // 프로바이더 + 모델 타입
 // ============================================================
-export type Provider = 'gemini' | 'groq' | 'cerebras';
+export type Provider = 'gemini' | 'groq' | 'cerebras' | 'anthropic';
 export type ModelTier = 'haiku' | 'sonnet' | 'opus';
+
+/** Claude 모델 ID — 상담 메인용 */
+export const ANTHROPIC_MODELS = {
+  SONNET_4_6: 'claude-sonnet-4-5-20250929',  // Sonnet 4.6 (alias 사용 가능 시 'claude-sonnet-4-6'로 변경)
+} as const;
 
 export const GEMINI_MODELS = {
   FLASH_3:       'gemini-3-flash',          // 전체 1순위 (신규 고성능 모델)
@@ -39,15 +46,20 @@ const PROVIDER_MODELS: Record<Provider, Record<ModelTier, string>> = {
     sonnet: GEMINI_MODELS.FLASH_3,            // 전체 1순위 고정
     opus: GEMINI_MODELS.FLASH_15,             // 안정적 폴백: 1.5 Flash
   },
-  groq: { 
-    haiku: 'llama-3.1-8b-instant', 
-    sonnet: 'llama-3.3-70b-versatile', 
-    opus: 'llama-3.3-70b-versatile' 
+  groq: {
+    haiku: 'llama-3.1-8b-instant',
+    sonnet: 'llama-3.3-70b-versatile',
+    opus: 'llama-3.3-70b-versatile'
   },
-  cerebras: { 
-    haiku: 'llama3.1-8b', 
-    sonnet: 'llama3.1-70b', 
-    opus: 'llama3.1-70b' 
+  cerebras: {
+    haiku: 'llama3.1-8b',
+    sonnet: 'llama3.1-70b',
+    opus: 'llama3.1-70b'
+  },
+  anthropic: {
+    haiku: ANTHROPIC_MODELS.SONNET_4_6,       // 상담 전용 (모든 티어 동일)
+    sonnet: ANTHROPIC_MODELS.SONNET_4_6,
+    opus: ANTHROPIC_MODELS.SONNET_4_6,
   },
 };
 
@@ -133,6 +145,112 @@ async function geminiGenerate(
     }
   }
   return ''; // 여기 도달하면 빈 문자열(캐스케이드가 처리)
+}
+
+// ============================================================
+// Claude 호출 (v52) — 상담 메인 전용 + 프롬프트 캐싱
+// ============================================================
+/**
+ * Claude 호출 (non-stream)
+ * 프롬프트 캐싱: system 프롬프트에 cache_control 지정 (30~40% 비용 절감)
+ * - 첫 호출: cache_creation_input_tokens 비용 1.25x
+ * - 이후 5분 내: cache_read_input_tokens 비용 0.1x (90% 절감)
+ */
+async function claudeGenerate(
+  systemPrompt: string,
+  messages: { role: 'user' | 'assistant'; content: string }[],
+  maxTokens: number,
+  tier: ModelTier = 'sonnet',
+  modelOverride?: string
+): Promise<string> {
+  const model = modelOverride || PROVIDER_MODELS.anthropic[tier];
+  try {
+    const response = await anthropic.messages.create({
+      model,
+      max_tokens: maxTokens,
+      temperature: TEMPERATURE[tier],
+      // 🔥 프롬프트 캐싱: system 프롬프트 전체를 캐시 (루나 페르소나/규칙/심리학 지식)
+      system: [
+        {
+          type: 'text',
+          text: systemPrompt,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
+      messages: messages.map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      })),
+    });
+
+    recordProviderUsage('anthropic' as any);
+
+    // 캐시 적중 로깅
+    const usage = (response as any).usage;
+    if (usage?.cache_read_input_tokens) {
+      console.log(`[Claude] 💾 캐시 적중: ${usage.cache_read_input_tokens} tokens (비용 90% 절감)`);
+    } else if (usage?.cache_creation_input_tokens) {
+      console.log(`[Claude] 🆕 캐시 생성: ${usage.cache_creation_input_tokens} tokens`);
+    }
+
+    const textBlock = response.content.find((b) => b.type === 'text');
+    return textBlock && textBlock.type === 'text' ? textBlock.text : '';
+  } catch (err: any) {
+    console.error(`[Claude] Error (${model}):`, err?.message);
+    throw err;
+  }
+}
+
+/**
+ * Claude 스트리밍 (상담 메인)
+ * 프롬프트 캐싱 동일 적용
+ */
+async function* claudeStream(
+  systemPrompt: string,
+  messages: { role: 'user' | 'assistant'; content: string }[],
+  maxTokens: number,
+  tier: ModelTier = 'sonnet',
+  modelOverride?: string
+): AsyncGenerator<string> {
+  const model = modelOverride || PROVIDER_MODELS.anthropic[tier];
+  try {
+    const stream = anthropic.messages.stream({
+      model,
+      max_tokens: maxTokens,
+      temperature: TEMPERATURE[tier],
+      system: [
+        {
+          type: 'text',
+          text: systemPrompt,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
+      messages: messages.map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      })),
+    });
+
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        yield event.delta.text;
+      }
+    }
+
+    // 스트림 종료 후 캐시 로깅
+    const finalMessage = await stream.finalMessage();
+    const usage = (finalMessage as any).usage;
+    if (usage?.cache_read_input_tokens) {
+      console.log(`[Claude Stream] 💾 캐시 적중: ${usage.cache_read_input_tokens} tokens (90% 절감)`);
+    } else if (usage?.cache_creation_input_tokens) {
+      console.log(`[Claude Stream] 🆕 캐시 생성: ${usage.cache_creation_input_tokens} tokens`);
+    }
+
+    recordProviderUsage('anthropic' as any);
+  } catch (err: any) {
+    console.error(`[Claude Stream] Error (${model}):`, err?.message);
+    throw err;
+  }
 }
 
 /** Groq 호출 (v44) */
@@ -299,6 +417,9 @@ export async function generateWithProvider(
   maxTokens: number = 1024,
   modelOverride?: string
 ): Promise<string> {
+  if (provider === 'anthropic') {
+    return claudeGenerate(systemPrompt, messages, maxTokens, tier, modelOverride);
+  }
   if (provider === 'groq') {
     return groqGenerate(systemPrompt, messages, maxTokens, tier, modelOverride);
   }
@@ -308,9 +429,9 @@ export async function generateWithProvider(
   return geminiGenerate(systemPrompt, messages, maxTokens, tier, modelOverride);
 }
 
-/** 특정 프로바이더로 스트리밍 (Gemini 전용, modelOverride로 모델 지정 가능) */
+/** 특정 프로바이더로 스트리밍 (anthropic/gemini 라우팅, modelOverride로 모델 지정 가능) */
 export async function* streamWithProvider(
-  _provider: Provider,
+  provider: Provider,
   systemPrompt: string,
   messages: { role: 'user' | 'assistant'; content: string }[],
   tier: ModelTier = 'sonnet',
@@ -318,6 +439,11 @@ export async function* streamWithProvider(
   modelOverride?: string,
   onRetry?: (event: RetryStatusEvent) => void,
 ): AsyncGenerator<string> {
+  if (provider === 'anthropic') {
+    yield* claudeStream(systemPrompt, messages, maxTokens, tier, modelOverride);
+    return;
+  }
+  // 기본: Gemini (groq/cerebras는 stream 미지원 → Gemini 폴백)
   yield* geminiStream(systemPrompt, messages, maxTokens, tier, onRetry, modelOverride);
 }
 
