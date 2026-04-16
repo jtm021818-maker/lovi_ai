@@ -25,19 +25,20 @@ export type Provider = 'gemini' | 'groq' | 'cerebras';
 export type ModelTier = 'haiku' | 'sonnet' | 'opus';
 
 export const GEMINI_MODELS = {
-  FLASH_LITE_25: 'gemini-2.5-flash-lite',   // 1순위: 전체 메인
-  FLASH_20: 'gemini-2.0-flash',                     // 폴백: RPD 무제한
-  FLASH_LITE_20: 'gemini-2.0-flash-lite',           // 경량 분석/검증
-  FLASH_25: 'gemini-2.5-flash',                     // 프리미엄 폴백
-  FLASH_LITE_31: 'gemini-3.1-flash-lite-preview',   // 비활성 (에러 발생 중)
+  FLASH_LITE_25: 'gemini-2.5-flash-lite',   // 전체 1순위 (v52 정식명칭)
+  FLASH_15:      'gemini-1.5-flash',        // 폴백용: RPD 넉넉한 안정화 모델
+  FLASH_20:      'gemini-1.5-flash',        // [404 대체] 2.0 대신 1.5 사용
+  FLASH_LITE_20: 'gemini-2.5-flash-lite',   // [404 대체] 2.0 대신 2.5 사용
+  FLASH_25:      'gemini-2.5-flash',        // 프리미엄 폴백
+  FLASH_LITE_31: 'gemini-1.5-flash',        // 임시 폴백
 } as const;
 
 /** 프로바이더별 모델 매핑 (기본 — modelOverride로 재정의 가능) */
 const PROVIDER_MODELS: Record<Provider, Record<ModelTier, string>> = {
   gemini: {
-    haiku: GEMINI_MODELS.FLASH_LITE_20,       // 경량 분석/검증: 2 Flash-Lite
-    sonnet: GEMINI_MODELS.FLASH_LITE_25,      // 메인 상담: 2.5 Flash-Lite (1순위)
-    opus: GEMINI_MODELS.FLASH_20,             // 폴백: 2 Flash (무제한)
+    haiku: GEMINI_MODELS.FLASH_LITE_25,       // 전체 1순위 고정
+    sonnet: GEMINI_MODELS.FLASH_LITE_25,      // 전체 1순위 고정
+    opus: GEMINI_MODELS.FLASH_15,             // 안정적 폴백: 1.5 Flash
   },
   groq: { 
     haiku: 'llama-3.1-8b-instant', 
