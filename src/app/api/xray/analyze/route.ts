@@ -12,7 +12,7 @@ const API_KEYS = [
 ].filter(Boolean) as string[];
 
 const FALLBACK_MODELS = [
-  'gemini-2.5-flash-lite-preview',    // 1순위: v52 전체 통일
+  'gemini-2.5-flash-lite',    // 1순위: v52 전체 통일
   'gemini-2.0-flash',                 // 2순위: RPD 무제한 폴백
   'gemini-2.0-flash-lite',            // 3순위: 경량 폴백
 ];

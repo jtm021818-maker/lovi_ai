@@ -188,7 +188,7 @@ export async function runDeepResearch(
     const prompt = buildResearchPrompt(params);
 
     const response = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash-lite-preview', // v52: 전체 1순위 통일
+      model: 'gemini-2.5-flash-lite', // v52: 전체 1순위 통일
       config: {
         tools: [{ googleSearch: {} }], // 🔍 Google Search grounding 활성화
         maxOutputTokens: 600,

@@ -25,7 +25,7 @@ export type Provider = 'gemini' | 'groq' | 'cerebras';
 export type ModelTier = 'haiku' | 'sonnet' | 'opus';
 
 export const GEMINI_MODELS = {
-  FLASH_LITE_25: 'gemini-2.5-flash-lite-preview',   // 1순위: 전체 메인
+  FLASH_LITE_25: 'gemini-2.5-flash-lite',   // 1순위: 전체 메인
   FLASH_20: 'gemini-2.0-flash',                     // 폴백: RPD 무제한
   FLASH_LITE_20: 'gemini-2.0-flash-lite',           // 경량 분석/검증
   FLASH_25: 'gemini-2.5-flash',                     // 프리미엄 폴백
