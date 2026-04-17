@@ -28,6 +28,21 @@ export type ConcernDepth = 'light' | 'medium' | 'deep';
 const PHASE_ORDER: ConversationPhaseV2[] = ['HOOK', 'MIRROR', 'BRIDGE', 'SOLVE', 'EMPOWER'];
 
 // ============================================
+// 🆕 v73: Phase 별 필수 정보 카드 — context-assembler.ts 와 동기 유지
+// 카드가 모두 채워지면 자동 전환 (긍정 전환 로직)
+// ============================================
+const PHASE_REQUIRED_CARDS: Record<string, string[]> = {
+  HOOK:    ['W1_who', 'W2_what', 'W3_when', 'W4_surface_emotion'],
+  MIRROR:  ['M1_emotion_intensity', 'M2_deep_hypothesis', 'M3_pattern_history', 'M4_acknowledgment'],
+  BRIDGE:  ['B1_core_need', 'B2_trigger_pattern', 'B3_ready_for_action'],
+  SOLVE:   ['S1_action_chosen', 'S2_barrier_checked', 'S3_commitment'],
+  EMPOWER: ['E1_summary_accepted', 'E2_homework_set'],
+};
+
+// 🆕 v73: 연속 READY 턴 임계치 — 2턴 연속 READY 면 자동 전환
+const CONSECUTIVE_READY_THRESHOLD = 2;
+
+// ============================================
 // 🆕 v42: 게이트 이벤트 — AI가 이 이벤트를 완료하면 다음 Phase로
 // ============================================
 
@@ -225,6 +240,9 @@ export interface PhaseContext {
 
   // 🆕 v60: 직전 턴 페이싱 상태
   lastPacingState?: 'EARLY' | 'MID' | 'READY' | 'STRETCHED' | 'FRUSTRATED' | null;
+
+  // 🆕 v73: 연속 READY 턴 카운트 (2턴 연속이면 긍정 전환)
+  consecutiveReadyTurns?: number;
 }
 
 // ============================================
@@ -250,7 +268,7 @@ export class PhaseManager {
    * ✅ 좌뇌 pacing_meta 가 모든 페이싱 판단 책임
    */
   static getCurrentPhase(ctx: PhaseContext): ConversationPhaseV2 {
-    const { turnCount, currentPhase, phaseStartTurn, completedEvents, persona, phaseSignal, pacingMeta, consecutiveFrustratedTurns } = ctx;
+    const { turnCount, currentPhase, phaseStartTurn, completedEvents, persona, phaseSignal, pacingMeta, consecutiveFrustratedTurns, filledCards, consecutiveReadyTurns } = ctx;
 
     const currentIdx = PHASE_ORDER.indexOf(currentPhase);
     if (currentIdx < 0 || currentIdx >= PHASE_ORDER.length - 1) {
@@ -258,6 +276,22 @@ export class PhaseManager {
     }
     const nextPhase = PHASE_ORDER[currentIdx + 1];
     const turnsInPhase = turnCount - phaseStartTurn;
+
+    // 🆕 v73: 0. 카드 만족 긍정 전환 — 필수 카드가 모두 채워지면 즉시 전환
+    const requiredCards = PHASE_REQUIRED_CARDS[currentPhase] ?? [];
+    const filledKeys = Object.keys(filledCards ?? {});
+    const cardsSatisfied = requiredCards.length > 0 && requiredCards.every(k => filledKeys.includes(k));
+    if (cardsSatisfied) {
+      console.log(`[PhaseManager:v73] 🎴 카드 만족 (${requiredCards.join(',')}) → ${currentPhase} → ${nextPhase} (턴 ${turnCount}, phase내 ${turnsInPhase}턴)`);
+      return nextPhase;
+    }
+
+    // 🆕 v73: 0-b. 2턴 연속 READY → 긍정 전환
+    const readyStreak = consecutiveReadyTurns ?? 0;
+    if (readyStreak >= CONSECUTIVE_READY_THRESHOLD) {
+      console.log(`[PhaseManager:v73] ✅ ${readyStreak}턴 연속 READY → ${currentPhase} → ${nextPhase}`);
+      return nextPhase;
+    }
 
     // 1. 게이트 이벤트 충족 → 즉시 전환 (기존 동작 유지)
     const gateEvents = persona === 'tarot'

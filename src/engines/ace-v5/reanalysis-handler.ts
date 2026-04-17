@@ -113,13 +113,29 @@ export function detectSelfCorrection(text: string): SelfCorrectionInfo {
 // 응답 후처리: 부수 텍스트/메타 제거
 // ============================================================
 
-/** Claude가 가끔 출력하는 메타 발화 패턴 (제거 필요) */
+/**
+ * Claude/Gemini가 가끔 출력하는 메타 발화 패턴 (제거 필요)
+ * v73: 이모지 선두 / "후보:" 단독 / "→ N번 선택" / 좌뇌 해설 / --- 구분선 / "트랙 X — 제목" 전부 커버
+ */
 const META_PATTERNS = [
-  /^\s*\[?(트랙|후보|선택)\s*[A-Z\d]+[^\]]*\]?\s*$/gim,  // "트랙 A:", "후보 1:", "[선택]"
-  /^\s*###\s*.+$/gim,                                      // 마크다운 헤더
-  /^\s*\*\*[^*]+\*\*\s*$/gim,                              // 단독 볼드 줄
-  /^\s*최종\s*[:：]\s*/gim,                                // "최종:" 접두
-  /^\s*\(.+사고.+\)\s*$/gim,                              // "(머릿속 사고)" 등
+  // "🫀 트랙 A — 감각", "### 🫀 트랙 A", "트랙 A:" 전부 대응 (이모지/헤더/공백 선두 허용)
+  /^[\s]*(?:#{1,6}\s*)?[🫀🧠🔍💬✨]*\s*트랙\s*[A-Da-d\d][^\n]*$/gim,
+  // "후보 1", "후보 1:", "후보:" 단독, "---후보---"
+  /^[\s]*(?:-{2,}\s*)?후보\s*[:：]?\s*\d*\s*(?:-{2,})?\s*$/gim,
+  /^[\s]*\d+[\.\)]\s*["「][^\n]{0,200}["」]\s*$/gim,           // 후보 선택지 리스트 "1. "..."" 형식
+  // "→ 1번 선택", "→ **1번** 선택", "최종:", "→ 1 선택"
+  /^[\s]*(?:→|->|⇒)?\s*\*{0,2}\d+번?\*{0,2}\s*선택[^\n]*$/gim,
+  /^[\s]*최종\s*[:：][^\n]*$/gim,
+  // "좌뇌 말대로", "좌뇌가 ...라고 했는데", "머릿속에서", "사고 체계" 메타 해설
+  /^[\s]*(?:좌뇌|우뇌)(?:\s+|이|가|는|의|말대로|말)[^\n]*$/gim,
+  /^[\s]*머릿속에서[^\n]*$/gim,
+  // 마크다운 헤더 / 단독 볼드 섹션 제목
+  /^\s*#{1,6}\s+[^\n]+$/gim,
+  /^\s*\*\*[^*\n]+\*\*\s*$/gim,
+  // "---" 구분선
+  /^\s*[-=—*]{3,}\s*$/gim,
+  // "(머릿속 사고)" 등 괄호 주석
+  /^\s*\(.*(사고|thinking|내부|머릿속).*\)\s*$/gim,
 ];
 
 export interface CleanedResponse {
@@ -216,8 +232,28 @@ export function validateAceResponse(text: string): ValidationResult {
     return { passed: false, issues: ['JSON 누출'] };
   }
 
+  // 🆕 v73: 사고 노출 (reasoning_leak) 검사 — 3중 방어 최후 보루
+  const REASONING_LEAK_PATTERNS = [
+    /트랙\s*[A-Da-d]\b/,         // "트랙 A", "트랙 B"
+    /후보\s*\d|후보\s*[:：]/,      // "후보 1", "후보:"
+    /→\s*\*{0,2}\d+번?\s*선택/,   // "→ 1번 선택"
+    /[🫀🧠🔍💬]/,                 // 사고 트랙 이모지
+    /좌뇌\s*(말대로|분석|직감|확신)/,
+    /머릿속에서|사고\s*체계/,
+  ];
+  for (const p of REASONING_LEAK_PATTERNS) {
+    if (p.test(trimmed)) {
+      issues.push(`reasoning_leak: ${p.source}`);
+      break;  // 하나만 있어도 leak → 중복 로그 방지
+    }
+  }
+
   return {
-    passed: issues.length === 0 || !issues.some(i => i.includes('JSON') || i.includes('AI 메타')),
+    passed: issues.length === 0 || !issues.some(i =>
+      i.includes('JSON') ||
+      i.includes('AI 메타') ||
+      i.includes('reasoning_leak')   // 🆕 v73: leak 은 반드시 fail
+    ),
     issues,
   };
 }

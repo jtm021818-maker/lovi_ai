@@ -88,6 +88,9 @@ export interface WorkingMemoryScratchpad {
   /** 10. 연속 FRUSTRATED 카운트 */
   consecutive_frustrated_turns: number;
 
+  /** 🆕 v73: 11. 연속 READY 카운트 (2턴 연속이면 긍정 전환) */
+  consecutive_ready_turns?: number;
+
   /** 생성/수정 시각 */
   created_at: string;
   updated_at: string;
@@ -115,6 +118,7 @@ export function createEmptyScratchpad(
     session_scratchpad: {},
     consecutive_short_replies: 0,
     consecutive_frustrated_turns: 0,
+    consecutive_ready_turns: 0,
     created_at: now,
     updated_at: now,
   };

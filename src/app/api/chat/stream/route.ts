@@ -786,7 +786,26 @@ export async function POST(req: NextRequest) {
           }
 
           // 🆕 v35: session_metadata (작전 모드 포함) 영구 저장
-          unifiedSessionUpdate.session_metadata = runningSessionMeta;
+          // 🆕 v73: working_memory 키는 pipeline 에서 atomic RPC 로 따로 저장함 → 여기서 덮어쓰지 않도록 DB 의 최신본 보존
+          try {
+            const { data: freshSess } = await supabase
+              .from('counseling_sessions')
+              .select('session_metadata')
+              .eq('id', sessionId)
+              .maybeSingle();
+            const freshMeta = (freshSess?.session_metadata as any) ?? {};
+            const mergedMeta = {
+              ...runningSessionMeta,
+              // WM 은 freshMeta 의 것을 우선 (pipeline 이 방금 atomic 저장한 최신본)
+              ...(freshMeta?.working_memory ? { working_memory: freshMeta.working_memory } : {}),
+            };
+            unifiedSessionUpdate.session_metadata = mergedMeta;
+            const wmTurn = freshMeta?.working_memory?.turn_idx ?? '?';
+            console.log(`[Chat:v73] 🛡️ session_metadata 병합 (WM 보존): turn=${wmTurn}`);
+          } catch (e: any) {
+            console.warn('[Chat:v73] WM 보존 실패, 기존 방식으로 덮어쓰기:', e?.message);
+            unifiedSessionUpdate.session_metadata = runningSessionMeta;
+          }
 
           // 🎯 v66: safeSupabaseRetry 로 fetch failed 시 자동 재시도
           //   기존: 단일 fire-and-forget → fetch failed 1회로 영구 손실
@@ -924,15 +943,23 @@ async function savePostProcessing(
 ) {
   const { sessionId, userId, aiContent, userMessage, stateResult, strategyResult, responseMode, phaseV2, completedEvents: evts, emotionScore, turnCount } = params;
 
+  // 🆕 v73: 빈/에러 AI 응답 DB insert 가드 — "응답을 받지 못했어요 💜" 같은 오염 차단
+  const safeAiContent = (aiContent ?? '').trim();
+  const isErrorMsg = /응답을 받지 못했|생성하는 중 문제|다시 시도해 주세요/.test(safeAiContent);
+  const shouldInsertAi = safeAiContent.length >= 5 && !isErrorMsg;
+  if (!shouldInsertAi) {
+    console.warn(`[Chat:v73] 🚫 빈/에러 AI 응답 → messages insert SKIP (len=${safeAiContent.length}, errorMsg=${isErrorMsg})`);
+  }
+
   // 🆕 v31: INSERT 3개 병렬화 (직렬 → Promise.all, ~400ms 절약)
   await Promise.all([
-    supabase.from('messages').insert({
-      session_id: sessionId, user_id: userId, sender_type: 'ai', content: aiContent,
+    shouldInsertAi ? supabase.from('messages').insert({
+      session_id: sessionId, user_id: userId, sender_type: 'ai', content: safeAiContent,
       sentiment_score: stateResult?.emotionScore, cognitive_distortions: stateResult?.cognitiveDistortions ?? [],
       horsemen_detected: stateResult?.horsemenDetected ?? [], risk_level: stateResult?.riskLevel ?? 'LOW',
       is_flooding: stateResult?.isFlooding ?? false, strategy_used: strategyResult?.strategyType,
       model_used: strategyResult?.modelTier,
-    }),
+    }) : Promise.resolve(),
     strategyResult ? supabase.from('strategy_logs').insert({
       session_id: sessionId, user_id: userId, strategy_type: strategyResult.strategyType,
       selection_reason: strategyResult.reason, thinking_budget: strategyResult.thinkingBudget,
@@ -948,22 +975,45 @@ async function savePostProcessing(
     emotionScore: stateResult?.emotionScore, strategyUsed: strategyResult?.strategyType,
   }).catch((err) => console.error('[PostProcess] RAG 인제스팅 실패:', err));
 
-  // 🆕 v70: AI 응답도 임베딩 — 루나 자기 말 기억용 (fire-and-forget)
-  if (aiContent && aiContent.trim().length > 0) {
+  // 🆕 v70/v73: AI 응답도 임베딩 — 루나 자기 말 기억용 (fire-and-forget) + 에러 메시지 가드
+  if (shouldInsertAi) {
     import('@/lib/rag/ingestor').then(({ ingestAiResponse }) => {
-      ingestAiResponse({ supabase, userId, sessionId, content: aiContent,
+      ingestAiResponse({ supabase, userId, sessionId, content: safeAiContent,
         strategyUsed: strategyResult?.strategyType,
       }).catch((err) => console.warn('[PostProcess:v70] AI 임베딩 실패:', err?.message));
     }).catch(() => { /* ignore */ });
   }
 
   // 🆕 v33: 시나리오 잠금 (1회 SELECT 필요 — 세션 UPDATE와 독립)
+  // 🆕 v73: 재평가 로직 추가 — 2턴 연속 다른 시나리오 감지 시 덮어쓰기 (UNREQUITED_LOVE 오잠금 자동 해제)
   const detectedScenario = stateResult?.scenario;
   if (detectedScenario && detectedScenario !== 'GENERAL') {
-    const { data: curSess } = await supabase.from('counseling_sessions').select('locked_scenario').eq('id', sessionId).single();
+    const { data: curSess } = await supabase.from('counseling_sessions')
+      .select('locked_scenario, session_metadata').eq('id', sessionId).single();
+
     if (!curSess?.locked_scenario) {
+      // 첫 잠금
       await supabase.from('counseling_sessions').update({ locked_scenario: detectedScenario }).eq('id', sessionId);
-      console.log(`[PostProcess] 🔒 시나리오 잠금: ${detectedScenario}`);
+      console.log(`[PostProcess:v73] 🔒 시나리오 잠금: ${detectedScenario}`);
+    } else if (curSess.locked_scenario !== detectedScenario) {
+      // 🆕 v73: 재평가 — 2턴 연속 다른 시나리오 감지 시 덮어쓰기
+      const meta = (curSess.session_metadata as any) ?? {};
+      const shiftKey = `scenario_shift_${detectedScenario}`;
+      const shiftCount = (meta[shiftKey] ?? 0) + 1;
+
+      if (shiftCount >= 2) {
+        await supabase.from('counseling_sessions').update({
+          locked_scenario: detectedScenario,
+          session_metadata: { ...meta, [shiftKey]: 0 },  // 카운트 리셋
+        }).eq('id', sessionId);
+        console.log(`[PostProcess:v73] 🔄 시나리오 재평가: ${curSess.locked_scenario} → ${detectedScenario} (2턴 연속 감지)`);
+      } else {
+        // 누적만 기록
+        await supabase.from('counseling_sessions').update({
+          session_metadata: { ...meta, [shiftKey]: shiftCount },
+        }).eq('id', sessionId);
+        console.log(`[PostProcess:v73] 📊 시나리오 변화 누적: ${curSess.locked_scenario} vs ${detectedScenario} (${shiftCount}/2)`);
+      }
     }
   }
 

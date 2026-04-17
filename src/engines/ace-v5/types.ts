@@ -94,6 +94,9 @@ export interface AceV5Input {
 
   /** 우뇌의 의심사항 (재요청 시 좌뇌에 전달용) */
   claudeConcern?: string;
+
+  /** 🆕 v73: 직전 루나 응답 (메타-항의 시 자기-참조용) */
+  previousLunaText?: string | null;
 }
 
 // ============================================================

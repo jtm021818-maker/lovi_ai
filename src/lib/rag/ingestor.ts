@@ -139,6 +139,14 @@ export async function ingestAiResponse(params: {
 
   const { supabase, userId, sessionId, content, strategyUsed } = params;
 
+  // 🆕 v73: 에러/폴백 메시지 차단 (RAG 벡터DB 오염 방지)
+  const trimmed = (content ?? '').trim();
+  const isErrorMsg = /응답을 받지 못했|생성하는 중 문제|다시 시도해 주세요|다시 말해줄래\?|무슨 말|뭐라고 했어/.test(trimmed);
+  if (!trimmed || trimmed.length < 10 || isErrorMsg) {
+    console.log(`[Memory:AIEmbed:v73] 🚫 임베딩 차단 (len=${trimmed.length}, errorMsg=${isErrorMsg})`);
+    return;
+  }
+
   // 필터: 최소 길이 + 의미 있는 내용
   const cleaned = content
     .replace(/\[SITUATION_READ:[^\]]*\]/gi, '')

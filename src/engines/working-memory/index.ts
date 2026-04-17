@@ -86,8 +86,38 @@ export async function saveScratchpad(
 ): Promise<{ success: boolean; error?: string }> {
   if (!V70_ENABLED || !supabase) return { success: false, error: 'disabled' };
 
+  const patch = { ...scratchpad, updated_at: new Date().toISOString() };
+  const useAtomic = process.env.LUNA_WM_ATOMIC_V73 !== '0';
+
+  // 🆕 v73: atomic RPC 우선 시도 (session_metadata 전체 덮어쓰기 경합 회피)
+  if (useAtomic) {
+    try {
+      const { data: rpcResult, error: rpcErr } = await supabase.rpc('wm_patch_scratchpad', {
+        p_session_id: sessionId,
+        p_patch: patch,
+        p_min_turn_idx: scratchpad.turn_idx,
+      });
+      if (!rpcErr) {
+        if (rpcResult === false) {
+          console.log(`[Memory:WM:v73] 🛡️ atomic skip: DB turn > ${scratchpad.turn_idx} (역행 방지)`);
+          return { success: true };  // 더 최신 WM 이미 있음 — 정상 흐름
+        }
+        console.log(`[Memory:WM:v73] 💾 atomic 저장 완료: sid=${sessionId.slice(0,8)}, turn=${scratchpad.turn_idx}, cards=${Object.keys(scratchpad.filled_cards).length}개`);
+        return { success: true };
+      }
+      // RPC 실패 (함수 없음 등) → legacy fallback
+      if (rpcErr.message?.includes('does not exist') || rpcErr.message?.includes('function')) {
+        console.warn('[Memory:WM:v73] RPC 미존재 → legacy merge fallback (마이그레이션 필요)');
+      } else {
+        console.warn(`[Memory:WM:v73] atomic RPC 실패 → legacy fallback: ${rpcErr.message}`);
+      }
+    } catch (e: any) {
+      console.warn('[Memory:WM:v73] atomic 예외 → legacy fallback:', e?.message);
+    }
+  }
+
+  // Legacy fallback: 기존 session_metadata read-modify-write
   try {
-    // 기존 session_metadata 로드 후 merge (다른 필드 덮어쓰지 않기)
     const { data: existing } = await supabase
       .from('counseling_sessions')
       .select('session_metadata')
@@ -97,7 +127,7 @@ export async function saveScratchpad(
     const existingMeta = (existing?.session_metadata as any) ?? {};
     const merged = {
       ...existingMeta,
-      working_memory: { ...scratchpad, updated_at: new Date().toISOString() },
+      working_memory: patch,
     };
 
     const { error } = await supabase
@@ -109,7 +139,7 @@ export async function saveScratchpad(
       console.warn(`[Memory:WM] ❌ saveScratchpad 실패: ${error.message}`);
       return { success: false, error: error.message };
     }
-    console.log(`[Memory:WM] 💾 saveScratchpad 완료: sid=${sessionId.slice(0,8)}, turn=${scratchpad.turn_idx}, recent=${scratchpad.recent_turns.length}턴, cards=${Object.keys(scratchpad.filled_cards).length}개, emotion_traj=${scratchpad.emotion_trajectory.length}, threads=${scratchpad.active_threads.length}, short_replies=${scratchpad.consecutive_short_replies}, frustrated=${scratchpad.consecutive_frustrated_turns}`);
+    console.log(`[Memory:WM] 💾 saveScratchpad(legacy) 완료: sid=${sessionId.slice(0,8)}, turn=${scratchpad.turn_idx}, cards=${Object.keys(scratchpad.filled_cards).length}개`);
     return { success: true };
   } catch (e: any) {
     return { success: false, error: e?.message };
@@ -220,6 +250,12 @@ export function updateFromTurn(
     ? current.consecutive_frustrated_turns + 1
     : 0;
 
+  // 🆕 v73: READY 연속 카운트 (2턴 연속이면 phase 긍정 전환)
+  const isReady = leftBrainAnalysis?.pacing_meta?.pacing_state === 'READY';
+  const consecutiveReadyTurns = isReady
+    ? (current.consecutive_ready_turns ?? 0) + 1
+    : 0;
+
   // 7. session_scratchpad 기본 유지 (reflection 에서 LLM 이 덮어씀)
   const sessionScratchpad = {
     ...current.session_scratchpad,
@@ -242,6 +278,7 @@ export function updateFromTurn(
     filled_cards: filledCards,
     consecutive_short_replies: consecutiveShortReplies,
     consecutive_frustrated_turns: consecutiveFrustratedTurns,
+    consecutive_ready_turns: consecutiveReadyTurns,
     session_scratchpad: sessionScratchpad,
     updated_at: new Date().toISOString(),
   };

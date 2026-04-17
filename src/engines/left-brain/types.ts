@@ -263,6 +263,14 @@ export interface LeftBrainAnalysis {
   /** 🆕 v60: 이번 턴에 채워진 정보 카드들 */
   cards_filled_this_turn: FilledCard[];
 
+  /** 🆕 v73: 메타-자각 — 유저가 직전 루나 응답에 항의하는 경우 */
+  meta_awareness?: {
+    user_meta_complaint: boolean;
+    complaint_type: 'confusion' | 'off_topic' | 'repeat' | 'ignored' | null;
+    last_user_substance_quote: string | null;
+    recovery_move: 'self_reference_and_clarify' | null;
+  };
+
   // 기존 dual-brain 호환 필드
   perceived_emotion: string;
   actual_need: string;

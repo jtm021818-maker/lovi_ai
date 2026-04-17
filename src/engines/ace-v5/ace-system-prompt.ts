@@ -149,6 +149,15 @@ phase_transition_recommendation 별:
 - 매번 물음표로 끝내기 (취조)
 - "저는 AI" / "저는 인공지능" (메타 발화)
 
+### 🚨 v73 절대 금지 — 사고 노출 (이거 어기면 유저에게 노출됨)
+- 🫀 🧠 🔍 💬 이모지로 줄 시작 (이건 프롬프트 구조 — 응답에 복사 금지)
+- "트랙 A / 트랙 B / 트랙 C / 트랙 D" 같은 사고 체계 이름
+- "후보 1 / 후보 2 / 후보 3" / "→ 1번 선택" 메타 선택 구조
+- "### 헤더" / "**볼드 섹션 제목**" (카톡 말풍선엔 없음)
+- "좌뇌 말대로" / "머릿속에서" / "사고 체계" / "감각 트랙" 메타 자기 해설
+- "---" 구분선
+- 응답은 오직 **말풍선 텍스트** 만. 중간 사고는 출력에 **단 한 글자도** 나가면 안 됨.
+
 ## 루나 톤 라이브러리
 
 ${buildToneLibraryText()}
@@ -197,8 +206,17 @@ export function buildAceV5UserMessage(params: {
     direct_question_suggested: string | null;
     luna_meta_thought: string;
   } | null;
+  // 🆕 v73: 메타-자각 — 유저가 직전 루나 응답에 항의하는 경우
+  metaAwareness?: {
+    user_meta_complaint: boolean;
+    complaint_type: 'confusion' | 'off_topic' | 'repeat' | 'ignored' | null;
+    last_user_substance_quote: string | null;
+    recovery_move: 'self_reference_and_clarify' | null;
+  } | null;
+  // 🆕 v73: 직전 루나 응답 (자기-참조용)
+  previousLunaText?: string | null;
 }): string {
-  const { userUtterance, handoffPromptText, recentLunaActions, intimacyLevel, phase, isReanalysis, pacingMeta } = params;
+  const { userUtterance, handoffPromptText, recentLunaActions, intimacyLevel, phase, isReanalysis, pacingMeta, metaAwareness, previousLunaText } = params;
 
   const sections: string[] = [];
 
@@ -248,6 +266,24 @@ export function buildAceV5UserMessage(params: {
       pmLines.push(`→ 직접 질문 모드 (좁게/단답형으로 카드 채우기)`);
     }
     sections.push(pmLines.join('\n'));
+  }
+
+  // 🆕 v73: 메타-항의 감지 시 — 자기-참조 회복 모드 강제
+  if (metaAwareness?.user_meta_complaint) {
+    const mLines: string[] = [`【🚨 메타-항의 감지 — 자기-참조 회복 모드】`];
+    mLines.push(`유저가 직전 네 응답에 혼란/항의를 표시했어 (type: ${metaAwareness.complaint_type ?? 'unknown'}).`);
+    if (previousLunaText) {
+      mLines.push(`직전 너의 응답: "${previousLunaText.slice(0, 200)}"`);
+    }
+    if (metaAwareness.last_user_substance_quote) {
+      mLines.push(`유저 마지막 실질 발화: "${metaAwareness.last_user_substance_quote}"`);
+    }
+    mLines.push(`→ 회복 수칙:`);
+    mLines.push(`  1. **절대 새 주제/새 조언 꺼내지 마**`);
+    mLines.push(`  2. 자기 응답 되짚기: "어, 잠깐 내가 방금 엉뚱한 말 했지?" / "아 미안, 딴 소리 했네"`);
+    mLines.push(`  3. 유저 실질 발화로 복귀: 유저가 말한 그 핵심 포인트를 다시 확인하는 질문`);
+    mLines.push(`  4. "어? 내가 뭐라고 했어?" 같은 기억상실 응답 ❌ — 방금 한 말 기억하고 정정하는 게 맞음`);
+    sections.push(mLines.join('\n'));
   }
 
   // 마무리

@@ -1085,7 +1085,7 @@ const GENERAL: ScenarioKeywordSet = {
 const UNREQUITED_LOVE: ScenarioKeywordSet = {
   keywords: [
     { text: '짝사랑', weight: 3 },
-    { text: '좋아하는 사람', weight: 3 },
+    { text: '좋아하는 사람', weight: 1 }, // v73: 3→1 하향 (긍정 진행 케이스 오잠금 방지)
     { text: '좋아하는데 모름', weight: 3 },
     { text: '나만 좋아하는', weight: 3 },
     { text: '혼자 좋아', weight: 3 },
@@ -1125,7 +1125,13 @@ const UNREQUITED_LOVE: ScenarioKeywordSet = {
     { regex: /나만\s*좋아하는\s*것\s*같아/, weight: 3, desc: '일방적 감정 인식' },
     { regex: /그\s*(사람|애|남자|여자)가\s*나를/, weight: 2, desc: '상대의 나에 대한 감정' },
   ],
-  antiKeywords: ['사귀는', '남친', '여친', '남자친구', '여자친구', '헤어졌', '이별'],
+  // 🆕 v73: 긍정 진행 지표 추가 — 번호 땀/연락 중/썸 등은 짝사랑 아님
+  antiKeywords: [
+    '사귀는', '남친', '여친', '남자친구', '여자친구', '헤어졌', '이별',
+    '번호 땄', '번호 받', '연락 중', '연락중', '연락해', '연락하는 중',
+    '썸 타', '썸타', '만나기로', '사귀기로', '카톡 중', '카톡하는 중',
+    '데이트 하', '데이트했', '맞선', '소개팅',
+  ],
 };
 
 // ============================================================

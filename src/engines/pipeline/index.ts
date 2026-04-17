@@ -1466,6 +1466,8 @@ ${researchResult.insight}
       let fullText = '';
       // 🆕 v60: 좌뇌 analysis 캡쳐 (pacing_meta 추출용) — phase 재판단까지 필요
       let capturedLeftBrainAnalysis: any = null;
+      // 🆕 v73: WM 캡쳐 (phase 재판단용 — filledCards/consecutive_ready_turns)
+      let capturedWorkingMemory: any = null;
 
       // 🧠 v52: 이중뇌 분기 — 상담 모드(luna)에서만 실행
       // Gemini가 판단/태그 생성, Claude가 말풍선 생성 (복잡 턴만)
@@ -1487,6 +1489,7 @@ ${researchResult.insight}
               ragContext.sessionId,
               ragContext.userId,
             );
+            capturedWorkingMemory = workingMemory; // 🆕 v73: 재판단용 외부 캡쳐
           } catch (e: any) {
             console.warn('[Pipeline:v70] WM load 실패 (무시):', e?.message);
           }
@@ -1537,12 +1540,13 @@ ${researchResult.insight}
               emotionScore: stateResult.emotionScore,
             });
             finalWorkingMemory = updatedWM;
-            // fire-and-forget
-            saveScratchpad(ragContext.supabase, ragContext.sessionId, updatedWM)
-              .then(res => {
-                if (!res.success) console.warn('[Pipeline:v70] WM save 실패:', res.error);
-              })
-              .catch((e: any) => console.warn('[Pipeline:v70] WM save 예외:', e?.message));
+            // 🆕 v73: await 로 변경 — fire-and-forget 이 다음 턴 session_metadata 덮어쓰기와 경합하던 버그 수정
+            try {
+              const saveRes = await saveScratchpad(ragContext.supabase, ragContext.sessionId, updatedWM);
+              if (!saveRes.success) console.warn('[Pipeline:v73] WM save 실패:', saveRes.error);
+            } catch (e: any) {
+              console.warn('[Pipeline:v73] WM save 예외:', e?.message);
+            }
           } catch (e: any) {
             console.warn('[Pipeline:v70] WM update 실패 (무시):', e?.message);
           }
@@ -2013,6 +2017,10 @@ ${researchResult.insight}
                 direct_question_suggested: lbPacing.direct_question_suggested,
                 luna_meta_thought: lbPacing.luna_meta_thought,
               } : null,
+              // 🆕 v73: 카드 만족 긍정 전환 용 (WM 에서 주입)
+              filledCards: (capturedWorkingMemory?.filled_cards as any) ?? {},
+              consecutiveReadyTurns: (capturedWorkingMemory?.consecutive_ready_turns as number | undefined) ?? 0,
+              consecutiveFrustratedTurns: (capturedWorkingMemory?.consecutive_frustrated_turns as number | undefined) ?? 0,
             };
             const reCheckedPhase = PhaseManager.getCurrentPhase(reCheckCtx);
             if (reCheckedPhase !== newPhaseV2) {

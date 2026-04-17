@@ -68,6 +68,8 @@ export async function* executeAceV5(
     isReanalysis: input.alreadyReanalyzed === true,
     model: selectedModel,
     onChunk: undefined,
+    metaAwareness: (input.leftBrain as any)?.meta_awareness ?? null,
+    previousLunaText: input.previousLunaText ?? null,
   }, logCollector);
 
   // ────────────────────────────────────────
@@ -119,6 +121,8 @@ export async function* executeAceV5(
         isReanalysis: true,
         model: 'claude',    // 재요청은 Claude 로 고정
         onChunk: undefined,
+        metaAwareness: (refinedAnalysis.analysis as any)?.meta_awareness ?? null,
+        previousLunaText: input.previousLunaText ?? null,
       }, logCollector);
 
       finalText = secondCallResult.fullText;
@@ -145,8 +149,14 @@ export async function* executeAceV5(
     const msg = `[ACEv5] ⚠️ 품질 검증 실패: ${validation.issues.join(', ')}`;
     if (logCollector) logCollector.log(msg);
     else console.warn(msg);
-    // 좌뇌 초안으로 폴백
-    if (cleaned.text.length < 5) {
+
+    // 🆕 v73: reasoning_leak (사고 노출) 감지 시 무조건 좌뇌 draft 로 폴백
+    //   cleaned.text 에 🫀/트랙/후보 등 사고 흔적이 남아 있으면 유저 노출 → 치명
+    const hasLeak = validation.issues.some((i) => i.includes('reasoning_leak'));
+    if (hasLeak) {
+      console.warn(`[ACEv5:v73] 🚨 reasoning_leak → 좌뇌 draft 강제 폴백 ("${handoff.draft?.slice(0, 40)}")`);
+      finalText = handoff.draft || '...';
+    } else if (cleaned.text.length < 5) {
       finalText = handoff.draft;
     } else {
       finalText = cleaned.text;
@@ -222,6 +232,15 @@ interface SingleCallParams {
   /** 🆕 v56: 우뇌 모델 선택 */
   model: 'gemini' | 'claude';
   onChunk?: (chunk: string) => void;
+  /** 🆕 v73: 메타-자각 */
+  metaAwareness?: {
+    user_meta_complaint: boolean;
+    complaint_type: 'confusion' | 'off_topic' | 'repeat' | 'ignored' | null;
+    last_user_substance_quote: string | null;
+    recovery_move: 'self_reference_and_clarify' | null;
+  } | null;
+  /** 🆕 v73: 직전 루나 응답 (자기-참조용) */
+  previousLunaText?: string | null;
 }
 
 interface SingleCallResult {
@@ -246,6 +265,8 @@ async function streamVoiceOnce(params: SingleCallParams, logCollector?: LogColle
     intimacyLevel: params.intimacyLevel,
     phase: params.phase,
     isReanalysis: params.isReanalysis,
+    metaAwareness: params.metaAwareness ?? null,
+    previousLunaText: params.previousLunaText ?? null,
   });
 
   const provider = params.model === 'claude' ? 'anthropic' : 'gemini';
