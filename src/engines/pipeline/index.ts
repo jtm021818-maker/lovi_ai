@@ -23,6 +23,22 @@ import { PhaseManager, type PhaseContext } from '@/engines/phase-manager';
 import { HumanLikeEngine } from '@/engines/human-like';
 import { parsePhaseSignal } from '@/engines/human-like/phase-signal';
 import { resetCascadeLog, getCascadeLog } from '@/lib/ai/provider-registry';
+// 🧠 이중뇌 (Gemini 판단 → Claude 발화) — 상담 모드 전용
+import { executeDualBrain, DUAL_BRAIN_CONFIG } from '@/engines/dual-brain';
+
+// 🫀 v54: 변연계 (Limbic System) — 시간적 감정 지속
+import {
+  onSessionStart as limbicSessionStart,
+  onTurn as limbicOnTurn,
+  formatLimbicForPrompt,
+  LIMBIC_CONFIG,
+} from '@/engines/limbic';
+
+// 🧠 v54: ACC (Anterior Cingulate Cortex) — 모순 감지
+import { analyzeAcc, ACC_CONFIG } from '@/engines/acc';
+
+// 📱 v55: KBE (Kakao Behavior Engine) — 카톡 행동 LLM 판단
+import { runKBE, KBE_CONFIG } from '@/engines/kbe';
 import { createEmotionThermometer, createMindReading, createSituationSummary, createEmotionMirror, createPatternMirror, createSolutionPreview, createSolutionCard, createMessageDraft, createGrowthReport, createSessionSummary, createHomeworkCard, createTarotAxisCollect, createTarotDraw, createTarotInsight, createTarotSessionSummary, createTarotHomework, createLunaStory, createLunaStrategy, createToneSelect, createDraftWorkshop, createRoleplayFeedback, createPanelReport, createIdeaRefine, createActionPlan, createWarmWrap } from '@/engines/phase-manager/events';
 import { generateDynamicTarotInsight } from '@/engines/tarot/interpretation-engine';
 import { matchTarotSolutions, getTarotSolutionPrompt } from '@/engines/solution-dictionary/tarot-solutions';
@@ -1229,6 +1245,93 @@ ${researchResult.insight}
       }
     }
 
+    // 🫀 v54: 변연계 + ACC 분석 (병렬, fail-safe)
+    // 좌뇌/우뇌 호출 직전에 컨텍스트 풍부화
+    let limbicHandoffText = '';
+    let accConflictHint = '';
+
+    if (LIMBIC_CONFIG.enabled || ACC_CONFIG.enabled) {
+      const userId = ragContext?.userId;
+      const supabase = ragContext?.supabase;
+
+      if (userId && supabase) {
+        try {
+          // 병렬 실행
+          const [limbicResult, accResult] = await Promise.all([
+            LIMBIC_CONFIG.enabled
+              ? limbicSessionStart({
+                  supabase,
+                  userId,
+                  isFirstMeeting: turnCount === 0,
+                  daysSinceLastSession: 0,    // TODO: 세션 메타에서 가져오기
+                  totalSessions: turnCount,
+                })
+              : Promise.resolve(null),
+            ACC_CONFIG.enabled
+              ? analyzeAcc({
+                  supabase,
+                  user_id: userId,
+                  user_utterance: userMessage,
+                })
+              : Promise.resolve(null),
+          ]);
+
+          // Limbic 컨텍스트 주입
+          if (limbicResult) {
+            limbicHandoffText = '\n\n' + formatLimbicForPrompt(limbicResult.handoff);
+            // 좌뇌 신호로 Limbic 상태 갱신 (이번 턴, fire-and-forget)
+            limbicOnTurn({
+              state: limbicResult.state,
+              signalInput: {
+                derived_signals: {
+                  crisis_risk: (stateResult.riskLevel as string) === 'CRITICAL' || stateResult.riskLevel === RiskLevel.HIGH,
+                  escalating: false,
+                  helplessness: false,
+                  insight_moment: false,
+                  trust_gain: false,
+                },
+                high_stakes_type: null,
+                user_input_excerpt: userMessage.slice(0, 100),
+              },
+              triggerContext: `유저 발화: ${userMessage.slice(0, 50)}`,
+            });
+          }
+
+          // ACC 모순 힌트 주입 + 🆕 v56: 좌뇌 strategic_shift 트리거
+          if (accResult && accResult.conflict_hint) {
+            accConflictHint = '\n\n' + accResult.conflict_hint;
+            console.log(`[Pipeline] ⚠️ ACC 모순 ${accResult.detected_conflicts.length}개 감지`);
+
+            // 고심각도 (severity >= 0.7) 모순은 structured data 로도 주입
+            // → 좌뇌가 strategic_shift = { requires_shift: true } 로 판단하게 유도
+            const highSev = accResult.detected_conflicts.filter(c => c.severity >= 0.7);
+            if (highSev.length > 0) {
+              const structured = highSev.map(c => ({
+                type: c.conflict_type,
+                previous: c.previous.content.slice(0, 80),
+                current: c.current.content.slice(0, 80),
+                severity: Math.round(c.severity * 100) / 100,
+                days_apart: Math.round(c.days_apart),
+              }));
+
+              accConflictHint += `\n\n### 🔄 고심각도 모순 — 좌뇌 strategic_shift 재판단 요구\n` +
+                `아래 모순 데이터 보고 strategic_shift.requires_shift, shift_to 진지하게 판단해.\n` +
+                '```json\n' + JSON.stringify(structured, null, 2) + '\n```\n' +
+                `→ 이 턴은 '공감 모드' 유지보다 'questioning/explore/confrontation' 전환 우선 고려.`;
+
+              console.log(`[Pipeline] 🔄 ${highSev.length}개 고심각도 모순 → 좌뇌 전략 전환 유도`);
+            }
+          }
+        } catch (err: any) {
+          console.warn('[Pipeline] Limbic/ACC 분석 실패 (계속 진행):', err?.message);
+        }
+      }
+    }
+
+    // systemPrompt 에 Limbic + ACC 컨텍스트 주입
+    if (limbicHandoffText) systemPrompt = systemPrompt + limbicHandoffText;
+    if (accConflictHint) systemPrompt = systemPrompt + accConflictHint;
+
     // 모델 라우팅
     const modelRoute = routeModel(strategyResult.strategyType, stateResult.riskLevel);
 
@@ -1341,6 +1444,98 @@ ${researchResult.insight}
     } else {
       // 상담사/친구 모드: 스트리밍 — 3사 캐스케이드
       let fullText = '';
+
+      // 🧠 v52: 이중뇌 분기 — 상담 모드(luna)에서만 실행
+      // Gemini가 판단/태그 생성, Claude가 말풍선 생성 (복잡 턴만)
+      const useDualBrain = DUAL_BRAIN_CONFIG.enabled && persona === 'luna';
+      const useKBE = KBE_CONFIG.enabled && persona === 'luna';
+
+      if (useDualBrain) {
+        // 📱 v55: KBE 활성 시 Claude 출력을 버퍼링 → KBE 가 "카톡 행동" 결정 → 스트림
+        // KBE 비활성 시 기존 방식(Claude 출력 직접 스트림)
+        let claudeBuffer = '';
+
+        try {
+          for await (const chunk of executeDualBrain({
+            userInput: userMessage,
+            contextBlock: systemPrompt,
+            sessionId: ragContext?.userId ?? 'unknown',
+            turnIdx: turnCount,
+          })) {
+            if (chunk.type === 'text') {
+              if (useKBE) {
+                claudeBuffer += chunk.data;   // 버퍼링만
+              } else {
+                fullText += chunk.data;
+                yield { type: 'text', data: chunk.data };
+              }
+            }
+          }
+        } catch (err: any) {
+          console.warn('[Pipeline] ⚠️ DualBrain 실패 — 레거시 단일 모델로 폴백:', err?.message);
+          fullText = '';
+          claudeBuffer = '';
+        }
+
+        // KBE 실행 — Claude 원문을 "친구라면 어떻게 보낼까" 판단
+        if (useKBE && claudeBuffer) {
+          try {
+            const kbeStream = runKBE({
+              claude_response: claudeBuffer,
+              user_utterance: userMessage,
+              left_brain_summary: {
+                tone: strategyResult.strategyType,
+                somatic: limbicHandoffText ? '변연계 활성' : '평이',
+                complexity: 3,
+                ambiguity: false,
+                crisis: (stateResult.riskLevel as string) === 'CRITICAL' || stateResult.riskLevel === RiskLevel.HIGH,
+              },
+              limbic_mood: limbicHandoffText.slice(0, 200) || '평이한 상태',
+              session_meta: {
+                turn_idx: turnCount,
+                intimacy_level: 3,   // TODO: 실제 친밀도 시스템 연동
+                stickers_used_this_session: 0,
+                last_sticker_turns_ago: -1,
+                last_event_turns_ago: -1,
+                events_fired_session: [],
+              },
+            });
+
+            for await (const kbeChunk of kbeStream) {
+              if (kbeChunk.type === 'text') {
+                fullText += kbeChunk.data;
+                yield { type: 'text', data: kbeChunk.data };
+              } else if (kbeChunk.type === 'sticker') {
+                // 스티커는 text 로 변환해서 기존 UI 호환
+                const stickerTag = `[STICKER:${kbeChunk.data}]`;
+                fullText += stickerTag;
+                yield { type: 'text', data: stickerTag };
+              } else if (kbeChunk.type === 'typing') {
+                // 타이핑 인디케이터는 retry_status 로 brigde (기존 UI 시스템 재사용)
+                // 또는 별도 이벤트 타입 추가 필요 — 현재는 무시
+              } else if (kbeChunk.type === 'event') {
+                // 이벤트는 phase_event 로 yield (단, 실제 이벤트 데이터는 기존 로직에서 생성)
+                console.log(`[Pipeline] 🎬 KBE 이벤트 트리거: ${kbeChunk.data}`);
+              }
+              // 'meta' 는 로깅만
+            }
+          } catch (err: any) {
+            console.warn('[Pipeline] ⚠️ KBE 실패 — Claude 원문 그대로 전송:', err?.message);
+            // KBE 실패 시 Claude 버퍼 그대로
+            fullText = claudeBuffer;
+            yield { type: 'text', data: claudeBuffer };
+          }
+        } else if (!useKBE && claudeBuffer) {
+          // KBE 비활성인데 어떤 이유로 버퍼됐으면 그대로
+          fullText = claudeBuffer;
+        }
+      }
+
+      // fullText가 비어있으면 기존 streamWithCascade 실행 (dual-brain 비활성/실패 시)
+      // fullText가 채워졌으면 이 블록 전체 스킵하고 post-processing으로 직행
+      if (fullText) {
+        // dual-brain 성공 — 기존 think-filter / stream 루프 건너뛰기
+      } else {
       // 🆕 v49: streamWithCascade가 텍스트 + 재시도 이벤트를 직접 yield
       const stream = streamWithCascade(
         modelRoute.cascade,
@@ -1408,6 +1603,7 @@ ${researchResult.insight}
           yield { type: 'text', data: text };
         }
       }
+      }   // 🧠 v52: dual-brain 폴백 else 블록 종료
 
       // 🆕 v30: 응답 검증 — fire-and-forget (스트리밍 완료 후 비동기, 0.5~1초 절약)
       // 검증 결과는 로그에만 사용되므로 유저 응답 전달을 블로킹할 필요 없음
