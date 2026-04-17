@@ -61,14 +61,35 @@ export async function GET() {
     intimacyState,
   });
 
-  // 새로 생성했으면 DB에 저장
-  if (!fromCache) {
-    const updated = { ...memoryProfile, todayState: state } as any;
+  // 🆕 v47: 스트릭 및 방문 날짜 자동 갱신 (MoodCheckIn 제거 대응)
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  let profileNeedUpdate = false;
+
+  if ((memoryProfile as any).lastVisitDate !== today) {
+    if ((memoryProfile as any).lastVisitDate === yesterday) {
+      (memoryProfile as any).streakDays = ((memoryProfile as any).streakDays ?? 0) + 1;
+    } else {
+      (memoryProfile as any).streakDays = 1;
+    }
+    (memoryProfile as any).lastVisitDate = today;
+    profileNeedUpdate = true;
+    console.log(`[Lounge] 🔥 스트릭 갱신: ${(memoryProfile as any).streakDays}일 (어제 방문: ${(memoryProfile as any).lastVisitDate === yesterday})`);
+  }
+
+  // 새로 생성했거나 스트릭이 갱신되었으면 DB에 저장
+  if (!fromCache || profileNeedUpdate) {
+    const updated = {
+      ...memoryProfile,
+      todayState: state,
+    } as any;
+    
     await supabase
       .from('user_profiles')
       .update({ memory_profile: updated })
       .eq('id', user.id);
-    console.log(`[Lounge] ✨ Daily State 새로 생성 (배치 ${state.batchMessages?.messages?.length ?? 0}개)`);
+      
+    if (!fromCache) console.log(`[Lounge] ✨ Daily State 새로 생성 (배치 ${state.batchMessages?.messages?.length ?? 0}개)`);
   } else {
     console.log(`[Lounge] 📦 Daily State 캐시 리턴 (배치 ${state.batchMessages?.messages?.length ?? 0}개)`);
   }

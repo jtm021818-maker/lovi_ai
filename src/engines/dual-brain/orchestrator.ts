@@ -26,6 +26,7 @@ import {
   type DualBrainLogEntry,
 } from './config';
 import type { BrainOutput, RouteDecision } from './types';
+import { LogCollector } from '@/lib/utils/logger';
 
 // 🧠 v53: 좌뇌 (Left Brain) 상태 분석 엔진
 import {
@@ -59,10 +60,12 @@ async function callGeminiBrain(params: {
   sessionId: string;
   turnIdx: number;
 }): Promise<{
+  leftBrainAnalysis?: LeftBrainAnalysis;  // 좌뇌 전체 출력 (Claude voice에 전달용)
+}, logCollector?: LogCollector): Promise<{
   output: BrainOutput | null;
   latencyMs: number;
   error?: string;
-  leftBrainAnalysis?: LeftBrainAnalysis;  // 좌뇌 전체 출력 (Claude voice에 전달용)
+  leftBrainAnalysis?: LeftBrainAnalysis;
 }> {
   const t0 = Date.now();
 
@@ -77,7 +80,7 @@ async function callGeminiBrain(params: {
       recentTrajectory: [],   // TODO: 세션 스토어에서 가져오기
       phase: extractPhase(params.contextBlock),
       intimacyLevel: extractIntimacy(params.contextBlock),
-    });
+    }, logCollector);
 
     // 좌뇌 로깅
     logLeftBrainAnalysis({
@@ -314,6 +317,7 @@ export interface DualBrainInput {
  */
 export async function* executeDualBrain(
   input: DualBrainInput,
+  logCollector?: LogCollector,
 ): AsyncGenerator<DualBrainStreamYield> {
   const overallStart = Date.now();
 
@@ -327,7 +331,7 @@ export async function* executeDualBrain(
     contextBlock: input.contextBlock,
     sessionId: input.sessionId,
     turnIdx: input.turnIdx,
-  });
+  }, logCollector);
 
   // Step 2.5: 좌뇌 분석 결과로 Claude 힌트 강화
   let enrichedStakeHint = stakeHintBase;
@@ -417,7 +421,7 @@ export async function* executeDualBrain(
           intimacyLevel: extractIntimacy(input.contextBlock),
           phase: extractPhase(input.contextBlock),
           model: 'gemini',    // 🆕 Gemini 모드로 ACE v5 (저비용)
-        })) {
+        }, logCollector)) {
           if (chunk.type === 'text') {
             fullResponseText += chunk.data;
             yield { type: 'text', data: chunk.data };
@@ -486,7 +490,7 @@ export async function* executeDualBrain(
           intimacyLevel: extractIntimacy(input.contextBlock),
           phase: extractPhase(input.contextBlock),
           model: 'claude',   // 🆕 v56: claude_rephrase 경로는 Claude 모델 명시
-        })) {
+        }, logCollector)) {
           if (chunk.type === 'text') {
             fullResponseText += chunk.data;
             yield { type: 'text', data: chunk.data };

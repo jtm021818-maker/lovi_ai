@@ -22,19 +22,33 @@ import TheaterOpening from './TheaterOpening';
 // 파서 & 상수
 // ============================================================
 
-/** [speaker] (지문) 대사 파싱 */
-function parseSceneLine(line: string): { speaker?: string; gender?: 'male' | 'female'; action?: string; dialog: string } {
+/**
+ * [speaker] (지문) 대사 파싱
+ * 🆕 v61: characterSetup 전달 시 userLabel/partnerLabel 로 정확한 성별 매핑,
+ *        없으면 기존 fallback (speaker 문자열에서 "남"/"여" 추출)
+ */
+function parseSceneLine(
+  line: string,
+  characterSetup?: { userLabel?: string; partnerLabel?: string; userGender?: 'male' | 'female'; partnerGender?: 'male' | 'female' },
+): { speaker?: string; gender?: 'male' | 'female'; action?: string; dialog: string } {
   const speakerMatch = line.match(/^\[([^\]]+)\]\s*/);
   const speaker = speakerMatch?.[1];
   const rest = speaker ? line.slice(speakerMatch![0].length) : line;
   const actionMatch = rest.match(/^\(([^)]+)\)\s*(.*)$/);
 
-  // speaker → 성별 매핑 ([남자] → male, [여자] → female)
   let gender: 'male' | 'female' | undefined;
   if (speaker) {
     const s = speaker.trim();
-    if (s === '남자' || s === '남' || s.includes('남')) gender = 'male';
-    else if (s === '여자' || s === '여' || s.includes('여')) gender = 'female';
+    // 1. characterSetup 기반 매핑 (정확)
+    if (characterSetup) {
+      if (s === characterSetup.userLabel) gender = characterSetup.userGender;
+      else if (s === characterSetup.partnerLabel) gender = characterSetup.partnerGender;
+    }
+    // 2. Fallback: speaker 문자열에서 추출
+    if (!gender) {
+      if (s === '남자' || s === '남' || s.includes('남')) gender = 'male';
+      else if (s === '여자' || s === '여' || s.includes('여')) gender = 'female';
+    }
   }
 
   if (actionMatch) return { speaker, gender, action: actionMatch[1], dialog: actionMatch[2] };
@@ -293,8 +307,8 @@ function VNScene({
   const maleSheet = SPRITE_SHEET.male;   // event1_luna_man.png
   const femaleSheet = SPRITE_SHEET.female; // event1_luna_girl.png
 
-  // 현재 대사의 파싱 결과 (speaker + 성별 확인용)
-  const currentParsed = phase === 'playing' ? parseSceneLine(lines[lineIndex]) : null;
+  // 현재 대사의 파싱 결과 (speaker + 성별 확인용) — v61: characterSetup 으로 라벨 기반 정확 매핑
+  const currentParsed = phase === 'playing' ? parseSceneLine(lines[lineIndex], data.characterSetup) : null;
   // 현재 대사의 캐릭터가 어느 쪽인지 (성별 기반 스프라이트 선택)
   const currentLineGender = currentParsed?.gender;
   // (보존: 추후 좌우 반전/스프라이트 결정용)
@@ -329,7 +343,7 @@ function VNScene({
     if (phase === 'playing') {
       const llmFrame = data.sceneFrames?.[lineIndex];
       if (llmFrame !== undefined) return Math.min(7, Math.max(0, llmFrame)) as SpriteFrame;
-      return pickSpriteFrame(parseSceneLine(lines[lineIndex]).dialog, false);
+      return pickSpriteFrame(parseSceneLine(lines[lineIndex], data.characterSetup).dialog, false);
     }
     return 0;
   })();

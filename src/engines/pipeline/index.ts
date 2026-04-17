@@ -23,6 +23,7 @@ import { PhaseManager, type PhaseContext } from '@/engines/phase-manager';
 import { HumanLikeEngine } from '@/engines/human-like';
 import { parsePhaseSignal } from '@/engines/human-like/phase-signal';
 import { resetCascadeLog, getCascadeLog } from '@/lib/ai/provider-registry';
+import { LogCollector } from '@/lib/utils/logger';
 // 🧠 이중뇌 (Gemini 판단 → Claude 발화) — 상담 모드 전용
 import { executeDualBrain, DUAL_BRAIN_CONFIG } from '@/engines/dual-brain';
 
@@ -245,6 +246,7 @@ export class CounselingPipeline {
     | { type: 'retry_status'; data: RetryStatusEvent }
     | { type: 'done'; data: { stateResult: StateResult; strategyResult: StrategyResult; suggestionShown: boolean; responseMode?: ResponseMode; updatedAxes?: Partial<ReadIgnoredAxes>; phaseV2?: ConversationPhaseV2; completedEvents?: PhaseEventType[]; lastEventTurn?: number; confirmedEmotionScore?: number; emotionHistory?: number[]; promptStyle?: string; emotionAccumulatorState?: EmotionAccumulatorState; phaseStartTurn?: number; lunaEmotionState?: string; sessionStoryState?: string; strategyMode?: StrategyMode | null; intimacyState?: import('@/engines/intimacy').IntimacyState | null; intimacyPersonaKey?: 'luna' | 'tarot'; intimacyAll?: { luna: import('@/engines/intimacy').IntimacyState; tarot: import('@/engines/intimacy').IntimacyState } | null; intimacyLevelUp?: { oldLevel: number; newLevel: number; newLevelName: string } | null; _contextLog?: any } }
   > {
+    const logCollector = new LogCollector();
     // 🆕 v31: Step 1 + Step 4를 병렬 실행 (상태분석과 RAG는 독립적 — ~200~500ms 절약)
     const tPipeStart = Date.now();
     resetCascadeLog(); // 🆕 v46: 이번 턴의 캐스케이드 로그 초기화
@@ -255,7 +257,7 @@ export class CounselingPipeline {
       : Promise.resolve('');
 
     const [stateResult, ragText] = await Promise.all([
-      this.stateEngine.analyze(userMessage, chatHistory, context),
+      this.stateEngine.analyze(userMessage, chatHistory, context, logCollector),
       ragPromise,
     ]);
     console.log(`[Perf] ⏱️ state+RAG 병렬: ${Date.now() - tPipeStart}ms`);
@@ -1272,7 +1274,7 @@ ${researchResult.insight}
                   supabase,
                   user_id: userId,
                   user_utterance: userMessage,
-                })
+                }, logCollector)
               : Promise.resolve(null),
           ]);
 
@@ -1463,7 +1465,7 @@ ${researchResult.insight}
             contextBlock: systemPrompt,
             sessionId: ragContext?.userId ?? 'unknown',
             turnIdx: turnCount,
-          })) {
+          }, logCollector)) {
             if (chunk.type === 'text') {
               if (useKBE) {
                 claudeBuffer += chunk.data;   // 버퍼링만
@@ -1986,7 +1988,8 @@ ${researchResult.insight}
         },
         phaseStartTurn: updatedPhaseStartTurn,
       },
-      cascadeLog: getCascadeLog(), // 🆕 v46: 모델별 시도 로그 (브라우저 F12 전송)
+      cascadeLog: getCascadeLog(),
+      engineLogs: logCollector.getLogs(),
     };
 
     yield { type: 'done', data: { stateResult, strategyResult, suggestionShown: gateResult.show, responseMode: therapeuticResponse.mode, updatedAxes: currentScenario === RelationshipScenario.READ_AND_IGNORED ? updatedAxes : undefined, phaseV2: newPhaseV2, completedEvents: updatedCompletedEvents, lastEventTurn: updatedLastEventTurn, confirmedEmotionScore, emotionHistory: updatedEmotionHistory, promptStyle: currentPromptStyle, emotionAccumulatorState: updatedAccumulator, phaseStartTurn: updatedPhaseStartTurn, lunaEmotionState: hlreActive ? hlre.serializeEmotionState() : undefined, sessionStoryState: hlreActive ? hlre.serializeSessionStory() : undefined, strategyMode: activeStrategyMode, intimacyState: hlreActive ? hlre.getIntimacyState(intimacyPersonaKey) : null, intimacyPersonaKey: hlreActive ? intimacyPersonaKey : undefined, intimacyAll: hlreActive ? hlre.getIntimacyAll() : null, intimacyLevelUp, _contextLog } };

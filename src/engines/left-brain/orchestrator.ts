@@ -15,6 +15,7 @@
 
 import { generateWithProvider, GEMINI_MODELS } from '@/lib/ai/provider-registry';
 import { detectHighStakes } from '@/engines/dual-brain/high-stakes-detector';
+import { LogCollector } from '@/lib/utils/logger';
 
 import { LEFT_BRAIN_SYSTEM_PROMPT, buildContextBlock, deriveTimeContext } from './left-brain-prompt';
 import { updateStateVector, calculateVelocity, analyzeTrajectory, NEUTRAL_STATE } from './state-vector';
@@ -36,6 +37,7 @@ import type {
 
 export async function analyzeLeftBrain(
   input: LeftBrainInput,
+  logCollector?: LogCollector,
 ): Promise<{ analysis: LeftBrainAnalysis | null; latencyMs: number; error?: string }> {
   const t0 = Date.now();
 
@@ -82,10 +84,17 @@ ${conflictsText}
     // Step 2: Gemini 호출 (좌뇌 시스템 프롬프트 + 컨텍스트 + 재분석 블록)
     const fullSystemPrompt = `${LEFT_BRAIN_SYSTEM_PROMPT}\n\n## 현재 컨텍스트\n${contextBlock}${reanalysisBlock}`;
 
-    console.log(`\n================ [🧠 좌뇌 (Left-Brain) 프로세스 시작] ================`);
-    console.log(`[USER INPUT]: ${input.userUtterance}`);
-    console.log(`[FULL PROMPT DUMP]:\n${fullSystemPrompt}`);
-    console.log(`======================================================================\n`);
+    if (logCollector) {
+      logCollector.log(`\n================ [🧠 좌뇌 (Left-Brain) 프로세스 시작] ================`);
+      logCollector.log(`[USER INPUT]: ${input.userUtterance}`);
+      logCollector.log(`[FULL PROMPT DUMP]:\n${fullSystemPrompt}`);
+      logCollector.log(`======================================================================\n`);
+    } else {
+      console.log(`\n================ [🧠 좌뇌 (Left-Brain) 프로세스 시작] ================`);
+      console.log(`[USER INPUT]: ${input.userUtterance}`);
+      console.log(`[FULL PROMPT DUMP]:\n${fullSystemPrompt}`);
+      console.log(`======================================================================\n`);
+    }
 
     const rawOutput = await Promise.race([
       generateWithProvider(

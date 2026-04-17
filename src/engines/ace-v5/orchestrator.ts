@@ -12,6 +12,7 @@
 
 import { streamWithProvider, ANTHROPIC_MODELS, GEMINI_MODELS } from '@/lib/ai/provider-registry';
 import { analyzeLeftBrain } from '@/engines/left-brain';
+import { LogCollector } from '@/lib/utils/logger';
 
 import { ACE_V5_SYSTEM_PROMPT, buildAceV5UserMessage } from './ace-system-prompt';
 import { buildHandoff, formatHandoffForPrompt } from './handoff-builder';
@@ -43,6 +44,7 @@ export interface AceV5StreamYield {
  */
 export async function* executeAceV5(
   input: AceV5Input,
+  logCollector?: LogCollector,
 ): AsyncGenerator<AceV5StreamYield> {
   const overallStart = Date.now();
 
@@ -65,7 +67,7 @@ export async function* executeAceV5(
     isReanalysis: input.alreadyReanalyzed === true,
     model: selectedModel,
     onChunk: undefined,
-  });
+  }, logCollector);
 
   // ────────────────────────────────────────
   // 3단계: 재요청 감지
@@ -85,7 +87,9 @@ export async function* executeAceV5(
     // ────────────────────────────────────────
     reanalysisRequested = true;
     reanalysisReason = reanalysisCheck.reason;
-    console.log(`[ACEv5] ↩️ 재요청 감지: ${reanalysisReason}`);
+    const msg = `[ACEv5] ↩️ 재요청 감지: ${reanalysisReason}`;
+    if (logCollector) logCollector.log(msg);
+    else console.log(msg);
 
     const refinedAnalysis = await analyzeLeftBrain({
       userUtterance: input.userUtterance,
@@ -94,7 +98,7 @@ export async function* executeAceV5(
       recentTrajectory: [],   // TODO: 세션 스토어 연동
       phase: input.phase,
       intimacyLevel: input.intimacyLevel,
-    });
+    }, logCollector);
 
     if (refinedAnalysis.analysis) {
       // 재핸드오프
@@ -114,7 +118,7 @@ export async function* executeAceV5(
         isReanalysis: true,
         model: 'claude',    // 재요청은 Claude 로 고정
         onChunk: undefined,
-      });
+      }, logCollector);
 
       finalText = secondCallResult.fullText;
       voiceLatencyMs += secondCallResult.latencyMs;
@@ -137,7 +141,9 @@ export async function* executeAceV5(
   const correction = detectSelfCorrection(cleaned.text);
 
   if (!validation.passed) {
-    console.warn(`[ACEv5] ⚠️ 품질 검증 실패: ${validation.issues.join(', ')}`);
+    const msg = `[ACEv5] ⚠️ 품질 검증 실패: ${validation.issues.join(', ')}`;
+    if (logCollector) logCollector.log(msg);
+    else console.warn(msg);
     // 좌뇌 초안으로 폴백
     if (cleaned.text.length < 5) {
       finalText = handoff.draft;
@@ -185,7 +191,9 @@ export async function* executeAceV5(
   };
 
   if (leftBrainHints.length > 0) {
-    console.log(`[ACEv5] ↩️ 좌뇌 힌트 ${leftBrainHints.length}개 추출:`, leftBrainHints);
+    const msg = `[ACEv5] ↩️ 좌뇌 힌트 ${leftBrainHints.length}개 추출: ${leftBrainHints.join(', ')}`;
+    if (logCollector) logCollector.log(msg);
+    else console.log(msg);
   }
 
   yield { type: 'meta', data: meta };
@@ -219,7 +227,7 @@ interface SingleCallResult {
  * model='gemini' → Gemini 2.5 Flash (90% 상황, 저비용)
  * model='claude' → Claude Sonnet 4.6 (10% 고복잡도)
  */
-async function streamVoiceOnce(params: SingleCallParams): Promise<SingleCallResult> {
+async function streamVoiceOnce(params: SingleCallParams, logCollector?: LogCollector): Promise<SingleCallResult> {
   const t0 = Date.now();
 
   const userMessage = buildAceV5UserMessage({
@@ -238,11 +246,17 @@ async function streamVoiceOnce(params: SingleCallParams): Promise<SingleCallResu
 
   const fullPromptDump = `${ACE_V5_SYSTEM_PROMPT}\n\n## 우뇌 컨텍스트\n${userMessage}`;
 
-  console.log(`\n================ [🗣️ 우뇌 (Right-Brain) 프로세스 시작] ================`);
-  console.log(`[MODEL]: ${provider} - ${modelId}`);
-  console.log(`[REANALYSIS MODE]: ${params.isReanalysis}`);
-  console.log(`[FULL PROMPT DUMP]:\n${fullPromptDump}`);
-  console.log(`=======================================================================\n`);
+  const msg = `\n================ [🗣️ 우뇌 (Right-Brain) 프로세스 시작] ================\n` +
+    `[MODEL]: ${provider} - ${modelId}\n` +
+    `[REANALYSIS MODE]: ${params.isReanalysis}\n` +
+    `[FULL PROMPT DUMP]:\n${fullPromptDump}\n` +
+    `=======================================================================\n`;
+
+  if (logCollector) {
+    logCollector.log(msg);
+  } else {
+    console.log(msg);
+  }
 
   const stream = streamWithProvider(
     provider,

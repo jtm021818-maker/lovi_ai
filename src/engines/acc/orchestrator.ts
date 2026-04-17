@@ -12,6 +12,7 @@ import { extractStatements } from './statement-extractor';
 import { detectConflicts } from './conflict-detector';
 import { saveStatements } from './statement-store';
 import { ACC_CONFIG } from './config';
+import { LogCollector } from '@/lib/utils/logger';
 import type {
   AccAnalysisResult,
   ExtractionInput,
@@ -31,7 +32,7 @@ export interface AccAnalyzeParams extends ExtractionInput {
 // 메인 분석
 // ============================================================
 
-export async function analyzeAcc(params: AccAnalyzeParams): Promise<AccAnalysisResult> {
+export async function analyzeAcc(params: AccAnalyzeParams, logCollector?: LogCollector): Promise<AccAnalysisResult> {
   if (!ACC_CONFIG.enabled) {
     return emptyResult();
   }
@@ -100,17 +101,19 @@ export async function analyzeAcc(params: AccAnalyzeParams): Promise<AccAnalysisR
   const conflictHint = buildConflictHint(detectedConflicts);
 
   if (ACC_CONFIG.verboseLogging) {
-    console.log(`\n================ [⚡ 전대상피질 (ACC) 모순 검증] ================`);
-    console.log(
-      `[📝 추출 됨]: ${extracted.statements.length}개 (${extractionLatencyMs}ms) | ` +
-      `[⚠️ 모순 발견]: ${detectedConflicts.length}개 (${conflictLatencyMs}ms)`,
-    );
-    if (detectedConflicts.length > 0) {
-      for (const c of detectedConflicts) {
-        console.log(`[⚠️ 모순 내용]: ${c.description} (severity ${c.severity.toFixed(2)})`);
-      }
+    const msg = `\n================ [⚡ 전대상피질 (ACC) 모순 검증] ================` +
+      `\n[📝 추출 됨]: ${extracted.statements.length}개 (${extractionLatencyMs}ms) | ` +
+      `[⚠️ 모순 발견]: ${detectedConflicts.length}개 (${conflictLatencyMs}ms)` +
+      (detectedConflicts.length > 0 
+        ? `\n` + detectedConflicts.map(c => `[⚠️ 모순 내용]: ${c.description} (severity ${c.severity.toFixed(2)})`).join('\n')
+        : '') +
+      `\n=========================================================\n`;
+
+    if (logCollector) {
+      logCollector.log(msg);
+    } else {
+      console.log(msg);
     }
-    console.log(`=========================================================\n`);
   }
 
   return {

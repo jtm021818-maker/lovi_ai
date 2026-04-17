@@ -17,7 +17,7 @@ import { useRouter } from 'next/navigation';
 import LoungeBackground, { getTimeOfDay } from '@/components/lounge/LoungeBackground';
 import LoungeMessage, { type LoungeMessageType } from '@/components/lounge/LoungeMessage';
 import LoungeInput from '@/components/lounge/LoungeInput';
-import MoodCheckIn from '@/components/lounge/MoodCheckIn';
+import type { CharacterDailyState } from '@/engines/lounge/daily-state-engine';
 import type { CharacterDailyState } from '@/engines/lounge/daily-state-engine';
 import { moodToEmoji } from '@/engines/lounge/daily-state-engine';
 import type { ScheduledMessage, BatchDailyMessages } from '@/engines/lounge/batch-message-types';
@@ -45,10 +45,8 @@ export default function LoungePage() {
   const [messages, setMessages] = useState<LoungeMessageType[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [checkedIn, setCheckedIn] = useState(false);
   const [streakDays, setStreakDays] = useState(0);
   const [userJoined, setUserJoined] = useState(false);
-  const [showCheckIn, setShowCheckIn] = useState(false);
   const [userName, setUserName] = useState('나');
   const [lunaLive, setLunaLive] = useState<CharacterLiveStatus | null>(null);
   const [tarotLive, setTarotLive] = useState<CharacterLiveStatus | null>(null);
@@ -352,7 +350,6 @@ export default function LoungePage() {
         const data = await res.json();
         setDailyState(data.state);
         setPersona(data.persona === 'tarot' ? 'tarot' : 'luna');
-        setCheckedIn(data.todayCheckedIn);
         setStreakDays(data.streakDays);
         if (data.nickname) setUserName(data.nickname);
 
@@ -408,8 +405,6 @@ export default function LoungePage() {
                 scrollToBottom();
               }, 500);
             }
-
-            if (!data.todayCheckedIn) setShowCheckIn(true);
           } else {
             // 첫 입장: 과거 메시지 한꺼번에 보여주기
             const initialMsgs: LoungeMessageType[] = [];
@@ -443,7 +438,6 @@ export default function LoungePage() {
 
             setMessages(initialMsgs);
             setUserJoined(true);
-            if (!data.todayCheckedIn) setTimeout(() => setShowCheckIn(true), 1500);
             saveHistory(initialMsgs, true);
           }
 
@@ -470,7 +464,6 @@ export default function LoungePage() {
           });
           setMessages(restored);
           setUserJoined(true);
-          if (!data.todayCheckedIn) setShowCheckIn(true);
 
           const lastFewTexts = existingHistory.slice(-3).map((m: any) => m.text ?? '');
           const alreadyGreeted = lastFewTexts.some((t: string) => t.includes('돌아왔어요'));
@@ -533,18 +526,15 @@ export default function LoungePage() {
             if (onJoin) {
               setTimeout(() => {
                 renderWithTyping(speaker, onJoin).then(() => {
-                  if (!data.todayCheckedIn) setTimeout(() => setShowCheckIn(true), 1500);
                   setMessages(prev => { saveHistory(prev, true); return prev; });
                 });
               }, 1000);
             } else {
-              if (!data.todayCheckedIn) setTimeout(() => setShowCheckIn(true), 1000);
               setMessages(prev => { saveHistory(prev, true); return prev; });
             }
           }, totalDelay);
         } else {
           setUserJoined(true);
-          if (!data.todayCheckedIn) setShowCheckIn(true);
         }
       } catch (e) {
         console.error('[Lounge] 초기화 실패:', e);
@@ -678,37 +668,7 @@ export default function LoungePage() {
     }
   }, [messages, addMsg, scrollToBottom, saveHistory, renderWithTyping, resetNudgeTimer, batchData, scheduleFutureMessages]);
 
-  // 감정 체크인
-  const handleCheckIn = useCallback(async (mood: string, score: number) => {
-    setCheckedIn(true);
-    setShowCheckIn(false);
-    addMsg({ type: 'system', text: `오늘의 기분: ${mood}` });
-    setTimeout(() => {
-      const speaker = persona === 'tarot' ? 'tarot' as const : 'luna' as const;
-      const text = score >= 3
-        ? '좋은 하루 보내고 있구나!'
-        : score >= 2
-        ? '그렇구나... 이야기해볼래?'
-        : '많이 힘들구나. 옆에 있을게.';
-      renderWithTyping(speaker, text);
-    }, 1500);
-
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const { data } = await supabase.from('user_profiles').select('memory_profile').eq('id', user.id).single();
-    const profile = (data?.memory_profile ?? {}) as any;
-    const checkins = (profile.dailyCheckins ?? []).slice(-29);
-    const today = new Date().toISOString().slice(0, 10);
-    checkins.push({ date: today, mood, score });
-    profile.dailyCheckins = checkins;
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-    if (profile.lastVisitDate === yesterday) profile.streakDays = (profile.streakDays ?? 0) + 1;
-    else if (profile.lastVisitDate !== today) profile.streakDays = 1;
-    profile.lastVisitDate = today;
-    setStreakDays(profile.streakDays ?? 1);
-    await supabase.from('user_profiles').update({ memory_profile: profile }).eq('id', user.id);
-  }, [addMsg, persona, renderWithTyping]);
+  // 기분 체크인 제거됨 (v47)
 
   const luna = dailyState?.luna;
   const tarot = dailyState?.tarot;
@@ -909,13 +869,7 @@ export default function LoungePage() {
             );
           })}
 
-          <AnimatePresence>
-            {showCheckIn && !checkedIn && (
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mx-2 my-3">
-                <MoodCheckIn onCheckIn={handleCheckIn} characterName={persona === 'tarot' ? '타로냥' : '루나'} />
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* v47: MoodCheckIn 삭제 */}
 
           {messages.some(m => m.type === 'character' && (m as any).text?.includes('상담으로 가볼까')) && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-center my-3">

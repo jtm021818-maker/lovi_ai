@@ -695,6 +695,7 @@ export async function POST(req: NextRequest) {
                       pipelineMeta: ctxLog.pipelineMeta,
                       aiResponse: fullText,
                       cascadeLog: ctxLog.cascadeLog || [], // 🆕 v46: 모델별 시도 로그
+                      engineLogs: ctxLog.engineLogs || [], // 🆕 Cognitive Engine Logs
                     },
                   })}\n\n`)
                 );

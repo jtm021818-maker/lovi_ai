@@ -7,6 +7,7 @@
  *   3. 세션 종료 시: 종료 트리거 + 상태 저장
  */
 
+import { LogCollector } from '@/lib/utils/logger';
 import type { LimbicState, LimbicHandoff, LimbicTrigger, SignalToTriggerInput, ActiveEmotion } from './types';
 import { decayLimbicState, updateBaselineMood, applyHormoneChanges, addEmotion } from './emotion-decay';
 import {
@@ -46,7 +47,7 @@ export interface SessionStartResult {
   triggersFired: LimbicTrigger[];
 }
 
-export async function onSessionStart(params: SessionStartParams): Promise<SessionStartResult> {
+export async function onSessionStart(params: SessionStartParams, logCollector?: LogCollector): Promise<SessionStartResult> {
   if (!LIMBIC_CONFIG.enabled) {
     // 비활성화 — 빈 상태 반환
     const empty = await loadAndDecayLimbicState(params.supabase, params.userId);
@@ -81,13 +82,17 @@ export async function onSessionStart(params: SessionStartParams): Promise<Sessio
   updateLimbicCache(params.userId, state);
 
   if (LIMBIC_CONFIG.verboseLogging) {
-    console.log(`\n================ [🫀 변연계 (Limbic) 시작 로그] ================`);
-    console.log(
-      `[무드]: ${handoff.current_mood_description} | ` +
+    const msg = `\n================ [🫀 변연계 (Limbic) 시작 로그] ================` +
+      `\n[무드]: ${handoff.current_mood_description} | ` +
       `[트리거]: [${triggersFired.join(',') || '없음'}] | ` +
-      `[에너지]: ${(handoff.energy_level * 100).toFixed(0)}%`,
-    );
-    console.log(`=================================================================\n`);
+      `[에너지]: ${(handoff.energy_level * 100).toFixed(0)}%` +
+      `\n=================================================================\n`;
+
+    if (logCollector) {
+      logCollector.log(msg);
+    } else {
+      console.log(msg);
+    }
   }
 
   return { state, handoff, triggersFired };
@@ -109,7 +114,7 @@ export interface OnTurnResult {
   triggersFired: LimbicTrigger[];
 }
 
-export function onTurn(params: OnTurnParams): OnTurnResult {
+export function onTurn(params: OnTurnParams, logCollector?: LogCollector): OnTurnResult {
   if (!LIMBIC_CONFIG.enabled) {
     return {
       state: params.state,
@@ -132,9 +137,15 @@ export function onTurn(params: OnTurnParams): OnTurnResult {
   const handoff = buildLimbicHandoff(newState);
 
   if (LIMBIC_CONFIG.verboseLogging && triggers.length > 0) {
-    console.log(`\n================ [🫀 변연계 (Limbic) 턴 반응] ================`);
-    console.log(`[⚡ 트리거 발동]: [${triggers.join(',')}] → ${handoff.current_mood_description}`);
-    console.log(`===============================================================\n`);
+    const msg = `\n================ [🫀 변연계 (Limbic) 턴 반응] ================` +
+      `\n[⚡ 트리거 발동]: [${triggers.join(',')}] → ${handoff.current_mood_description}` +
+      `\n===============================================================\n`;
+
+    if (logCollector) {
+      logCollector.log(msg);
+    } else {
+      console.log(msg);
+    }
   }
 
   return { state: newState, handoff, triggersFired: triggers };
@@ -168,7 +179,7 @@ export interface OnTurnWithLlmParams {
  *   좌뇌 응답에 hormonal_impact 가 있으면 이걸 호출
  *   없으면 기존 onTurn (trigger-mapper 백업)
  */
-export function onTurnWithLlmJudgment(params: OnTurnWithLlmParams): OnTurnResult {
+export function onTurnWithLlmJudgment(params: OnTurnWithLlmParams, logCollector?: LogCollector): OnTurnResult {
   if (!LIMBIC_CONFIG.enabled) {
     return {
       state: params.state,
@@ -220,13 +231,17 @@ export function onTurnWithLlmJudgment(params: OnTurnWithLlmParams): OnTurnResult
   const handoff = buildLimbicHandoff(newState);
 
   if (LIMBIC_CONFIG.verboseLogging) {
-    console.log(
-      `[Limbic LLM] 🧠 호르몬 (cort ${h.cortisol_delta >= 0 ? '+' : ''}${h.cortisol_delta.toFixed(2)}, ` +
+    const msg = `[Limbic LLM] 🧠 호르몬 (cort ${h.cortisol_delta >= 0 ? '+' : ''}${h.cortisol_delta.toFixed(2)}, ` +
       `oxy ${h.oxytocin_delta >= 0 ? '+' : ''}${h.oxytocin_delta.toFixed(2)}, ` +
       `dop ${h.dopamine_delta >= 0 ? '+' : ''}${h.dopamine_delta.toFixed(2)}, ` +
       `thr ${h.threat_delta >= 0 ? '+' : ''}${h.threat_delta.toFixed(2)}) ` +
-      `→ ${handoff.current_mood_description} | ${h.reasoning}`
-    );
+      `→ ${handoff.current_mood_description} | ${h.reasoning}`;
+
+    if (logCollector) {
+      logCollector.log(msg);
+    } else {
+      console.log(msg);
+    }
   }
 
   return { state: newState, handoff, triggersFired: [] };
@@ -286,6 +301,7 @@ export function applyAccSignalsToLimbic(
   state: LimbicState,
   accSignals: AccSignalsForLimbic,
   context: string,
+  logCollector?: LogCollector,
 ): LimbicState {
   if (!LIMBIC_CONFIG.enabled) return state;
 
@@ -340,12 +356,16 @@ export function applyAccSignalsToLimbic(
   }
 
   if (LIMBIC_CONFIG.verboseLogging) {
-    console.log(
-      `[Limbic ↔ ACC] ${accSignals.conflict_count > 0 ? `🔴 모순${accSignals.conflict_count}개 ` : ''}` +
+    const msg = `[Limbic ↔ ACC] ${accSignals.conflict_count > 0 ? `🔴 모순${accSignals.conflict_count}개 ` : ''}` +
       `${accSignals.deep_disclosure_detected ? '💜 깊은개방 ' : ''}` +
       `${accSignals.consistency_pattern ? '✓ 일관성 ' : ''}` +
-      `→ thr ${(hormonal.threat_arousal ?? 0).toFixed(2)}, oxy ${(hormonal.oxytocin ?? 0).toFixed(2)}`
-    );
+      `→ thr ${(hormonal.threat_arousal ?? 0).toFixed(2)}, oxy ${(hormonal.oxytocin ?? 0).toFixed(2)}`;
+
+    if (logCollector) {
+      logCollector.log(msg);
+    } else {
+      console.log(msg);
+    }
   }
 
   return newState;
@@ -369,7 +389,7 @@ export interface SessionEndResult {
   saveError?: string;
 }
 
-export async function onSessionEnd(params: SessionEndParams): Promise<SessionEndResult> {
+export async function onSessionEnd(params: SessionEndParams, logCollector?: LogCollector): Promise<SessionEndResult> {
   if (!LIMBIC_CONFIG.enabled) {
     return {
       finalState: params.state,
@@ -401,10 +421,14 @@ export async function onSessionEnd(params: SessionEndParams): Promise<SessionEnd
   const saveResult = await saveLimbicState(params.supabase, finalState);
 
   if (LIMBIC_CONFIG.verboseLogging) {
-    console.log(
-      `[Limbic] 💤 세션 종료 | 종료 트리거: [${triggersFired.join(',') || '없음'}] | ` +
-      `저장: ${saveResult.success ? '✅' : '❌ ' + saveResult.error}`,
-    );
+    const msg = `[Limbic] 💤 세션 종료 | 종료 트리거: [${triggersFired.join(',') || '없음'}] | ` +
+      `저장: ${saveResult.success ? '✅' : '❌ ' + saveResult.error}`;
+
+    if (logCollector) {
+      logCollector.log(msg);
+    } else {
+      console.log(msg);
+    }
   }
 
   return {

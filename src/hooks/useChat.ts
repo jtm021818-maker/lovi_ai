@@ -375,6 +375,37 @@ export function useChat(sessionId: string): UseChatReturn {
                   console.groupEnd();
                 }
 
+                // 🧠 [v47] Cognitive Engine 상세 로그 — 서버 사이드 사고 과정 시각화
+                if (ctx.engineLogs?.length) {
+                  console.groupCollapsed(
+                    `%c💭 [Engine Logs] ${ctx.engineLogs.length}건의 인지 연산`,
+                    'color: #ffeb3b; font-weight: bold; font-size: 12px;'
+                  );
+                  ctx.engineLogs.forEach((log: any) => {
+                    let icon = '⚪';
+                    let color = '#9e9e9e';
+                    const cat = log.category.toUpperCase();
+                    
+                    if (cat.includes('LEFT')) { icon = '📘'; color = '#2196f3'; }
+                    else if (cat.includes('RIGHT') || cat.includes('ACE')) { icon = '🎨'; color = '#e91e63'; }
+                    else if (cat.includes('ACC')) { icon = '🛡️'; color = '#4caf50'; }
+                    else if (cat.includes('LIMBIC')) { icon = '🧬'; color = '#f44336'; }
+                    else if (cat.includes('DUAL')) { icon = '☯️'; color = '#9c27b0'; }
+                    else if (cat.includes('PIPELINE')) { icon = '⚙️'; color = '#607d8b'; }
+                    else if (cat.includes('HLRE')) { icon = '🔥'; color = '#ff5722'; }
+
+                    console.log(
+                      `%c${icon} [${log.category}] %c${log.message}`,
+                      `color: ${color}; font-weight: bold;`,
+                      'color: #e0e0e0; font-weight: normal;'
+                    );
+                    if (log.data && Object.keys(log.data).length > 0) {
+                      console.log('%c└ Data:', 'color: #757575; font-style: italic;', log.data);
+                    }
+                  });
+                  console.groupEnd();
+                }
+
                 console.groupEnd();
                 break;
               }

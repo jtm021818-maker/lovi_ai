@@ -217,7 +217,13 @@ export interface EmotionMirrorData {
   backgroundPrompt?: string;        // 디버깅용 프롬프트
   characterSetup?: {
     mode: 'solo' | 'duo';           // 혼자/둘이 연극
-    userGender?: 'male' | 'female'; // 캐릭터 스프라이트 선택
+    userGender?: 'male' | 'female'; // 유저 캐릭터 스프라이트 선택
+    /** 🆕 v61: 상대 성별 (duo 일 때) */
+    partnerGender?: 'male' | 'female';
+    /** 🆕 v61: 씬 대사 라벨 — 유저 역할 ("남자" / "여자") */
+    userLabel?: string;
+    /** 🆕 v61: 씬 대사 라벨 — 상대 역할 (duo 일 때만) */
+    partnerLabel?: string;
   };
 }
 
