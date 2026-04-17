@@ -1504,6 +1504,8 @@ ${researchResult.insight}
             phaseStartTurn: updatedPhaseStartTurn ?? phaseStartTurn,
             workingMemory,
             supabase: ragContext?.supabase,
+            // 🆕 v71: 좌뇌가 대화 맥락 받게 (반복 질문 박멸)
+            chatHistory: chatHistory,
           }, logCollector)) {
             if (chunk.type === 'text') {
               if (useKBE) {

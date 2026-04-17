@@ -139,7 +139,7 @@ ${conflictsText}
             fullSystemPrompt,
             [{ role: 'user' as const, content: input.userUtterance }],
             'haiku',
-            8000, // v69: 3000 → 8000 (확실한 여유)
+            4000, // v71: 8000 → 4000 (충분 + 응답 시간 단축)
             model.id,
           ),
           new Promise<never>((_, reject) =>

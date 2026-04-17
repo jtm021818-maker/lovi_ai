@@ -66,6 +66,8 @@ async function callGeminiBrain(params: {
   phaseStartTurn?: number;
   workingMemory?: any;  // WorkingMemoryScratchpad
   supabase?: any;       // SupabaseClient
+  /** 🆕 v71: 좌뇌도 최근 대화 히스토리 받음 */
+  chatHistory?: Array<{ role: 'user' | 'ai'; content: string }>;
 }, logCollector?: LogCollector): Promise<{
   output: BrainOutput | null;
   latencyMs: number;
@@ -97,8 +99,19 @@ async function callGeminiBrain(params: {
       console.warn('[DualBrain] context-assembler 실패 (fallback to legacy):', e?.message);
     }
 
+    // 🆕 v71: 좌뇌가 받는 userUtterance 에 최근 대화 히스토리 prepend → 맥락 유지
+    //   기존: 단일 메시지만 → 매 턴 첫 만남처럼 분석
+    //   변경: 최근 6턴 (3 round) 함께 보내서 "방금 청소 얘기 했음" 인지
+    const recentHistory = (params.chatHistory ?? []).slice(-6);
+    const historyBlock = recentHistory.length > 0
+      ? recentHistory.map((m) => `[${m.role === 'user' ? '유저' : '루나'}] ${m.content}`).join('\n')
+      : '';
+    const userUtteranceWithHistory = historyBlock
+      ? `## 직전 대화 (참고)\n${historyBlock}\n\n## 이번 유저 발화 (분석 대상)\n${params.userInput}`
+      : params.userInput;
+
     const { analysis, latencyMs, error } = await analyzeLeftBrain({
-      userUtterance: params.userInput,
+      userUtterance: userUtteranceWithHistory,
       sessionId: params.sessionId,
       turnIdx: params.turnIdx,
       recentTrajectory: richContext.recentTrajectory ?? [],
@@ -355,6 +368,8 @@ export interface DualBrainInput {
   phaseStartTurn?: number;
   workingMemory?: any;
   supabase?: any;
+  /** 🆕 v71: 좌뇌도 최근 대화 히스토리 받아서 맥락 유지 */
+  chatHistory?: Array<{ role: 'user' | 'ai'; content: string }>;
   // ─────────────────────────────
   userInput: string;
   contextBlock: string;
@@ -391,6 +406,8 @@ export async function* executeDualBrain(
     phaseStartTurn: input.phaseStartTurn,
     workingMemory: input.workingMemory,
     supabase: input.supabase,
+    // 🆕 v71: 좌뇌도 대화 맥락 받음
+    chatHistory: input.chatHistory,
   }, logCollector);
 
   // 🆕 v63: brainResult 즉시 디버그 — output null 케이스 추적
