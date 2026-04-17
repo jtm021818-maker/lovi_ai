@@ -251,7 +251,7 @@ async function streamVoiceOnce(params: SingleCallParams, logCollector?: LogColle
   const provider = params.model === 'claude' ? 'anthropic' : 'gemini';
   const modelId = params.model === 'claude'
     ? ANTHROPIC_MODELS.SONNET_4_6
-    : GEMINI_MODELS.FLASH_LITE_31; // 🆕 v62: 3.1 Flash Lite ($0.25) — 가성비 추론 우뇌
+    : GEMINI_MODELS.FLASH_25; // 🆕 v74: 2.5 Flash ($0.30) — 메인 상담 모델과 통일 (안정성)
 
   // 🆕 v64: 통일 디버그 로거 (engine + model + 프롬프트 + 유저 메시지)
   logEnginePrompt({
