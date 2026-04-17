@@ -79,23 +79,24 @@ export function getProviderCascade(
     // ──────────────────────────────────────────
     case 'event_generation':
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_31 }, // $0.25 (v73: 지능/안정성 상향)
         { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 }, // $0.10
         { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },      // $0.30
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_31 }, // $0.25
       ];
 
     // ──────────────────────────────────────────
     // 상태 분석 (좌뇌 7D + 페이싱 + 호르몬) — JSON 구조화 안정성 우선
-    //   v73: 3.1 Flash Lite 가 페이싱 판단 및 추론에서 2.5 Lite 보다 압도적
-    //   1순위: 3.1 Flash Lite ($0.25)
-    //   2순위: 2.5 Flash Lite ($0.10)
-    //   3순위: 2.5 Flash ($0.30)
+    //   v63.1: JSON 출력은 2.5 Flash Lite 가 가장 안정적
+    //          (3.1 Lite 는 큰 JSON 가끔 깨짐 → 비용 낭비 + parse 실패)
+    //   1순위: 2.5 Flash Lite ($0.10) — 검증된 JSON 안정성
+    //   2순위: 2.5 Flash ($0.30) — 안정 폴백
+    //   3순위: 3.1 Flash Lite ($0.25) — 최후 시도
     // ──────────────────────────────────────────
     case 'state_analysis':
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_31 }, // $0.25
         { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 }, // $0.10
         { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },      // $0.30
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_31 }, // $0.25
       ];
 
     // ──────────────────────────────────────────
