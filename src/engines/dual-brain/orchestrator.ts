@@ -27,6 +27,7 @@ import {
 } from './config';
 import type { BrainOutput, RouteDecision } from './types';
 import { LogCollector } from '@/lib/utils/logger';
+import { logEnginePrompt, logEnginePromptResult } from '@/lib/utils/engine-prompt-logger';
 
 // 🧠 v53: 좌뇌 (Left Brain) 상태 분석 엔진
 import {
@@ -135,6 +136,16 @@ async function callGeminiBrain(params: {
   try {
     const systemPrompt = `${BRAIN_SYSTEM_PROMPT}\n\n## 현재 컨텍스트\n${params.contextBlock}`;
 
+    // 🆕 v64: 통일 디버그 로거
+    logEnginePrompt({
+      engine: 'DUAL_BRAIN_PATH_B',
+      turnIdx: params.turnIdx,
+      model: GEMINI_MODELS.FLASH_LITE_25,
+      provider: 'gemini',
+      systemPrompt,
+      userMessage: params.userInput,
+    });
+
     const rawOutput = await Promise.race([
       generateWithProvider(
         'gemini',
@@ -151,6 +162,13 @@ async function callGeminiBrain(params: {
 
     const latencyMs = Date.now() - t0;
     const parsed = parseBrainJSON(rawOutput);
+    logEnginePromptResult({
+      engine: 'DUAL_BRAIN_PATH_B',
+      turnIdx: params.turnIdx,
+      rawOutput,
+      parsedOK: !!parsed,
+      latencyMs,
+    });
     if (!parsed) {
       return { output: null, latencyMs, error: 'json_parse_failed' };
     }

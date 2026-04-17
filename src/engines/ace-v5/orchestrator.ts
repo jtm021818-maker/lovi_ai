@@ -14,6 +14,7 @@ import { streamWithProvider, ANTHROPIC_MODELS, GEMINI_MODELS } from '@/lib/ai/pr
 import { analyzeLeftBrain } from '@/engines/left-brain';
 import { LogCollector } from '@/lib/utils/logger';
 
+import { logEnginePrompt } from '@/lib/utils/engine-prompt-logger';
 import { ACE_V5_SYSTEM_PROMPT, buildAceV5UserMessage } from './ace-system-prompt';
 import { buildHandoff, formatHandoffForPrompt } from './handoff-builder';
 import {
@@ -252,19 +253,19 @@ async function streamVoiceOnce(params: SingleCallParams, logCollector?: LogColle
     ? ANTHROPIC_MODELS.SONNET_4_6
     : GEMINI_MODELS.FLASH_LITE_31; // 🆕 v62: 3.1 Flash Lite ($0.25) — 가성비 추론 우뇌
 
-  const fullPromptDump = `${ACE_V5_SYSTEM_PROMPT}\n\n## 우뇌 컨텍스트\n${userMessage}`;
-
-  const msg = `\n================ [🗣️ 우뇌 (Right-Brain) 프로세스 시작] ================\n` +
-    `[MODEL]: ${provider} - ${modelId}\n` +
-    `[REANALYSIS MODE]: ${params.isReanalysis}\n` +
-    `[FULL PROMPT DUMP]:\n${fullPromptDump}\n` +
-    `=======================================================================\n`;
-
-  if (logCollector) {
-    logCollector.log(msg);
-  } else {
-    console.log(msg);
-  }
+  // 🆕 v64: 통일 디버그 로거 (engine + model + 프롬프트 + 유저 메시지)
+  logEnginePrompt({
+    engine: 'ACE_V5_RIGHT_BRAIN',
+    model: modelId,
+    provider,
+    systemPrompt: ACE_V5_SYSTEM_PROMPT,
+    userMessage,
+    extra: {
+      reanalysis: !!params.isReanalysis,
+      phase: params.phase,
+      intimacyLevel: params.intimacyLevel,
+    },
+  });
 
   const stream = streamWithProvider(
     provider,

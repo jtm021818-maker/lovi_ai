@@ -8,6 +8,7 @@
  */
 
 import { generateWithProvider, GEMINI_MODELS } from '@/lib/ai/provider-registry';
+import { logEnginePrompt, logEnginePromptResult } from '@/lib/utils/engine-prompt-logger';
 import { KAKAO_ACTION_SYSTEM_PROMPT, buildKbeUserMessage } from './kakao-action-prompt';
 import type {
   KakaoActionPlan,
@@ -31,6 +32,16 @@ export async function planKakaoAction(
   try {
     const userMessage = buildKbeUserMessage(input);
 
+    // 🆕 v64: 통일 디버그 로거
+    logEnginePrompt({
+      engine: 'KBE',
+      turnIdx: input.session_meta?.turn_idx,
+      model: GEMINI_MODELS.FLASH_LITE_25,
+      provider: 'gemini',
+      systemPrompt: KAKAO_ACTION_SYSTEM_PROMPT,
+      userMessage,
+    });
+
     const raw = await Promise.race([
       generateWithProvider(
         'gemini',
@@ -46,6 +57,13 @@ export async function planKakaoAction(
     ]);
 
     const parsed = parseKakaoPlan(raw, input);
+    logEnginePromptResult({
+      engine: 'KBE',
+      turnIdx: input.session_meta?.turn_idx,
+      rawOutput: raw,
+      parsedOK: !!parsed,
+      latencyMs: Date.now() - t0,
+    });
     if (!parsed) {
       // JSON 파싱 실패 → fallback
       return {

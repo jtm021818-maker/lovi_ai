@@ -15,6 +15,7 @@
 
 import { generateWithProvider, GEMINI_MODELS } from '@/lib/ai/provider-registry';
 import { detectHighStakes } from '@/engines/dual-brain/high-stakes-detector';
+import { logEnginePrompt, logEnginePromptResult } from '@/lib/utils/engine-prompt-logger';
 import { LogCollector } from '@/lib/utils/logger';
 
 import { LEFT_BRAIN_SYSTEM_PROMPT, buildContextBlock, deriveTimeContext } from './left-brain-prompt';
@@ -115,6 +116,18 @@ ${conflictsText}
 
     for (const model of LEFT_BRAIN_CASCADE) {
       const attemptStart = Date.now();
+
+      // 🆕 v64: 호출 직전 프롬프트+모델 로깅 (각 시도마다)
+      logEnginePrompt({
+        engine: 'LEFT_BRAIN',
+        turnIdx: input.turnIdx,
+        model: model.id,
+        provider: 'gemini',
+        systemPrompt: fullSystemPrompt,
+        userMessage: input.userUtterance,
+        extra: { cascadeModel: model.name, phase: input.phase, intimacyLevel: input.intimacyLevel },
+      });
+
       try {
         const rawOutput = await Promise.race([
           generateWithProvider(
@@ -135,6 +148,14 @@ ${conflictsText}
         console.log(`[LeftBrain:try] ${model.name} success ${attemptMs}ms, rawLen=${rawOutput?.length ?? 0}`);
 
         const candidate = parseAndValidate(rawOutput, logCollector);
+        logEnginePromptResult({
+          engine: 'LEFT_BRAIN',
+          turnIdx: input.turnIdx,
+          rawOutput,
+          parsedOK: !!candidate,
+          latencyMs: attemptMs,
+        });
+
         if (candidate) {
           parsed = candidate;
           console.log(`[LeftBrain:parseOK] model=${model.name}, draftLen=${candidate.draft_utterances?.length ?? 0}, tone=${candidate.tone_to_use}`);
