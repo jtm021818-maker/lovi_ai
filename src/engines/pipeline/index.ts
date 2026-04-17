@@ -1444,6 +1444,8 @@ ${researchResult.insight}
     } else {
       // 상담사/친구 모드: 스트리밍 — 3사 캐스케이드
       let fullText = '';
+      // 🆕 v60: 좌뇌 analysis 캡쳐 (pacing_meta 추출용) — phase 재판단까지 필요
+      let capturedLeftBrainAnalysis: any = null;
 
       // 🧠 v52: 이중뇌 분기 — 상담 모드(luna)에서만 실행
       // Gemini가 판단/태그 생성, Claude가 말풍선 생성 (복잡 턴만)
@@ -1469,6 +1471,8 @@ ${researchResult.insight}
                 fullText += chunk.data;
                 yield { type: 'text', data: chunk.data };
               }
+            } else if (chunk.type === 'analysis') {
+              capturedLeftBrainAnalysis = chunk.data;
             }
           }
         } catch (err: any) {
@@ -1842,7 +1846,11 @@ ${researchResult.insight}
           const hasNewGateEvents = updatedCompletedEvents.length > (completedEvents?.length ?? 0);
           const hasTransitionSignal = aiPhaseSignal && aiPhaseSignal !== 'STAY';
           
-          if (hasNewGateEvents || hasTransitionSignal) {
+          // 🆕 v60: 좌뇌 pacing_meta 도 재판단 트리거
+          const lbPacing = capturedLeftBrainAnalysis?.pacing_meta;
+          const hasPacingTransition = lbPacing && (lbPacing.phase_transition_recommendation === 'JUMP' || lbPacing.phase_transition_recommendation === 'WRAP');
+
+          if (hasNewGateEvents || hasTransitionSignal || hasPacingTransition) {
             const reCheckCtx: PhaseContext = {
               ...phaseCtx,
               currentPhase: newPhaseV2,
@@ -1850,6 +1858,13 @@ ${researchResult.insight}
               lastEventTurn: updatedLastEventTurn,
               phaseStartTurn: updatedPhaseStartTurn,
               phaseSignal: aiPhaseSignal,
+              // 🆕 v60: 좌뇌 pacing_meta 직접 전달
+              pacingMeta: lbPacing ? {
+                pacing_state: lbPacing.pacing_state,
+                phase_transition_recommendation: lbPacing.phase_transition_recommendation,
+                direct_question_suggested: lbPacing.direct_question_suggested,
+                luna_meta_thought: lbPacing.luna_meta_thought,
+              } : null,
             };
             const reCheckedPhase = PhaseManager.getCurrentPhase(reCheckCtx);
             if (reCheckedPhase !== newPhaseV2) {

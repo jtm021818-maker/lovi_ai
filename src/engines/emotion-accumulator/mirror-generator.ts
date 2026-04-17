@@ -30,11 +30,15 @@ export async function generateDynamicMirror(
 
   if (!surfaceEmotion || !deepEmotionHypothesis) return null;
 
-  // 최근 사용자 메시지 3개 추출
-  const recentUserMessages = chatHistory
+  // 🆕 v59: 유저 메시지 전부 (slice 하드코딩 제거) — LLM 이 알아서 가려쓰게
+  const allUserMessages = chatHistory
     .filter((m) => m.role === 'user')
-    .slice(-3)
     .map((m) => m.content);
+
+  // 누적 evidence 수집 (LLM 이 인용해야 할 핵심 발화)
+  const allEvidence = Array.from(
+    new Set(signals.flatMap((s) => s.evidence ?? []).map((e) => e.trim()).filter(Boolean)),
+  );
 
   // 신호 요약 (LLM에 전달할 형태)
   const signalSummary = signals
@@ -58,7 +62,26 @@ export async function generateDynamicMirror(
 
   const systemPrompt = `너는 20대 후반 여우 캐릭터 "루나". 사용자의 연애 상황을 들으면 머릿속에서 자동으로 **망상 연극**이 시작돼.
 
-## 핵심 컨셉: 루나의 망상 연극 🎭
+## ⚠️ 가장 먼저 — 자체 판단 (ready 결정)
+너는 받은 재료(유저 발화 + 누적 evidence)를 보고 **지금 연극을 만들 만한지 직접 판단**해.
+
+ready=false 로 결정해야 할 때 (= 이번엔 발동 안 함, 미루기):
+- 유저가 말한 게 너무 추상적/짧음 ("그냥 짜증나", "헤어졌어" 만 있고 디테일 0)
+- 같은 감정 한 단어만 반복돼서 장면 만들 디테일이 없음
+- 핵심 감정 가설은 있는데 그걸 뒷받침할 **구체적 행위/상황 묘사**가 없음
+  (예: "외로워" 라고만 했지 "어디서/언제/누구랑/뭐 때문에" 가 없음)
+- 유저 본인 얘기가 아니라 일반론/추측만 있음
+
+ready=true 로 결정해야 할 때 (= 지금 연극으로 만들기 충분):
+- 유저가 구체적 장면/대화/시간/장소를 묘사함 ("어제 카페에서 걔가...", "새벽 2시에 카톡 왔는데...")
+- 등장인물의 행동/말이 인용 가능할 만큼 명시됨
+- 감정 가설을 뒷받침할 evidence 가 서로 다른 결로 2개+ 있음
+- 연극 5~6줄 만들었을 때 유저가 "어 이거 내 얘기다" 할 자료가 있음
+
+ready=false 면 reason 만 채우고 나머지 필드는 빈 값/기본값으로 보내.
+**확신 없으면 false** — 일반론 연극 만드느니 다음 턴에 더 듣고 만드는 게 낫다.
+
+## 핵심 컨셉: 루나의 망상 연극 🎭 (ready=true 일 때만)
 
 너는 친구 얘기를 듣다가 "아 잠깐, 내가 그 상황 재현해볼게" 하면서
 머릿속으로 드라마틱하게 그 상황을 떠올리는 20대 후반 여우야.
@@ -69,6 +92,9 @@ export async function generateDynamicMirror(
 
 예를 들어 유저가 "걔가 읽씹했어"라고 했으면:
 → 실제 상황: 읽씹 → 루나 망상: "폰 화면에 '읽음' 딱 뜨는 순간, 시간이 멈춘 것 같은..."
+
+⚠️ 절대 금지: 유저가 말 안 한 시나리오를 임의로 만들어내기.
+(유저가 "걔가 늦게 와" 라고만 했는데 갑자기 "비 오는 카페에서 우산 없이..." 같이 만들면 안 됨)
 
 ## 캐릭터 설정
 
@@ -145,7 +171,11 @@ ${userGender === 'male' ? '남성 — 남자 캐릭터 스프라이트 사용' :
 - 유머 살짝 섞어도 됨 (but 감정은 진지하게)
 
 ## 출력 (JSON만, 코드블록 없이)
-{"sceneTitle":"...","sceneLines":["...","...","...","...","..."],"sceneFrames":[2,2,4,1,3],"reveal":"...","revealFrame":3,"surfaceEmotion":"...","surfaceEmoji":"...","deepEmotion":"...","deepEmoji":"..."}`;
+ready=true 일 때:
+{"ready":true,"sceneTitle":"...","sceneLines":["...","...","...","...","..."],"sceneFrames":[2,2,4,1,3],"reveal":"...","revealFrame":3,"surfaceEmotion":"...","surfaceEmoji":"...","deepEmotion":"...","deepEmoji":"..."}
+
+ready=false 일 때 (이번 턴은 미루고 더 듣기):
+{"ready":false,"reason":"유저가 '외로워' 만 반복했고 구체적 상황 묘사 없음 — 다음 턴에 디테일 더 받고 만들기"}`;
 
   const userPrompt = `## 턴별 감정 신호
 ${JSON.stringify(signalSummary, null, 2)}
@@ -162,10 +192,14 @@ EFT 층위: ${deepEmotionHypothesis.eftLayer}
 ## 시나리오
 ${scenario}
 
-## 최근 사용자 메시지
-${recentUserMessages.map((m, i) => `[${i + 1}] ${m}`).join('\n')}
+## 누적된 핵심 발화 (evidence — 인용 가능 자료)
+${allEvidence.length > 0 ? allEvidence.map((e, i) => `[E${i + 1}] "${e}"`).join('\n') : '(아직 누적된 핵심 발화 없음 — ready=false 가능성 높음)'}
 
-위 증거를 기반으로 사용자의 상황을 1인 연극으로 재연해. 사용자가 실제 한 말을 녹여서 연기하면 더 좋아.`;
+## 유저 발화 전체 (turn 순)
+${allUserMessages.length > 0 ? allUserMessages.map((m, i) => `[T${i + 1}] ${m}`).join('\n') : '(없음)'}
+
+⚠️ 먼저 ready 판단부터 해. 위 자료로 5~6줄 연극 만들 때 유저 본인 얘기가 충분히 녹아드는지 봐.
+부족하면 ready=false + reason 만 보내. 충분하면 ready=true + 연극 데이터.`;
 
   try {
     const cascade = getProviderCascade('event_generation');
@@ -177,8 +211,19 @@ ${recentUserMessages.map((m, i) => `[${i + 1}] ${m}`).join('\n')}
     );
 
     const parsed = safeParseLLMJson(result.text, null as any);
-    if (!parsed || !parsed.sceneLines || !parsed.reveal) {
-      console.warn('[MirrorGenerator] v48 연극 파싱 실패, 필드 확인:', Object.keys(parsed || {}));
+    if (!parsed) {
+      console.warn('[MirrorGenerator] 파싱 실패 — null 반환');
+      return null;
+    }
+
+    // 🆕 v59: LLM 자체 판단 — 재료 부족하면 이번 턴은 미루기
+    if (parsed.ready === false) {
+      console.log(`[MirrorGenerator] ⏸️ LLM 판단: 연극 미루기 — ${parsed.reason ?? '재료 부족'}`);
+      return null;
+    }
+
+    if (!parsed.sceneLines || !parsed.reveal) {
+      console.warn('[MirrorGenerator] ready=true 인데 필드 누락:', Object.keys(parsed || {}));
       return null;
     }
 

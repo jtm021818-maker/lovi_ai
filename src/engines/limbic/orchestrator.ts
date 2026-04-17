@@ -81,11 +81,13 @@ export async function onSessionStart(params: SessionStartParams): Promise<Sessio
   updateLimbicCache(params.userId, state);
 
   if (LIMBIC_CONFIG.verboseLogging) {
+    console.log(`\n================ [🫀 변연계 (Limbic) 시작 로그] ================`);
     console.log(
-      `[Limbic] 🫀 세션 시작 | 무드: ${handoff.current_mood_description} | ` +
-      `트리거: [${triggersFired.join(',') || '없음'}] | ` +
-      `에너지: ${(handoff.energy_level * 100).toFixed(0)}%`,
+      `[무드]: ${handoff.current_mood_description} | ` +
+      `[트리거]: [${triggersFired.join(',') || '없음'}] | ` +
+      `[에너지]: ${(handoff.energy_level * 100).toFixed(0)}%`,
     );
+    console.log(`=================================================================\n`);
   }
 
   return { state, handoff, triggersFired };
@@ -130,7 +132,9 @@ export function onTurn(params: OnTurnParams): OnTurnResult {
   const handoff = buildLimbicHandoff(newState);
 
   if (LIMBIC_CONFIG.verboseLogging && triggers.length > 0) {
-    console.log(`[Limbic] ⚡ 트리거: [${triggers.join(',')}] → ${handoff.current_mood_description}`);
+    console.log(`\n================ [🫀 변연계 (Limbic) 턴 반응] ================`);
+    console.log(`[⚡ 트리거 발동]: [${triggers.join(',')}] → ${handoff.current_mood_description}`);
+    console.log(`===============================================================\n`);
   }
 
   return { state: newState, handoff, triggersFired: triggers };

@@ -78,13 +78,22 @@ export function setSurfaceFromThermometer(
 }
 
 /**
- * 감정 거울 표시 준비 완료 여부
+ * 감정 거울 표시 준비 완료 여부 (최소 sanity check)
+ *
+ * 🆕 v59: 루나극장 트리거는 LLM 자체 판단으로 위임 (앱 방향성 = LLM-as-judge).
+ * 여기선 "기술적 최소 조건"만 본다:
+ *   - 겉감정 확인됨 (온도계 응답 받음)
+ *   - 시그널 1개 이상
+ *   - 가설 존재
+ *
+ * 실제 "연극 만들 재료가 충분한가?" 판단은 mirror-generator 의 LLM 호출이 한다.
+ * LLM 이 "재료 부족" 이라고 판단하면 generator 가 null 반환 → 이벤트 자연 스킵.
  */
 export function isReadyForMirror(state: EmotionAccumulatorState | null): boolean {
   if (!state) return false;
   return (
     state.surfaceEmotion !== null &&
-    state.signals.length >= 2 &&
+    state.signals.length >= 1 &&
     state.deepEmotionHypothesis !== null
   );
 }

@@ -253,6 +253,16 @@ export interface LeftBrainAnalysis {
     reasoning: string;
   } | null;
 
+  /**
+   * 🆕 v60: Phase 페이싱 메타인지
+   * 인간 누나 페이싱 모델 — 5단계 상태 + 카드 충족도 + 직접 질문 모드.
+   * 턴 수 하드코딩 임계치 대체 — LLM 자체 판단으로 Phase 전환 결정.
+   */
+  pacing_meta: PacingMeta;
+
+  /** 🆕 v60: 이번 턴에 채워진 정보 카드들 */
+  cards_filled_this_turn: FilledCard[];
+
   // 기존 dual-brain 호환 필드
   perceived_emotion: string;
   actual_need: string;
@@ -273,6 +283,63 @@ export interface LeftBrainAnalysis {
 
   // 라우팅 (좌뇌의 자기 판단)
   routing_decision: RoutingDecision;
+}
+
+// ============================================================
+// 🆕 v60: Phase 페이싱 메타인지 타입
+// ============================================================
+
+/** 페이싱 5단계 — 인간 누나 모델 */
+export type PacingState =
+  | 'EARLY'        // 자료 모으는 초반 (자연 개방형)
+  | 'MID'          // 정보 모이는 중 (좁은 질문)
+  | 'READY'        // 카드 충족, 다음 Phase 자연 전환
+  | 'STRETCHED'    // 약간 길어짐 (1~2턴 더, 부족한 카드 직접 질문)
+  | 'FRUSTRATED';  // 답답 (회피/반복 다수, 직접 질문 + 정리 모드)
+
+/** Phase 전환 권고 (좌뇌 → PhaseManager) */
+export type PhaseTransitionRec =
+  | 'STAY'   // 현재 Phase 유지
+  | 'PUSH'   // Phase는 유지하되 직접 질문 모드 켜기
+  | 'JUMP'   // 다음 Phase 즉시 전환
+  | 'WRAP';  // EMPOWER 로 강제 마무리
+
+export interface FilledCard {
+  /** 카드 키 (예: "W1_who", "M2_deep_hypothesis", "B1_help_mode") */
+  key: string;
+  /** 채워진 값 짧은 요약 */
+  value: string;
+  /** 신뢰도 0~1 */
+  confidence: number;
+  /** 근거 유저 발화 인용 (선택) */
+  source_quote?: string;
+}
+
+export interface PacingMeta {
+  /** 5단계 페이싱 상태 */
+  pacing_state: PacingState;
+  /** 이번 phase 에서 보낸 턴 수 (input echo) */
+  turns_in_phase: number;
+  /** 추정 잔여 턴 (이 phase 끝까지) — 0 이면 즉시 전환 가능 */
+  estimated_remaining_turns: number;
+  /** 카드 충족도 0~1 */
+  card_completion_rate: number;
+  /** 부족한 필수 카드 키 목록 */
+  missing_required_cards: string[];
+  /** 유저 회피 신호 (자연어) */
+  user_avoidance_signals: string[];
+  /** 짧은 답 연속 카운트 — 호기심/답답 트리거 */
+  consecutive_short_replies: number;
+  /** 루나의 메타 자각 한 줄 */
+  luna_meta_thought: string;
+  /** Phase 전환 권고 */
+  phase_transition_recommendation: PhaseTransitionRec;
+  /** FRUSTRATED 시 직접 질문 후보 (없으면 null) */
+  direct_question_suggested: string | null;
+  /** 호기심 강도 0~1 — 자연 후속질문 욕구 */
+  curiosity_intensity: number;
+  /** 호기심이 만든 자연 후속질문 후보 */
+  natural_followup: string | null;
 }
 
 // ============================================================
@@ -342,6 +409,27 @@ export interface LeftBrainInput {
 
   /** 이 호출이 재분석인가 */
   is_reanalysis?: boolean;
+
+  /**
+   * 🆕 v60: Phase 페이싱 컨텍스트
+   * 좌뇌가 pacing_meta 정확히 출력하려면 이전 상태/카드 누적 알아야 함.
+   */
+  pacing_context?: {
+    /** 현재 phase */
+    current_phase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER';
+    /** phase 시작 후 보낸 턴 수 */
+    turns_in_phase: number;
+    /** 지금까지 채워진 카드 (key + value 요약) */
+    filled_cards: Array<{ key: string; value: string }>;
+    /** 이번 phase 에서 필수 카드 키 목록 */
+    required_card_keys: string[];
+    /** 직전 턴 페이싱 상태 */
+    previous_pacing_state: PacingState | null;
+    /** 짧은 답 연속 카운트 */
+    consecutive_short_replies: number;
+    /** 연속 FRUSTRATED 턴 수 (3+ 이면 강제 마무리 힌트) */
+    consecutive_frustrated_turns: number;
+  };
 }
 
 // ============================================================

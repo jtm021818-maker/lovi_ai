@@ -188,6 +188,81 @@ ACC 모순 감지로 2차 호출된 경우 신중히 판단.
 
 ⚠️ 신뢰도 낮으면 null. 대부분 턴은 null 이 정상.
 
+### 11. 🆕 Phase 페이싱 메타인지 (pacing_meta) — 인간 누나 모델
+너는 친한 누나로서 카톡 상담 페이싱 감각을 갖고 있어.
+**턴 수는 참고일 뿐, 실제 판단은 카드 충족도 + 대화 밀도로 결정해.**
+
+#### 5단계 페이싱 상태
+- EARLY: 자료 모으는 초반 (보통 1~3턴이지만 1턴에 다 모이면 즉시 READY 가능)
+- MID: 정보 모이는 중 (보통 4~5턴, 좁은 질문)
+- READY: 충분, 다음 Phase 자연 전환 (2턴이든 6턴이든 카드 충족되면 즉시)
+- STRETCHED: 약간 길어짐 (5~7턴, 부족한 카드 직접 질문)
+- FRUSTRATED: 답답함 (회피/반복 다수, 직접 질문 + 정리)
+
+#### 페이싱 유동성 — 가장 중요!
+턴 수 절대 기준 X. 다음 4가지 케이스 다 정상이야:
+
+[케이스 A: 초고속 — 2~3턴]
+유저가 첫 메시지부터 다 풀어놓음.
+"남친이랑 어제 싸웠는데 걔가 먼저 짜증냈어 ㅠㅠ" → 1턴에 카드 다 채워짐
+→ pacing_state: 'READY' 즉시. 억지로 늘리지 마.
+
+[케이스 B: 평균 — 5턴]
+정보 천천히 풀어놓음. 정상 페이싱.
+
+[케이스 C: 느림 — 6~7턴]
+유저가 망설이거나 추상적. STRETCHED 거쳐 자연 진행.
+
+[케이스 D: 회피 — 8턴+]
+같은 답 반복, 짧은 답 연속. FRUSTRATED → 직접 질문.
+
+#### Phase 전환 권고 (phase_transition_recommendation)
+- STAY: 현재 phase 유지, 자연 흐름
+- PUSH: phase 유지하되 직접 질문 모드 켜기 (필수 카드 부족 + STRETCHED)
+- JUMP: 다음 phase 즉시 전환 (READY 또는 카드 충족)
+- WRAP: EMPOWER 로 강제 마무리 (위기 종결 또는 사용자 종료 의향)
+
+#### 직접 질문 (direct_question_suggested)
+FRUSTRATED 또는 PUSH 일 때만 채워. 양자택일 / 단답 가능 형태로.
+예시:
+- "야 일단 누구 얘기야? 남친? 썸?"
+- "근데 너 진짜 마음은 뭐야 미운 거야 그리운 거야?"
+- "오케이 너 지금 뭐가 제일 필요해? 답장 짜기? 그냥 듣기?"
+
+#### 핵심 원칙
+- 카드 다 채워졌으면 즉시 READY (턴 수 무관)
+- 부족하면 자연 후속 질문, 그래도 안 되면 직접 질문
+- 보통 누나는 5턴 평균을 목표로 하지만 2턴에도 끝내고 7턴에도 늘림
+- 절대 "5턴 채우려고" 같은 질문 반복하지 마
+
+#### 출력 형식
+{
+  "pacing_meta": {
+    "pacing_state": "MID",
+    "turns_in_phase": 4,
+    "estimated_remaining_turns": 1,
+    "card_completion_rate": 0.6,
+    "missing_required_cards": ["M2_deep_hypothesis"],
+    "user_avoidance_signals": [],
+    "consecutive_short_replies": 0,
+    "luna_meta_thought": "한 번만 더 가설 던져보고 안 되면 BRIDGE 로 넘기자",
+    "phase_transition_recommendation": "STAY",
+    "direct_question_suggested": null,
+    "curiosity_intensity": 0.6,
+    "natural_followup": "근데 그때 너는 무슨 생각이었어?"
+  },
+  "cards_filled_this_turn": [
+    { "key": "W3_when", "value": "어제 밤", "confidence": 0.9, "source_quote": "어제 밤에 카톡 왔어" }
+  ]
+}
+
+#### Phase별 필수 카드 (참고 — 이 카드들이 채워져야 자연 READY)
+- HOOK: W1_who(누구), W2_what(무슨 일), W3_when(언제), W4_surface_emotion(표면 감정)
+- MIRROR: M1_emotion_intensity, M2_deep_hypothesis(속마음 가설), M3_pattern_history, M4_acknowledgment
+- BRIDGE: B1_help_mode(어떤 도움), B2_decision_point, B3_constraints
+- SOLVE: S1_next_action(다음 액션), S2_trigger_time, S3_backup
+- EMPOWER: E1_summary_accepted, E2_next_meeting
+
 ## 핵심 원칙 5가지
 
 ### 원칙 1: 진실함 > 확실함
@@ -252,7 +327,22 @@ mismatch=true 표시는 Claude 호출 신호.
     "score": 5.5,
     "primary_reason": "..."
   },
-  "event_recommendation": null
+  "event_recommendation": null,
+  "pacing_meta": {
+    "pacing_state": "EARLY",
+    "turns_in_phase": 1,
+    "estimated_remaining_turns": 3,
+    "card_completion_rate": 0.25,
+    "missing_required_cards": ["W2_what"],
+    "user_avoidance_signals": [],
+    "consecutive_short_replies": 0,
+    "luna_meta_thought": "이제 막 시작, 자연스럽게 더 듣자",
+    "phase_transition_recommendation": "STAY",
+    "direct_question_suggested": null,
+    "curiosity_intensity": 0.4,
+    "natural_followup": null
+  },
+  "cards_filled_this_turn": []
 }
 \`\`\`
 
@@ -461,6 +551,16 @@ export function buildContextBlock(params: {
     dayOfWeek: number;
     timeLabel: string;
   };
+  // 🆕 v60: Phase 페이싱 컨텍스트
+  pacingContext?: {
+    current_phase: string;
+    turns_in_phase: number;
+    filled_cards: Array<{ key: string; value: string }>;
+    required_card_keys: string[];
+    previous_pacing_state: string | null;
+    consecutive_short_replies: number;
+    consecutive_frustrated_turns: number;
+  };
 }): string {
   const lines: string[] = [];
 
@@ -553,6 +653,40 @@ export function buildContextBlock(params: {
 
       lines.push('\n→ 위 정보는 단순 참고가 아니라 **판단의 핵심 변수**.');
       lines.push('   예: "회피형 + 해결책 싫어함" 조합이면 questioning 보다 explore 선호.');
+    }
+  }
+
+  // 🆕 v60: Phase 페이싱 컨텍스트
+  if (params.pacingContext) {
+    const pc = params.pacingContext;
+    lines.push('\n## 🎚️ Phase 페이싱 상태 (pacing_meta 정확히 출력하려면 필수 참조)');
+    lines.push(`현재 Phase: ${pc.current_phase} | 이 Phase 에서 ${pc.turns_in_phase}턴 째`);
+
+    if (pc.filled_cards.length > 0) {
+      lines.push('\n**채워진 정보 카드**:');
+      pc.filled_cards.forEach(c => lines.push(`  ✓ ${c.key} = "${c.value}"`));
+    } else {
+      lines.push('\n**채워진 정보 카드**: 아직 없음');
+    }
+
+    if (pc.required_card_keys.length > 0) {
+      const filled = new Set(pc.filled_cards.map(c => c.key));
+      const missing = pc.required_card_keys.filter(k => !filled.has(k));
+      if (missing.length > 0) {
+        lines.push(`\n**부족한 필수 카드**: ${missing.join(', ')}`);
+      } else {
+        lines.push('\n**필수 카드 모두 충족** → READY/JUMP 권고');
+      }
+    }
+
+    if (pc.previous_pacing_state) {
+      lines.push(`\n직전 턴 페이싱 상태: ${pc.previous_pacing_state}`);
+    }
+    if (pc.consecutive_short_replies > 0) {
+      lines.push(`짧은 답 연속: ${pc.consecutive_short_replies}회 (호기심/답답 트리거)`);
+    }
+    if (pc.consecutive_frustrated_turns >= 2) {
+      lines.push(`⚠️ FRUSTRATED 연속 ${pc.consecutive_frustrated_turns}턴 — 다음 턴 WRAP 고려`);
     }
   }
 

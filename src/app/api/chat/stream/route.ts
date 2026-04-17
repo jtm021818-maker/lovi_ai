@@ -466,6 +466,8 @@ export async function POST(req: NextRequest) {
               // 🆕 v36: 루나 인사이트 태그 제거 (텍스트 버블에 노출 방지)
               chunk = chunk.replace(/\[SITUATION_READ:[^\]]*\]/g, '');
               chunk = chunk.replace(/\[LUNA_THOUGHT:[^\]]*\]/g, '');
+              chunk = chunk.replace(/\[PHASE_SIGNAL:[^\]]*\]/g, '');
+              chunk = chunk.replace(/\[SITUATION_CLEAR:[^\]]*\]/g, '');
               // 🆕 v42: 빈 대괄호 [] 제거 (선택지 제거 후 남은 잔해)
               chunk = chunk.replace(/\[\s*\]/g, '');
               if (!chunk.trim()) break; // 제거 후 빈 문자열이면 스킵

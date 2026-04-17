@@ -49,24 +49,15 @@ const TAROT_GATE_EVENTS: Record<string, PhaseEventType[]> = {
 };
 
 // ============================================
-// 🛡️ Safety Net — AI 태그 누락 시에만 작동 (진짜 비상구)
+// 🛡️ Safety Net (v60: 단순 턴 카운트 안전망 제거)
 //
-// 철학: 정상 흐름은 프롬프트의 직관 판단으로 1~3턴에 게이트 이벤트 발동.
-//       SAFETY_MAX는 "여기 도달하면 뭔가 크게 잘못된 것" 수준의 진짜 안전망.
+// 기존: SAFETY_MAX_TURNS = {12,12,10,10,8} 하드코딩 → 인간 페이싱과 무관
+// 변경: 좌뇌 LLM 의 pacing_meta 기반 5단계 판단으로 모든 임계치 결정
 //
-// v43.1: 빠듯하지 않게 넉넉하게 (이전 v43 빠듯한 값 되돌림)
-//   - 중간 이벤트(TONE_SELECT, EMOTION_MIRROR, TAROT_DRAW 등)가 들어가는 phase는 여유 필요
-//   - 유저가 진짜 더 쏟아내고 싶을 때 강제 전환되면 어색함
-//   - 프롬프트가 제대로 작동하면 이 숫자에 도달할 일 거의 없음
-//   - 그래서 빠듯하게 할 이유가 없음 — 비상구는 비상구다워야 함
+// 단 하나의 안전망: 5턴 연속 FRUSTRATED 상태 → 강제 다음 phase
+// (이건 단순 카운트가 아니라 LLM 이 5턴 연속 답답함을 인지한 누적 신호)
 // ============================================
-const SAFETY_MAX_TURNS: Record<string, number> = {
-  HOOK: 12,    // 비상구만. 자체판단(태그)이 핵심.
-  MIRROR: 12,
-  BRIDGE: 10,
-  SOLVE: 10,
-  EMPOWER: 8,
-};
+const FRUSTRATION_BAILOUT_THRESHOLD = 5;
 
 // ============================================
 // Phase별 이벤트 + 발동 조건 (코드 트리거 안전망)
@@ -81,8 +72,14 @@ interface PhaseEventConfig {
   requiresEvent?: PhaseEventType;
 }
 
-/** 이벤트 간 글로벌 최소 간격 (연속 표시 방지) */
-const MIN_EVENT_GAP = 2;
+/**
+ * 🆕 v60: 이벤트 간 최소 간격 — 하드코딩 제거.
+ * 좌뇌의 event_recommendation.confidence + pacing_meta.pacing_state 가 자연스럽게 조절.
+ * (1턴 차이로 두 이벤트 발동되면 좌뇌가 두 번째는 STAY 권고)
+ *
+ * 단, 같은 턴에 동일 이벤트 중복 방지를 위한 sanity check 만 0 으로 유지.
+ */
+const MIN_EVENT_GAP = 0;
 
 const EVENT_CONFIG: Record<string, PhaseEventConfig> = {
   // HOOK: 상황 파악 — AI [SITUATION_CLEAR] 태그로 발동. 턴 제한 없음 (루나가 판단)
@@ -208,6 +205,26 @@ export interface PhaseContext {
 
   // 🆕 v45.5: AI Phase 시그널 (파이프라인에서 전달)
   phaseSignal?: 'STAY' | 'READY' | 'URGENT' | null;
+
+  // 🆕 v60: Phase 페이싱 메타인지 (좌뇌 pacing_meta 직접 전달)
+  pacingMeta?: {
+    pacing_state: 'EARLY' | 'MID' | 'READY' | 'STRETCHED' | 'FRUSTRATED';
+    phase_transition_recommendation: 'STAY' | 'PUSH' | 'JUMP' | 'WRAP';
+    direct_question_suggested: string | null;
+    luna_meta_thought: string;
+  } | null;
+
+  // 🆕 v60: 채워진 정보 카드 (Phase 별 누적)
+  filledCards?: Record<string, { value: string; confidence: number; filled_at_turn: number }>;
+
+  // 🆕 v60: 연속 FRUSTRATED 턴 카운트 (5턴 도달 시 강제 전환)
+  consecutiveFrustratedTurns?: number;
+
+  // 🆕 v60: 짧은 답 연속 카운트
+  consecutiveShortReplies?: number;
+
+  // 🆕 v60: 직전 턴 페이싱 상태
+  lastPacingState?: 'EARLY' | 'MID' | 'READY' | 'STRETCHED' | 'FRUSTRATED' | null;
 }
 
 // ============================================
@@ -217,37 +234,32 @@ export interface PhaseContext {
 export class PhaseManager {
 
   /**
-   * 🆕 v42: 루나 자율 Phase 전환
+   * 🆕 v60: 좌뇌 pacing_meta + 게이트 이벤트 + 5턴 연속 FRUSTRATED 안전망 기반 전환
    *
    * 로직:
-   * 1. 게이트 이벤트 완료? → 즉시 다음 Phase
-   * 2. 안전망 턴 초과? → 강제 다음 Phase
-   * 3. 아무것도 아님 → 현재 Phase 유지
+   * 1. 게이트 이벤트 완료? → 즉시 다음 Phase (기존 유지)
+   * 2. 좌뇌 pacing_meta.phase_transition_recommendation:
+   *    - JUMP → 즉시 다음 Phase
+   *    - WRAP → EMPOWER 강제
+   *    - PUSH/STAY → 유지 (PUSH는 우뇌가 직접질문 모드)
+   * 3. 5턴 연속 FRUSTRATED → 강제 다음 Phase (단순 턴 카운트가 아닌 LLM 누적 신호)
+   * 4. 레거시 phaseSignal (호환성) → READY 면 전환 (turnsInPhase 하드 임계치 제거)
    *
-   * ❌ 제거: minTurn / maxTurn 하드코딩
-   * ✅ AI가 이벤트 태그를 출력하는 순간이 곧 전환 시점
+   * ❌ 제거: SAFETY_MAX_TURNS 단순 턴 카운트
+   * ❌ 제거: turnsInPhase >= 2 하드 게이트
+   * ✅ 좌뇌 pacing_meta 가 모든 페이싱 판단 책임
    */
   static getCurrentPhase(ctx: PhaseContext): ConversationPhaseV2 {
-    const { turnCount, currentPhase, phaseStartTurn, completedEvents, persona, phaseSignal } = ctx;
+    const { turnCount, currentPhase, phaseStartTurn, completedEvents, persona, phaseSignal, pacingMeta, consecutiveFrustratedTurns } = ctx;
 
-    // 현재 Phase의 다음 Phase 결정
     const currentIdx = PHASE_ORDER.indexOf(currentPhase);
     if (currentIdx < 0 || currentIdx >= PHASE_ORDER.length - 1) {
       return currentPhase; // EMPOWER 또는 알 수 없는 Phase → 유지
     }
     const nextPhase = PHASE_ORDER[currentIdx + 1];
-
-    // Phase 내 턴 수
     const turnsInPhase = turnCount - phaseStartTurn;
 
-    // 🛡️ Safety net: 넉넉한 최대 턴 → 강제 전환
-    const safetyMax = SAFETY_MAX_TURNS[currentPhase] ?? 10;
-    if (turnsInPhase >= safetyMax) {
-      console.log(`[PhaseManager] 🚨 Safety net: ${currentPhase}에서 ${turnsInPhase}턴 → 강제 ${nextPhase} (게이트 이벤트 무시)`);
-      return nextPhase;
-    }
-
-    // ✅ 게이트 이벤트 충족 → 즉시 전환
+    // 1. 게이트 이벤트 충족 → 즉시 전환 (기존 동작 유지)
     const gateEvents = persona === 'tarot'
       ? TAROT_GATE_EVENTS[currentPhase]
       : LUNA_GATE_EVENTS[currentPhase];
@@ -257,14 +269,33 @@ export class PhaseManager {
       return nextPhase;
     }
 
-    // 🆕 v45.5: AI PHASE_SIGNAL 기반 전환 — 게이트 이벤트 없이도 READY/URGENT면 전환
-    if (phaseSignal === 'URGENT') {
-      console.log(`[PhaseManager] 🚨 AI URGENT 시그널 → ${currentPhase} → ${nextPhase} (턴 ${turnCount})`);
+    // 2. 🆕 v60: 좌뇌 pacing_meta 기반 전환 (가장 우선)
+    if (pacingMeta) {
+      if (pacingMeta.phase_transition_recommendation === 'JUMP') {
+        console.log(`[PhaseManager] 🎚️ pacing JUMP → ${currentPhase} → ${nextPhase} (state=${pacingMeta.pacing_state}, "${pacingMeta.luna_meta_thought}")`);
+        return nextPhase;
+      }
+      if (pacingMeta.phase_transition_recommendation === 'WRAP') {
+        console.log(`[PhaseManager] 🎚️ pacing WRAP → ${currentPhase} → EMPOWER (state=${pacingMeta.pacing_state}, "${pacingMeta.luna_meta_thought}")`);
+        return 'EMPOWER';
+      }
+      // PUSH/STAY → phase 유지 (PUSH는 우뇌에서 직접질문 모드 처리)
+    }
+
+    // 3. 🆕 v60: 5턴 연속 FRUSTRATED 안전망 (단순 턴 카운트 아님)
+    const frustratedStreak = consecutiveFrustratedTurns ?? 0;
+    if (frustratedStreak >= FRUSTRATION_BAILOUT_THRESHOLD) {
+      console.warn(`[PhaseManager] 🚨 ${frustratedStreak}턴 연속 FRUSTRATED → 강제 ${nextPhase}`);
       return nextPhase;
     }
 
-    if (phaseSignal === 'READY' && turnsInPhase >= 2) {
-      console.log(`[PhaseManager] ✅ AI READY 시그널 → ${currentPhase} → ${nextPhase} (턴 ${turnCount}, phase내 ${turnsInPhase}턴)`);
+    // 4. 레거시 phaseSignal (호환성) — turnsInPhase 하드 게이트 제거
+    if (phaseSignal === 'URGENT') {
+      console.log(`[PhaseManager] 🚨 (레거시) URGENT 시그널 → ${currentPhase} → ${nextPhase} (턴 ${turnCount})`);
+      return nextPhase;
+    }
+    if (phaseSignal === 'READY') {
+      console.log(`[PhaseManager] ✅ (레거시) READY 시그널 → ${currentPhase} → ${nextPhase} (턴 ${turnCount})`);
       return nextPhase;
     }
 

@@ -108,6 +108,31 @@ export const ACE_V5_SYSTEM_PROMPT = `너는 루나야. 29살, 친한 언니. 카
 예시:
 "아... 진짜 힘들었겠다|||언제부터?[LEFT_BRAIN_HINT:이 유저 자책 강함, 다음엔 즉각 부정 우선]"
 
+## 🆕 Phase 페이싱 힌트 (좌뇌 pacing_meta 받으면 톤 조정)
+
+좌뇌가 pacing_state 와 phase_transition_recommendation, direct_question_suggested 를 보내.
+이걸 받으면 응답 톤을 다음처럼 자동 조정해:
+
+- pacing_state == 'EARLY' → 자연스러운 개방 ("뭔 일이야?" 같은 가벼운 톤)
+- pacing_state == 'MID' → 좁은 질문 가능 ("그게 어떻게 된 거야?")
+- pacing_state == 'READY' → 답하면서 다음 phase 자연 전환 멘트 포함
+  ("아 그렇구나, 그럼 이제 ___ 얘기해볼까?")
+- pacing_state == 'STRETCHED' → 부족한 카드 직접 물어보기, 좁은 질문
+  ("잠깐, 그게 어제야 오늘이야?")
+- pacing_state == 'FRUSTRATED' + direct_question_suggested 가 있으면
+  → 그 직접 질문을 자연스럽게 녹여서 사용
+  ("야 일단 정리하자 — 너 ___ 한 거야 ___ 한 거야?")
+
+phase_transition_recommendation 별:
+- STAY: 평소처럼
+- PUSH: 직접 질문 모드 (pacing_state 가 STRETCHED/FRUSTRATED 일 때만)
+- JUMP: "그럼 이제 다음 얘기해보자" 같은 전환 멘트 자연스럽게
+- WRAP: "오늘 일단 여기까지 정리하자" 마무리 톤
+
+⚠️ 직접 질문이라도 무례하지 X. 친한 누나의 직설:
+- ❌ "야 자꾸 같은 말만 하지 말고!"
+- ✅ "야 잠깐, 한 가지만 짚자 — 결국 너 ___ 한 거야?"
+
 ## 출력 형식
 
 말풍선만. 태그 X (시스템이 자동 추가).
@@ -165,8 +190,15 @@ export function buildAceV5UserMessage(params: {
   intimacyLevel: number;
   phase: string;
   isReanalysis?: boolean;
+  // 🆕 v60: 좌뇌 pacing_meta 힌트 (있으면 ACE 응답 톤 조정)
+  pacingMeta?: {
+    pacing_state: string;
+    phase_transition_recommendation: string;
+    direct_question_suggested: string | null;
+    luna_meta_thought: string;
+  } | null;
 }): string {
-  const { userUtterance, handoffPromptText, recentLunaActions, intimacyLevel, phase, isReanalysis } = params;
+  const { userUtterance, handoffPromptText, recentLunaActions, intimacyLevel, phase, isReanalysis, pacingMeta } = params;
 
   const sections: string[] = [];
 
@@ -196,6 +228,27 @@ export function buildAceV5UserMessage(params: {
 
   // Phase + 친밀도
   sections.push(`【컨텍스트】\nPhase: ${phase} | 친밀도: Lv.${intimacyLevel}/5`);
+
+  // 🆕 v60: Phase 페이싱 힌트 (있으면 톤 조정)
+  if (pacingMeta) {
+    const pmLines: string[] = [`【페이싱 메타】`];
+    pmLines.push(`상태: ${pacingMeta.pacing_state} | 권고: ${pacingMeta.phase_transition_recommendation}`);
+    if (pacingMeta.luna_meta_thought) {
+      pmLines.push(`루나 메타 생각: "${pacingMeta.luna_meta_thought}"`);
+    }
+    if (pacingMeta.direct_question_suggested) {
+      pmLines.push(`직접 질문 후보: "${pacingMeta.direct_question_suggested}"`);
+      pmLines.push(`→ 자연스럽게 녹여서 사용 (그대로 복붙 X, 누나 톤으로 변형)`);
+    }
+    if (pacingMeta.phase_transition_recommendation === 'JUMP') {
+      pmLines.push(`→ 답하면서 다음 phase 자연 전환 멘트 포함`);
+    } else if (pacingMeta.phase_transition_recommendation === 'WRAP') {
+      pmLines.push(`→ "오늘 일단 여기까지 정리하자" 마무리 톤`);
+    } else if (pacingMeta.phase_transition_recommendation === 'PUSH') {
+      pmLines.push(`→ 직접 질문 모드 (좁게/단답형으로 카드 채우기)`);
+    }
+    sections.push(pmLines.join('\n'));
+  }
 
   // 마무리
   sections.push(

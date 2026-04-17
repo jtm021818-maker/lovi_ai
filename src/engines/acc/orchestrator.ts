@@ -100,15 +100,17 @@ export async function analyzeAcc(params: AccAnalyzeParams): Promise<AccAnalysisR
   const conflictHint = buildConflictHint(detectedConflicts);
 
   if (ACC_CONFIG.verboseLogging) {
+    console.log(`\n================ [⚡ 전대상피질 (ACC) 모순 검증] ================`);
     console.log(
-      `[ACC] 📝 추출 ${extracted.statements.length}개 (${extractionLatencyMs}ms) | ` +
-      `모순 ${detectedConflicts.length}개 (${conflictLatencyMs}ms)`,
+      `[📝 추출 됨]: ${extracted.statements.length}개 (${extractionLatencyMs}ms) | ` +
+      `[⚠️ 모순 발견]: ${detectedConflicts.length}개 (${conflictLatencyMs}ms)`,
     );
     if (detectedConflicts.length > 0) {
       for (const c of detectedConflicts) {
-        console.log(`[ACC] ⚠️ 모순: ${c.description} (severity ${c.severity.toFixed(2)})`);
+        console.log(`[⚠️ 모순 내용]: ${c.description} (severity ${c.severity.toFixed(2)})`);
       }
     }
+    console.log(`=========================================================\n`);
   }
 
   return {

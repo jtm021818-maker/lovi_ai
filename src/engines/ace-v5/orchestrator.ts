@@ -236,6 +236,14 @@ async function streamVoiceOnce(params: SingleCallParams): Promise<SingleCallResu
     ? ANTHROPIC_MODELS.SONNET_4_6
     : GEMINI_MODELS.FLASH_25;
 
+  const fullPromptDump = `${ACE_V5_SYSTEM_PROMPT}\n\n## 우뇌 컨텍스트\n${userMessage}`;
+
+  console.log(`\n================ [🗣️ 우뇌 (Right-Brain) 프로세스 시작] ================`);
+  console.log(`[MODEL]: ${provider} - ${modelId}`);
+  console.log(`[REANALYSIS MODE]: ${params.isReanalysis}`);
+  console.log(`[FULL PROMPT DUMP]:\n${fullPromptDump}`);
+  console.log(`=======================================================================\n`);
+
   const stream = streamWithProvider(
     provider,
     ACE_V5_SYSTEM_PROMPT,

@@ -41,10 +41,12 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
-  // API 요청은 캐싱하지 않음 (AI 채팅, 인증 등)
+  // API 및 미디어 자원(비디오 등)은 캐싱하지 않음
   if (
     request.url.includes('/api/') ||
     request.url.includes('supabase') ||
+    request.url.match(/\.(mp4|webm|avi|mkv|mp3|wav|ogg)$/i) ||
+    request.headers.has('range') ||
     request.method !== 'GET'
   ) {
     return;
@@ -64,8 +66,8 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(request)
       .then((response) => {
-        // 성공 시 캐시에 저장
-        if (response.ok) {
+        // 성공(200 상태코드) 시에만 캐시에 저장 (206 Partial Content 등은 캐싱 불가)
+        if (response.status === 200) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(request, clone);

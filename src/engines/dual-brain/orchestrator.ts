@@ -294,7 +294,7 @@ export function assembleWithTags(params: {
 // ============================================================
 
 export interface DualBrainStreamYield {
-  type: 'text' | 'meta';
+  type: 'text' | 'meta' | 'analysis';
   data: any;
 }
 
@@ -593,6 +593,11 @@ export async function* executeDualBrain(
   };
 
   logDualBrainTurn(logEntry);
+
+  // 🆕 v60: 좌뇌 전체 analysis 를 yield (pipeline 에서 pacing_meta 사용)
+  if (brainResult.leftBrainAnalysis) {
+    yield { type: 'analysis', data: brainResult.leftBrainAnalysis };
+  }
 
   // 메타 정보 yield (pipeline에서 사용)
   yield { type: 'meta', data: logEntry };

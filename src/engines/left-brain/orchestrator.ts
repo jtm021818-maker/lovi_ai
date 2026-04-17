@@ -49,6 +49,7 @@ export async function analyzeLeftBrain(
       userProfile: input.userProfile,
       personalProfile: input.personalProfile,   // 🆕 v56: 사적 페르소나
       timeContext: input.timeContext ?? deriveTimeContext(),   // 🆕 v58: 시간대 자동 감지
+      pacingContext: input.pacing_context,       // 🆕 v60: Phase 페이싱
     });
 
     // 🆕 v56: ACC 재귀 피드백 — 2차 분석 시 모순 컨텍스트 주입
@@ -80,6 +81,11 @@ ${conflictsText}
 
     // Step 2: Gemini 호출 (좌뇌 시스템 프롬프트 + 컨텍스트 + 재분석 블록)
     const fullSystemPrompt = `${LEFT_BRAIN_SYSTEM_PROMPT}\n\n## 현재 컨텍스트\n${contextBlock}${reanalysisBlock}`;
+
+    console.log(`\n================ [🧠 좌뇌 (Left-Brain) 프로세스 시작] ================`);
+    console.log(`[USER INPUT]: ${input.userUtterance}`);
+    console.log(`[FULL PROMPT DUMP]:\n${fullSystemPrompt}`);
+    console.log(`======================================================================\n`);
 
     const rawOutput = await Promise.race([
       generateWithProvider(
@@ -214,6 +220,10 @@ function parseAndValidate(raw: string): LeftBrainAnalysis | null {
       // 🆕 v58: 이벤트 공동 판단 — 좌뇌가 이벤트 추천 (KBE 는 타이밍만)
       event_recommendation: validateEventRecommendation(p.event_recommendation),
 
+      // 🆕 v60: Phase 페이싱 메타인지
+      pacing_meta: validatePacingMeta(p.pacing_meta),
+      cards_filled_this_turn: validateFilledCards(p.cards_filled_this_turn),
+
       perceived_emotion: String(p.perceived_emotion ?? '').slice(0, 40),
       actual_need: String(p.actual_need ?? '').slice(0, 40),
       tone_to_use: String(p.tone_to_use ?? '따뜻함'),
@@ -333,6 +343,69 @@ function validateEmotionBlend(eb: any): import('./types').LeftBrainAnalysis['emo
     intensity,
     reasoning: String(eb.reasoning ?? '').slice(0, 150),
   };
+}
+
+// 🆕 v60: Phase 페이싱 메타인지 검증
+function validatePacingMeta(p: any): import('./types').LeftBrainAnalysis['pacing_meta'] {
+  const validStates = ['EARLY', 'MID', 'READY', 'STRETCHED', 'FRUSTRATED'] as const;
+  const validRecs = ['STAY', 'PUSH', 'JUMP', 'WRAP'] as const;
+
+  const pacingState = validStates.includes(p?.pacing_state)
+    ? p.pacing_state as typeof validStates[number]
+    : 'EARLY';
+
+  const transitionRec = validRecs.includes(p?.phase_transition_recommendation)
+    ? p.phase_transition_recommendation as typeof validRecs[number]
+    : 'STAY';
+
+  const directQ = typeof p?.direct_question_suggested === 'string' && p.direct_question_suggested.trim().length > 0
+    ? String(p.direct_question_suggested).slice(0, 200)
+    : null;
+
+  const naturalFu = typeof p?.natural_followup === 'string' && p.natural_followup.trim().length > 0
+    ? String(p.natural_followup).slice(0, 200)
+    : null;
+
+  return {
+    pacing_state: pacingState,
+    turns_in_phase: Math.max(0, Math.round(Number(p?.turns_in_phase ?? 0))),
+    estimated_remaining_turns: Math.max(0, Math.round(Number(p?.estimated_remaining_turns ?? 0))),
+    card_completion_rate: clamp(Number(p?.card_completion_rate ?? 0), 0, 1),
+    missing_required_cards: Array.isArray(p?.missing_required_cards)
+      ? p.missing_required_cards.map(String).slice(0, 10)
+      : [],
+    user_avoidance_signals: Array.isArray(p?.user_avoidance_signals)
+      ? p.user_avoidance_signals.map(String).slice(0, 8)
+      : [],
+    consecutive_short_replies: Math.max(0, Math.round(Number(p?.consecutive_short_replies ?? 0))),
+    luna_meta_thought: String(p?.luna_meta_thought ?? '').slice(0, 200),
+    phase_transition_recommendation: transitionRec,
+    direct_question_suggested: directQ,
+    curiosity_intensity: clamp(Number(p?.curiosity_intensity ?? 0), 0, 1),
+    natural_followup: naturalFu,
+  };
+}
+
+// 🆕 v60: 이번 턴 채워진 카드 검증 (화이트리스트)
+const VALID_CARD_KEYS = new Set([
+  'W1_who', 'W2_what', 'W3_when', 'W4_surface_emotion',
+  'M1_emotion_intensity', 'M2_deep_hypothesis', 'M3_pattern_history', 'M4_acknowledgment',
+  'B1_help_mode', 'B2_decision_point', 'B3_constraints',
+  'S1_next_action', 'S2_trigger_time', 'S3_backup',
+  'E1_summary_accepted', 'E2_next_meeting',
+]);
+
+function validateFilledCards(cards: any): import('./types').FilledCard[] {
+  if (!Array.isArray(cards)) return [];
+  return cards
+    .filter((c: any) => c && typeof c === 'object' && VALID_CARD_KEYS.has(c.key))
+    .slice(0, 8)
+    .map((c: any) => ({
+      key: String(c.key),
+      value: String(c.value ?? '').slice(0, 100),
+      confidence: clamp(Number(c.confidence ?? 0.5), 0, 1),
+      source_quote: c.source_quote ? String(c.source_quote).slice(0, 150) : undefined,
+    }));
 }
 
 // 🆕 v58: 이벤트 공동 판단 — 좌뇌 이벤트 추천 검증
