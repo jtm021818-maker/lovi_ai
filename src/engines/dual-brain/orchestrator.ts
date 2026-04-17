@@ -558,10 +558,12 @@ export async function* executeDualBrain(
       }
     }
 
-    // 태그 조립
-    const tagSuffix = assembleTagsOnly(brainResult.output.tags);
-    yield { type: 'text', data: tagSuffix };
-    fullResponseText += tagSuffix;
+    // 태그 조립 (ACE v5를 사용하지 않은 경우에만 별도로 붙임)
+    if (!useAceForGemini) {
+      const tagSuffix = assembleTagsOnly(brainResult.output.tags);
+      yield { type: 'text', data: tagSuffix };
+      fullResponseText += tagSuffix;
+    }
   }
 
   // Step 4b: claude_rephrase 경로
@@ -614,7 +616,7 @@ export async function* executeDualBrain(
         }
         voiceLatencyMs = Date.now() - voiceStart;
 
-        // 기존 태그 조립
+        // 기존 태그 조립 (ACE를 안 쓴 경우에만)
         const tagSuffix = assembleTagsOnly(brainResult.output.tags);
         yield { type: 'text', data: tagSuffix };
         fullResponseText += tagSuffix;
