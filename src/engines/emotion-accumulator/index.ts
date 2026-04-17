@@ -91,10 +91,11 @@ export function setSurfaceFromThermometer(
  */
 export function isReadyForMirror(state: EmotionAccumulatorState | null): boolean {
   if (!state) return false;
-  // 🆕 v72: surfaceEmotion 없어도 deepEmotion + signal 3개+ 있으면 OK
-  //        (EMOTION_THERMOMETER 건너뛴 긴급 점프 케이스 대응)
-  if (state.signals.length < 2 || state.deepEmotionHypothesis === null) return false;
-  return state.surfaceEmotion !== null || state.signals.length >= 3;
+  return (
+    state.surfaceEmotion !== null &&
+    state.signals.length >= 1 &&
+    state.deepEmotionHypothesis !== null
+  );
 }
 
 // ============================================

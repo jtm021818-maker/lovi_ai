@@ -27,23 +27,9 @@ export async function generateDynamicMirror(
   chatHistory: { role: 'user' | 'ai'; content: string }[],
   userGender?: string,
 ): Promise<EmotionMirrorData | null> {
-  const { signals, deepEmotionHypothesis } = accState;
-  let { surfaceEmotion } = accState;
+  const { signals, deepEmotionHypothesis, surfaceEmotion } = accState;
 
-  if (!deepEmotionHypothesis) {
-    console.log('[MirrorGenerator] ⏸️ deepEmotionHypothesis 없음 → 생성 스킵');
-    return null;
-  }
-
-  // 🆕 v72: surfaceEmotion 없으면 deepEmotion 기반으로 자동 생성 (긴급 Phase 점프 케이스)
-  if (!surfaceEmotion) {
-    console.log('[MirrorGenerator] 🆕 v72: surfaceEmotion null → deepEmotion 기반 fallback 생성');
-    surfaceEmotion = {
-      label: deepEmotionHypothesis.primaryEmotion || '복잡한 감정',
-      score: 0,
-      emoji: '😔',
-    };
-  }
+  if (!surfaceEmotion || !deepEmotionHypothesis) return null;
 
   // 🆕 v59: 유저 메시지 전부 (slice 하드코딩 제거) — LLM 이 알아서 가려쓰게
   const allUserMessages = chatHistory
