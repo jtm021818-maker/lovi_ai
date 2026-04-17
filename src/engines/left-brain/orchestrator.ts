@@ -103,7 +103,7 @@ ${conflictsText}
         [{ role: 'user' as const, content: input.userUtterance }],
         'haiku',
         1024,                              // 출력 충분히
-        GEMINI_MODELS.FLASH_LITE_25,       // 2.5 Flash Lite
+        GEMINI_MODELS.FLASH_LITE_31,       // 🆕 v62: 3.1 Flash Lite ($0.25) — 가성비 추론 (좌뇌 복잡 JSON)
       ),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('left_brain_timeout')), 6000)

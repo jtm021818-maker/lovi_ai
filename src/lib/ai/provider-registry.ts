@@ -32,14 +32,18 @@ export const ANTHROPIC_MODELS = {
 } as const;
 
 export const GEMINI_MODELS = {
-  // 🔥 전체 모델 2.5 Flash Lite로 통일 (사용자 요청: 1.5 Flash 제거)
-  FLASH_LITE_25: 'gemini-2.5-flash-lite',           // 메인 베이스
-  FLASH_25:      'gemini-2.5-flash',                // 프리미엄/폴백
-  
-  // 하위 호환 및 폴백 매핑 -> 모두 2.5 Flash Lite/Flash로 유도
-  FLASH_3:       'gemini-2.5-flash-lite',
+  // 🆕 v62: 4개 모델 가성비 라인업 (가격 오름차순)
+  //   $0.10 | 2.5 Flash Lite        — 최저가, 단순 분석/검증/요약
+  //   $0.25 | 3.1 Flash Lite preview — 추론 향상 + 2.5x 빠름, 균형
+  //   $0.30 | 2.5 Flash              — 안정적 폴백
+  //   $0.50 | 3 Flash preview        — 최강 추론 (PhD GPQA 90.4%, SWE 78%)
+  FLASH_LITE_25: 'gemini-2.5-flash-lite',           // $0.10
+  FLASH_LITE_31: 'gemini-3.1-flash-lite-preview',   // $0.25
+  FLASH_25:      'gemini-2.5-flash',                // $0.30
+  FLASH_3:       'gemini-3-flash-preview',          // $0.50
+
+  // 하위 호환 매핑
   FLASH_15:      'gemini-2.5-flash-lite',
-  FLASH_LITE_31: 'gemini-2.5-flash-lite',
   FLASH_20:      'gemini-2.5-flash',
   FLASH_LITE_20: 'gemini-2.5-flash-lite',
 } as const;

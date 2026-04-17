@@ -220,7 +220,7 @@ async function verifyConflictWithLLM(
         [{ role: 'user' as const, content: userMsg }],
         'haiku',
         300,
-        GEMINI_MODELS.FLASH_LITE_25,
+        GEMINI_MODELS.FLASH_LITE_31, // 🆕 v62: 3.1 Flash Lite ($0.25) — 모순 검증 추론
       ),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('verifier_timeout')), 3000),

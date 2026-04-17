@@ -242,7 +242,7 @@ async function streamVoiceOnce(params: SingleCallParams, logCollector?: LogColle
   const provider = params.model === 'claude' ? 'anthropic' : 'gemini';
   const modelId = params.model === 'claude'
     ? ANTHROPIC_MODELS.SONNET_4_6
-    : GEMINI_MODELS.FLASH_25;
+    : GEMINI_MODELS.FLASH_LITE_31; // 🆕 v62: 3.1 Flash Lite ($0.25) — 가성비 추론 우뇌
 
   const fullPromptDump = `${ACE_V5_SYSTEM_PROMPT}\n\n## 우뇌 컨텍스트\n${userMessage}`;
 

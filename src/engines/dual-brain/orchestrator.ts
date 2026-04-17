@@ -142,7 +142,7 @@ async function callGeminiBrain(params: {
         [{ role: 'user' as const, content: params.userInput }],
         'haiku',
         800,
-        GEMINI_MODELS.FLASH_25,
+        GEMINI_MODELS.FLASH_LITE_31, // 🆕 v62: 3.1 Flash Lite ($0.25) — 가성비 추론
       ),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('brain_timeout')), DUAL_BRAIN_CONFIG.brainTimeoutMs),

@@ -1,12 +1,15 @@
 /**
- * 스마트 라우터 — 태스크별 Gemini 멀티모델 캐스케이드 체인 결정
+ * 스마트 라우터 — 태스크별 모델 캐스케이드 (3순위까지) 결정
  *
- * 모델별 무료 한도:
- *   2.5 Flash-Lite  — 전체 1순위 (메인 + 이벤트 + 분석)
- *   2.5 Flash       — 폴백 (안정적 품질)
+ * v62 가성비 라인업:
+ *   $0.10  Gemini 2.5 Flash Lite        — 단순 작업
+ *   $0.25  Gemini 3.1 Flash Lite preview — 빠름(2.5x) + 추론 향상
+ *   $0.30  Gemini 2.5 Flash              — 안정적
+ *   $0.50  Gemini 3 Flash preview        — 최강 추론 (PhD/SWE)
+ *   $$$    Claude Sonnet 4.6              — 진짜 복잡한 한국어 공감만
  *
- * 전략:
- *   전체 → 2.5 Flash-Lite (1순위) → 2.5 Flash (폴백)
+ * 전략: 가장 가벼운 작업은 2.5 Flash Lite, 추론 필요시 3.1 Lite,
+ *       진짜 복잡 응답만 Claude. 1순위 실패 → 2순위 → 3순위 폴백.
  */
 
 import type { Provider, ModelTier } from './provider-registry';
@@ -37,75 +40,102 @@ export type TaskType =
 export function getProviderCascade(
   task: TaskType,
   _strategy?: StrategyType,
-  _riskLevel?: RiskLevel
+  _riskLevel?: RiskLevel,
 ): CascadeItem[] {
   switch (task) {
     // ──────────────────────────────────────────
-    // 메인 상담: Claude Sonnet 4.6 + 프롬프트 캐싱 (30~40% 절감)
-    // 1순위: Claude Sonnet 4.6 (한국어 공감 품질 최강)
-    // 2순위: Gemini 2.5 Flash Lite (무료 폴백)
+    // 메인 상담 응답 (매 턴 카톡 답변)
+    //   진짜 복잡 (CRISIS, 깊은 공감) → Claude
+    //   일반 → Gemini 3.1 Flash Lite (가성비 추론)
+    //   폴백 → Gemini 3 Flash (추론 강함) → Gemini 2.5 Flash (안정)
+    //
+    // 위기/고복잡 케이스: Claude 1순위 (한국어 공감 품질)
     // ──────────────────────────────────────────
-    case 'main_response':
+    case 'main_response': {
+      const isCrisis = _riskLevel === 'CRITICAL' || _riskLevel === 'HIGH';
+      const isHighStrategy = _strategy === 'CRISIS_SUPPORT' || _strategy === 'CBT' || _strategy === 'ACT';
+      if (isCrisis || isHighStrategy) {
+        // 진짜 복잡 → Claude
+        return [
+          { provider: 'anthropic', tier: 'sonnet', modelOverride: ANTHROPIC_MODELS.SONNET_4_6 },
+          { provider: 'gemini',    tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_3 },          // $0.50 추론 폴백
+          { provider: 'gemini',    tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_31 },    // $0.25 최후
+        ];
+      }
+      // 평범한 카톡 응답 → 가성비 우선
       return [
-        { provider: 'anthropic', tier: 'sonnet', modelOverride: ANTHROPIC_MODELS.SONNET_4_6 },
-        { provider: 'gemini',    tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
-        { provider: 'gemini',    tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_31 }, // $0.25 1순위
+        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },      // $0.30 2순위
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 }, // $0.10 최후 폴백
       ];
+    }
 
     // ──────────────────────────────────────────
-    // 이벤트 (VN연극, 감정거울 등): 2.5 Flash-Lite
+    // 이벤트 생성 (VN 연극, 감정거울 등) — 창의 + 일관성
+    //   1순위: 3.1 Flash Lite (가성비 추론)
+    //   2순위: 3 Flash (강한 추론)
+    //   3순위: 2.5 Flash (안정 폴백)
     // ──────────────────────────────────────────
     case 'event_generation':
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
-        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_31 }, // $0.25
+        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_3 },       // $0.50
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_25 },      // $0.30
       ];
 
     // ──────────────────────────────────────────
-    // 상태 분석: RPD 무제한 모델로 (3.1 한도 절약)
-    // 1순위: 2 Flash-Lite (무제한, JSON 구조화)
-    // 2순위: 2 Flash (무제한 폴백)
+    // 상태 분석 (좌뇌 7D + 페이싱 + 호르몬) — JSON 구조화 + 추론 필요
+    //   1순위: 3.1 Flash Lite (빠름 + 추론)
+    //   2순위: 2.5 Flash (안정)
+    //   3순위: 2.5 Flash Lite (최후 폴백, $0.10)
     // ──────────────────────────────────────────
     case 'state_analysis':
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
-        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_31 }, // $0.25
+        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },      // $0.30
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 }, // $0.10
       ];
 
     // ──────────────────────────────────────────
-    // 응답 검증: 경량 + 무제한
-    // 1순위: 2 Flash-Lite
-    // 2순위: 2 Flash
+    // 응답 검증 — 경량 분류 작업, 최저가 우선
+    //   1순위: 2.5 Flash Lite ($0.10)
+    //   2순위: 3.1 Flash Lite ($0.25)
+    //   3순위: 2.5 Flash ($0.30)
     // ──────────────────────────────────────────
     case 'response_validation':
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
-        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 }, // $0.10
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_31 }, // $0.25
+        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },      // $0.30
       ];
 
     // ──────────────────────────────────────────
-    // 세션 요약: 경량 + 무제한
+    // 세션 요약 — 단순 요약, 최저가 우선
     // ──────────────────────────────────────────
     case 'session_summary':
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
-        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 }, // $0.10
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_31 }, // $0.25
+        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },      // $0.30
       ];
 
     // ──────────────────────────────────────────
-    // 라운지: 3.1 한도 절약, 무제한 모델 사용
-    // 1순위: 2 Flash-Lite (캐릭터 대화)
-    // 2순위: 2 Flash
+    // 라운지 (캐릭터 잡담) — 초고속 무료 제공자 우선
+    //   1순위: Cerebras (무료/초고속)
+    //   2순위: Groq (무료/빠름)
+    //   3순위: Gemini 2.5 Flash Lite ($0.10 폴백)
     // ──────────────────────────────────────────
     case 'lounge_generation':
       return [
-        { provider: 'cerebras', tier: 'haiku' },    // 1순위: Cerebras 8B (초고속/무료)
-        { provider: 'groq', tier: 'haiku' },        // 2순위: Groq 8B
+        { provider: 'cerebras', tier: 'haiku' },
+        { provider: 'groq',     tier: 'haiku' },
+        { provider: 'gemini',   tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
       ];
 
     default:
       return [
         { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 },
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_31 },
         { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },
       ];
   }
