@@ -64,8 +64,8 @@ export function getProviderCascade(
       }
       // 평범한 카톡 응답 → 가성비 우선
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_31 }, // $0.25 1순위
-        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },      // $0.30 2순위
+        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },      // $0.30 1순위 (복구)
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_31 }, // $0.25 2순위
         { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 }, // $0.10 최후 폴백
       ];
     }
