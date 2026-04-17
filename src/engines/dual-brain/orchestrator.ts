@@ -109,6 +109,7 @@ async function callGeminiBrain(params: {
     const userUtteranceWithHistory = historyBlock
       ? `## 직전 대화 (참고)\n${historyBlock}\n\n## 이번 유저 발화 (분석 대상)\n${params.userInput}`
       : params.userInput;
+    console.log(`[v71:LB] 📜 좌뇌 맥락 ${recentHistory.length}턴 주입 (userMsg ${params.userInput.length}자 → 총 ${userUtteranceWithHistory.length}자)`);
 
     const { analysis, latencyMs, error } = await analyzeLeftBrain({
       userUtterance: userUtteranceWithHistory,
@@ -508,6 +509,7 @@ export async function* executeDualBrain(
           intimacyLevel: extractIntimacy(input.contextBlock),
           phase: extractPhase(input.contextBlock),
           model: 'gemini',    // 🆕 Gemini 모드로 ACE v5 (저비용)
+          chatHistory: input.chatHistory,  // 🆕 v72: 우뇌도 맥락 받음
         }, logCollector)) {
           if (chunk.type === 'text') {
             aceChunkCount++;
@@ -588,6 +590,7 @@ export async function* executeDualBrain(
           intimacyLevel: extractIntimacy(input.contextBlock),
           phase: extractPhase(input.contextBlock),
           model: 'claude',   // 🆕 v56: claude_rephrase 경로는 Claude 모델 명시
+          chatHistory: input.chatHistory,  // 🆕 v72: 우뇌도 맥락 받음
         }, logCollector)) {
           if (chunk.type === 'text') {
             fullResponseText += chunk.data;
