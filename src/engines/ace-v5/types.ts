@@ -53,6 +53,15 @@ export interface LeftToRightHandoff {
 
   /** 신뢰도 (낮으면 우뇌가 의심해도 됨) */
   confidence: number;
+
+  /** 🆕 v74: 좌뇌 이벤트 추천 (우뇌가 이걸 보고 해당 태그 출력) */
+  event_recommendation?: LeftBrainAnalysis['event_recommendation'];
+
+  /** 🆕 v74: 좌뇌 전략적 전환 판단 (우뇌가 전략 조정) */
+  strategic_shift?: LeftBrainAnalysis['strategic_shift'];
+
+  /** 🆕 v74: 좌뇌 pacing 메타 (우뇌가 페이싱 톤 조정) */
+  pacing_meta?: LeftBrainAnalysis['pacing_meta'];
 }
 
 // ============================================================

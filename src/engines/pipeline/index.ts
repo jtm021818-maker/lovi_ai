@@ -1742,26 +1742,31 @@ ${researchResult.insight}
           }
           console.log(`[Pipeline] 🧑 HLRE 루나감정(후): ${hlrePost.emotionState.currentEmotion}(${Math.round(hlrePost.emotionState.currentIntensity * 100)}%)`);
 
-          // 🆕 v74: VN 극장 발동 — 좌뇌 LLM 자체 판단 단일 게이트
+          // 🆕 v74: VN 극장 발동 — 좌뇌/우뇌 LLM 판단 신호 통합 게이트
           //
-          // 발동 신호 (둘 중 하나 — 둘 다 LLM 판단):
-          //   A. 좌뇌 event_recommendation.suggested === 'VN_THEATER' (맥락으로 판단)
-          //   B. 우뇌가 응답에 [MIND_READ_READY] 태그 출력 (자기 판단)
+          // 발동 조건 (셋 중 하나 — 전부 LLM 자체 판단 결과):
+          //   A. 좌뇌 event_recommendation.suggested === 'VN_THEATER' (명시 추천)
+          //   B. 좌뇌 pacing_meta.pacing_state === 'READY' (카드 충족 + 다음 단계 준비)
+          //   C. 우뇌 응답에 [MIND_READ_READY] 태그 (스스로 마음 읽기 준비)
           //
-          // 제거된 코드 규칙 (규칙 없이 LLM 만):
-          //   ❌ canFireEventType('EMOTION_THERMOMETER') 선행 조건 (온도계 완료 강제)
-          //   ❌ turnInPhase >= 2 하드코딩
-          //   ❌ hlre.isFormulationReady() 휴리스틱
-          //   ❌ isReadyForMirror 기술 게이트 (좌뇌가 추천했으면 이미 충분)
+          // 제거된 코드 규칙:
+          //   ❌ 온도계 완료 선행 조건, turnInPhase >= 2 하드코딩,
+          //      isFormulationReady() 휴리스틱, isReadyForMirror 게이트
           const lbEventRec = capturedLeftBrainAnalysis?.event_recommendation;
+          const lbPacingState = capturedLeftBrainAnalysis?.pacing_meta?.pacing_state;
+          const lbTransition = capturedLeftBrainAnalysis?.pacing_meta?.phase_transition_recommendation;
+
           const lbRecommendsVN = lbEventRec?.suggested === 'VN_THEATER' || lbEventRec?.suggested === 'EMOTION_MIRROR';
+          const lbPacingReady = lbPacingState === 'READY' || lbTransition === 'JUMP';
           const aiTaggedReady = hlrePost.mindReadReady === true;
           const vnAlreadyFired = updatedCompletedEvents.includes('EMOTION_MIRROR') || eventsToFire.some((e) => e.type === 'EMOTION_MIRROR');
 
-          if ((lbRecommendsVN || aiTaggedReady) && !vnAlreadyFired && canFireEvent()) {
+          if ((lbRecommendsVN || lbPacingReady || aiTaggedReady) && !vnAlreadyFired && canFireEvent()) {
             const trigger = aiTaggedReady
               ? 'AI_TAG(MIND_READ_READY)'
-              : `LEFTBRAIN(confidence=${lbEventRec?.confidence ?? '?'})`;
+              : lbRecommendsVN
+                ? `LEFTBRAIN_REC(VN_THEATER, confidence=${lbEventRec?.confidence ?? '?'})`
+                : `LEFTBRAIN_PACING(${lbPacingState}/${lbTransition})`;
             console.log(`[Pipeline] 🎭 VN 극장 발동 시도 — 트리거: ${trigger}`);
 
             updatedLastEventTurn = turnCount;
@@ -1954,9 +1959,13 @@ ${researchResult.insight}
           const hasNewGateEvents = updatedCompletedEvents.length > (completedEvents?.length ?? 0);
           const hasTransitionSignal = aiPhaseSignal && aiPhaseSignal !== 'STAY';
           
-          // 🆕 v60: 좌뇌 pacing_meta 도 재판단 트리거
+          // 🆕 v60+v74: 좌뇌 pacing_meta 도 재판단 트리거 (PUSH 도 포함)
           const lbPacing = capturedLeftBrainAnalysis?.pacing_meta;
-          const hasPacingTransition = lbPacing && (lbPacing.phase_transition_recommendation === 'JUMP' || lbPacing.phase_transition_recommendation === 'WRAP');
+          const hasPacingTransition = lbPacing && (
+            lbPacing.phase_transition_recommendation === 'JUMP' ||
+            lbPacing.phase_transition_recommendation === 'WRAP' ||
+            lbPacing.phase_transition_recommendation === 'PUSH'
+          );
 
           if (hasNewGateEvents || hasTransitionSignal || hasPacingTransition) {
             const reCheckCtx: PhaseContext = {

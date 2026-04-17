@@ -57,6 +57,11 @@ export function buildHandoff(analysis: LeftBrainAnalysis): LeftToRightHandoff {
 
     tags: analysis.tags,
     confidence: analysis.confidence,
+
+    // 🆕 v74: LLM 간 신호 엮기 — 좌뇌의 이벤트 추천/전략 전환/페이싱을 우뇌가 보도록
+    event_recommendation: analysis.event_recommendation,
+    strategic_shift: analysis.strategic_shift,
+    pacing_meta: analysis.pacing_meta,
   };
 }
 
@@ -203,6 +208,56 @@ export function formatHandoffForPrompt(handoff: LeftToRightHandoff): string {
     `- 초안: "${handoff.draft}"\n` +
     `- 좌뇌 확신도: ${(handoff.confidence * 100).toFixed(0)}%`
   );
+
+  // 🆕 v74: 좌뇌 이벤트 추천 — 우뇌가 해당 이벤트를 발동할 태그를 출력해야 함
+  if (handoff.event_recommendation?.suggested) {
+    const rec = handoff.event_recommendation;
+    const tagMap: Record<string, string> = {
+      VN_THEATER: '[MIND_READ_READY]',
+      EMOTION_MIRROR: '[MIND_READ_READY]',
+      LUNA_STORY: '[STORY_READY:opener|situation|innerThought|cliffhanger]',
+      TAROT: '[TAROT_READY]',
+      ACTION_PLAN: '[ACTION_PLAN:type|title|coreAction|sharedResult|planB|timing|cheer]',
+      WARM_WRAP: '[WARM_WRAP:strengthFound|emotionShift|nextStep|lunaMessage]',
+      PATTERN_MIRROR: '[PATTERN_MIRROR_READY]',
+    };
+    const tag = rec.suggested ? (tagMap[rec.suggested] ?? null) : null;
+    sections.push(
+      `### 🎯 좌뇌 이벤트 추천\n` +
+      `좌뇌가 이 순간 **${rec.suggested}** 이 어울린다고 판단했어 (confidence ${(rec.confidence * 100).toFixed(0)}%)\n` +
+      `이유: ${rec.reasoning ?? '—'}\n` +
+      (tag ? `→ 발동하려면 응답 끝에 태그 ${tag} 붙여.\n` : '') +
+      `네가 맥락 봤을 때도 어울리면 태그 출력. 이상하면 무시하고 일반 응답.`
+    );
+  }
+
+  // 🆕 v74: 전략적 전환 — 좌뇌가 전략 바꿀 필요 있다고 판단
+  if (handoff.strategic_shift?.requires_shift) {
+    const s = handoff.strategic_shift;
+    sections.push(
+      `### 🔄 전략 전환 신호\n` +
+      `좌뇌: "${s.current_strategy}" → "${s.shift_to ?? '재판단'}" 전환 권장.\n` +
+      `이유: ${s.reasoning ?? '—'}\n` +
+      `→ 응답 톤/접근을 이에 맞춰 조정.`
+    );
+  }
+
+  // 🆕 v74: 페이싱 상태 — READY/JUMP 면 다음 단계 자연 전환 신호
+  if (handoff.pacing_meta) {
+    const pm = handoff.pacing_meta;
+    const pacingLines: string[] = [`### ⏱️ 페이싱 상태`];
+    pacingLines.push(`- 상태: ${pm.pacing_state} (전환 권고: ${pm.phase_transition_recommendation})`);
+    if (pm.luna_meta_thought) {
+      pacingLines.push(`- 루나 메타 생각: "${pm.luna_meta_thought}"`);
+    }
+    if (pm.pacing_state === 'READY' || pm.phase_transition_recommendation === 'JUMP') {
+      pacingLines.push(`→ 카드 충족. "이 정도면 됐어" 싶으면 자연 전환 멘트 섞어 or 이벤트 태그 출력.`);
+    }
+    if (pm.phase_transition_recommendation === 'PUSH' && pm.direct_question_suggested) {
+      pacingLines.push(`→ PUSH 모드: 직접 질문 녹이기 — "${pm.direct_question_suggested}"`);
+    }
+    sections.push(pacingLines.join('\n'));
+  }
 
   // 확신도 낮으면 우뇌 의심 권한
   if (handoff.confidence < 0.7) {
