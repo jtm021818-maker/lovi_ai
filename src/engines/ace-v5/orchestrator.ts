@@ -28,6 +28,28 @@ import {
 import type { AceV5Input, AceV5Output } from './types';
 
 // ============================================================
+// 🆕 v76: thinking_level 동적 결정 — complexity + crisis + reanalysis 기반
+// ============================================================
+
+/**
+ * 좌뇌 complexity 와 위기/재분석 여부로 Gemini 3 thinking_level 결정.
+ * 대부분 턴 'minimal'/'low' — 비용/속도 최적화.
+ * 고복잡도 턴만 'medium'/'high' — 정확도 우선.
+ */
+function pickThinkingLevel(
+  leftBrain: any,
+  isReanalysis: boolean,
+): 'minimal' | 'low' | 'medium' | 'high' {
+  if (isReanalysis) return 'high';
+  if (leftBrain?.derived_signals?.crisis_risk) return 'high';
+  const complexity = leftBrain?.complexity ?? 3;
+  if (complexity >= 5) return 'high';
+  if (complexity === 4) return 'medium';
+  if (complexity === 3) return 'low';
+  return 'minimal';
+}
+
+// ============================================================
 // 🆕 v74: 좌뇌 self_expression pass-through (LLM 판단 그대로 전달)
 // ============================================================
 
@@ -109,6 +131,7 @@ export async function* executeAceV5(
     metaAwareness: (input.leftBrain as any)?.meta_awareness ?? null,
     previousLunaText: input.previousLunaText ?? null,
     selfExpression: passSelfExpression((input.leftBrain as any)?.self_expression),
+    thinkingLevel: pickThinkingLevel(input.leftBrain, input.alreadyReanalyzed === true),
   }, logCollector);
 
   // ────────────────────────────────────────
@@ -163,6 +186,7 @@ export async function* executeAceV5(
         metaAwareness: (refinedAnalysis.analysis as any)?.meta_awareness ?? null,
         previousLunaText: input.previousLunaText ?? null,
         selfExpression: passSelfExpression((refinedAnalysis.analysis as any)?.self_expression),
+        thinkingLevel: 'high',  // 재분석은 high
       }, logCollector);
 
       finalText = secondCallResult.fullText;
@@ -289,6 +313,8 @@ interface SingleCallParams {
     must_avoid_question: boolean;
     self_disclosure_opportunity: string | null;
   } | null;
+  /** 🆕 v76: Gemini 3 reasoning 강도 (gemini 모델일 때만 사용) */
+  thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high';
 }
 
 interface SingleCallResult {
@@ -321,7 +347,10 @@ async function streamVoiceOnce(params: SingleCallParams, logCollector?: LogColle
   const provider = params.model === 'claude' ? 'anthropic' : 'gemini';
   const modelId = params.model === 'claude'
     ? ANTHROPIC_MODELS.SONNET_4_6
-    : GEMINI_MODELS.FLASH_25; // 🆕 v74: 2.5 Flash ($0.30) — 메인 상담 모델과 통일 (안정성)
+    : GEMINI_MODELS.FLASH_3; // 🆕 v76: Gemini 3 Flash Preview (reasoning native)
+
+  // 🆕 v76: Gemini 3 thinking_level — complexity 기반 (caller 가 전달) 또는 기본 'low'
+  const thinkingLevel = params.thinkingLevel ?? 'low';
 
   // 🆕 v64: 통일 디버그 로거 (engine + model + 프롬프트 + 유저 메시지)
   logEnginePrompt({
@@ -334,6 +363,7 @@ async function streamVoiceOnce(params: SingleCallParams, logCollector?: LogColle
       reanalysis: !!params.isReanalysis,
       phase: params.phase,
       intimacyLevel: params.intimacyLevel,
+      thinkingLevel: provider === 'gemini' ? thinkingLevel : undefined,
     },
   });
 
@@ -344,6 +374,8 @@ async function streamVoiceOnce(params: SingleCallParams, logCollector?: LogColle
     'sonnet',
     600,                            // 응답은 짧게
     modelId,
+    undefined,                      // onRetry
+    provider === 'gemini' ? { thinkingLevel, includeThoughts: false } : undefined,
   );
 
   let fullText = '';

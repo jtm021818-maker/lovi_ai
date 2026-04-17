@@ -8,7 +8,7 @@
  * - 2 Flash-Lite:   경량 분석/검증 (RPD 무제한)
  */
 
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import Groq from 'groq-sdk';
 import Anthropic from '@anthropic-ai/sdk';
 import { checkProviderRateLimit, recordProviderUsage } from '@/lib/utils/rate-limit';
@@ -330,6 +330,19 @@ async function cerebrasGenerate(
   }
 }
 
+/** 🆕 v76: Gemini 3 thinking_level — minimal/low/medium/high */
+export type GeminiThinkingLevel = 'minimal' | 'low' | 'medium' | 'high';
+
+/** 🆕 v76: Gemini 호출 확장 옵션 (Gemini 3 전용) */
+export interface GeminiOptions {
+  /** Gemini 3 reasoning 강도. 미지정 시 기본값 'low'. */
+  thinkingLevel?: GeminiThinkingLevel;
+  /** thinking chunk 를 응답 스트림에 포함할지. 반드시 false (leak 방지). */
+  includeThoughts?: boolean;
+  /** Temperature 오버라이드. Gemini 3 는 1.0 권장 (기본). */
+  temperature?: number;
+}
+
 async function* geminiStream(
   systemPrompt: string,
   messages: { role: 'user' | 'assistant'; content: string }[],
@@ -337,12 +350,30 @@ async function* geminiStream(
   tier: ModelTier = 'sonnet',
   onRetry?: (event: RetryStatusEvent) => void,
   modelOverride?: string,
+  geminiOptions?: GeminiOptions,
 ): AsyncGenerator<string> {
   const model = modelOverride || PROVIDER_MODELS.gemini[tier];
   const contents = messages.map((m) => ({
     role: m.role === 'assistant' ? ('model' as const) : ('user' as const),
     parts: [{ text: m.content }],
   }));
+
+  // 🆕 v76: Gemini 3 전용 thinkingConfig
+  const isGemini3 = model.startsWith('gemini-3');
+  const effectiveTemperature = geminiOptions?.temperature
+    ?? (isGemini3 ? 1.0 : TEMPERATURE[tier]);
+  const thinkingLevelMap: Record<GeminiThinkingLevel, ThinkingLevel> = {
+    minimal: ThinkingLevel.MINIMAL,
+    low: ThinkingLevel.LOW,
+    medium: ThinkingLevel.MEDIUM,
+    high: ThinkingLevel.HIGH,
+  };
+  const thinkingConfig = isGemini3
+    ? {
+        thinkingLevel: thinkingLevelMap[geminiOptions?.thinkingLevel ?? 'low'],
+        includeThoughts: geminiOptions?.includeThoughts ?? false,
+      }
+    : undefined;
 
   const MAX_RETRIES_503 = 4;
   const MAX_RETRIES_OTHER = 1;
@@ -355,7 +386,8 @@ async function* geminiStream(
         config: {
           systemInstruction: systemPrompt,
           maxOutputTokens: maxTokens,
-          temperature: TEMPERATURE[tier],
+          temperature: effectiveTemperature,
+          ...(thinkingConfig ? { thinkingConfig } : {}),
         },
         contents,
       });
@@ -447,13 +479,14 @@ export async function* streamWithProvider(
   maxTokens: number = 1024,
   modelOverride?: string,
   onRetry?: (event: RetryStatusEvent) => void,
+  geminiOptions?: GeminiOptions,
 ): AsyncGenerator<string> {
   if (provider === 'anthropic') {
     yield* claudeStream(systemPrompt, messages, maxTokens, tier, modelOverride);
     return;
   }
   // 기본: Gemini (groq/cerebras는 stream 미지원 → Gemini 폴백)
-  yield* geminiStream(systemPrompt, messages, maxTokens, tier, onRetry, modelOverride);
+  yield* geminiStream(systemPrompt, messages, maxTokens, tier, onRetry, modelOverride, geminiOptions);
 }
 
 /** 🆕 v31: 타임아웃 헬퍼 — Promise.race로 최대 대기시간 제한 */

@@ -10,30 +10,39 @@ import type { LeftBrainAnalysis } from '@/engines/left-brain';
 // 1. 좌뇌 → 우뇌 데이터 인터페이스 (Handoff)
 // ============================================================
 
-/** 좌뇌 분석을 우뇌가 활용할 형태로 가공 */
+/**
+ * 좌뇌 분석을 우뇌가 활용할 형태로 가공.
+ * 🆕 v75: 좌뇌 전체 필드 pass-through. 우뇌 LLM 이 판단해서 취사선택.
+ */
 export interface LeftToRightHandoff {
   /** 좌뇌가 본 상태 요약 (자연어) */
   state_summary: {
-    valence: string;       // "슬픔 강함" / "기쁨 약함" 등
-    arousal: string;       // "차분함" / "활성" / "격앙"
-    dominance: string;     // "통제감 낮음" / "주도적"
-    intimacy: string;      // "예의 거리" / "친한 사이"
+    valence: string;
+    arousal: string;
+    dominance: string;
+    intimacy: string;
   };
 
-  /** 소마틱 마커 (트랙 A 출발점) */
+  /** 원시 7차원 벡터 (우뇌가 세밀한 값 필요 시) */
+  state_vector_raw: LeftBrainAnalysis['state_vector'];
+
+  /** 소마틱 마커 */
   somatic: {
     gut_reaction: string;
     intensity: number;
+    triggered_by: string;
     meaning: string;
   };
 
-  /** 2차 ToM (트랙 C 입력) */
+  /** 2차 ToM (확장) */
   user_expectation: {
     surface: string;
     deep: string;
     mismatch: boolean;
     hidden_fear: string | null;
     pattern: string;
+    conversational_goal: { type: string; strength: number };
+    avoided_topics: string[];
   };
 
   /** 활성 신호들 (자연어 힌트) */
@@ -41,7 +50,22 @@ export interface LeftToRightHandoff {
   signal_hints: string[];
   avoidances: string[];
 
-  /** 좌뇌 초안 (참고용, 그대로 안 써도 됨) */
+  /** 좌뇌가 읽은 루나 속마음/상황 */
+  perceived_emotion: string;
+  actual_need: string;
+  luna_thought: string;
+  situation_read: string;
+
+  /** 🆕 v75: 파생 감정 (서러움/애증 같은 복합) */
+  emotion_blend: LeftBrainAnalysis['emotion_blend'];
+
+  /** 🆕 v75: 루나 자신의 호르몬 반응 (루나 내면 상태) */
+  hormonal_impact: LeftBrainAnalysis['hormonal_impact'];
+
+  /** 🆕 v75: 기억 연결 (과거 에피소드) */
+  memory_connections: LeftBrainAnalysis['memory_connections'];
+
+  /** 좌뇌 초안 (참고용) */
   draft: string;
 
   /** 좌뇌 추천 톤/길이 */
@@ -51,17 +75,28 @@ export interface LeftToRightHandoff {
   /** 좌뇌 태그 (자동 첨부) */
   tags: LeftBrainAnalysis['tags'];
 
-  /** 신뢰도 (낮으면 우뇌가 의심해도 됨) */
+  /** 복잡도 + 신뢰도 + 애매함 */
+  complexity: number;
   confidence: number;
+  ambiguity_signals: string[];
 
   /** 🆕 v74: 좌뇌 이벤트 추천 (우뇌가 이걸 보고 해당 태그 출력) */
   event_recommendation?: LeftBrainAnalysis['event_recommendation'];
 
-  /** 🆕 v74: 좌뇌 전략적 전환 판단 (우뇌가 전략 조정) */
+  /** 🆕 v74: 좌뇌 전략적 전환 판단 */
   strategic_shift?: LeftBrainAnalysis['strategic_shift'];
 
-  /** 🆕 v74: 좌뇌 pacing 메타 (우뇌가 페이싱 톤 조정) */
+  /** 🆕 v74: 좌뇌 pacing 메타 */
   pacing_meta?: LeftBrainAnalysis['pacing_meta'];
+
+  /** 🆕 v75: 메타-항의 감지 */
+  meta_awareness?: LeftBrainAnalysis['meta_awareness'];
+
+  /** 🆕 v75: 자아 표현 (질문 과잉 감지 + 망상 시드) */
+  self_expression?: LeftBrainAnalysis['self_expression'];
+
+  /** 🆕 v75: 이번 턴 채워진 정보 카드들 */
+  cards_filled_this_turn: LeftBrainAnalysis['cards_filled_this_turn'];
 }
 
 // ============================================================
