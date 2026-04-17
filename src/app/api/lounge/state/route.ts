@@ -95,7 +95,6 @@ export async function GET() {
   }
 
   // 체크인 상태
-  const today = new Date().toISOString().slice(0, 10);
   const checkins = (memoryProfile as any).dailyCheckins ?? [];
   const todayCheckedIn = checkins.some((c: any) => c.date === today);
 

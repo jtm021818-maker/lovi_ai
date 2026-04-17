@@ -59,8 +59,6 @@ async function callGeminiBrain(params: {
   contextBlock: string;
   sessionId: string;
   turnIdx: number;
-}): Promise<{
-  leftBrainAnalysis?: LeftBrainAnalysis;  // 좌뇌 전체 출력 (Claude voice에 전달용)
 }, logCollector?: LogCollector): Promise<{
   output: BrainOutput | null;
   latencyMs: number;
