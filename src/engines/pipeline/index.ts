@@ -257,7 +257,7 @@ export class CounselingPipeline {
       : Promise.resolve('');
 
     const [stateResult, ragText] = await Promise.all([
-      this.stateEngine.analyze(userMessage, chatHistory, context, logCollector),
+      this.stateEngine.analyze(userMessage, chatHistory, context),
       ragPromise,
     ]);
     console.log(`[Perf] ⏱️ state+RAG 병렬: ${Date.now() - tPipeStart}ms`);

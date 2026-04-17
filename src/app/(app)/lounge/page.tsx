@@ -18,7 +18,6 @@ import LoungeBackground, { getTimeOfDay } from '@/components/lounge/LoungeBackgr
 import LoungeMessage, { type LoungeMessageType } from '@/components/lounge/LoungeMessage';
 import LoungeInput from '@/components/lounge/LoungeInput';
 import type { CharacterDailyState } from '@/engines/lounge/daily-state-engine';
-import type { CharacterDailyState } from '@/engines/lounge/daily-state-engine';
 import { moodToEmoji } from '@/engines/lounge/daily-state-engine';
 import type { ScheduledMessage, BatchDailyMessages } from '@/engines/lounge/batch-message-types';
 import { splitByTime, buildPlaybackQueue, formatChatTime } from '@/engines/lounge/batch-message-types';
