@@ -371,14 +371,20 @@ export class PhaseManager {
     // Phase 내 상대 턴 계산
     const turnsInPhase = ctx.turnCount - ctx.phaseStartTurn;
 
-    // Phase 전환 직후(turnsInPhase=0) 이벤트 차단 — 타로 체인은 예외
+    // Phase 전환 직후(turnsInPhase=0) 이벤트 차단 — 타로/MIRROR 는 예외
     if (turnsInPhase <= 0) {
       const isTarotChain =
         (eventType === 'TAROT_DRAW' && ctx.completedEvents.includes('TAROT_AXIS_COLLECT')) ||
         (eventType === 'TAROT_INSIGHT' && ctx.completedEvents.includes('TAROT_DRAW'));
-      if (!isTarotChain) {
+      // 🆕 v72: MIRROR Phase 진입하면 EMOTION_MIRROR 즉시 발동 허용 (루나극장)
+      //        기존엔 Phase 전환 직후 "1턴 대기" 걸려서 루나극장이 영영 안 떴음
+      const isMirrorImmediate = phase === 'MIRROR' && eventType === 'EMOTION_MIRROR';
+      if (!isTarotChain && !isMirrorImmediate) {
         console.log(`[PhaseManager] 🚫 ${eventType}: phase 전환 직후 (turnsInPhase=${turnsInPhase}) → 차단`);
         return false;
+      }
+      if (isMirrorImmediate) {
+        console.log(`[PhaseManager] ✅ v72: MIRROR 진입 → EMOTION_MIRROR 즉시 허용`);
       }
     }
 
