@@ -28,6 +28,44 @@ import {
 import type { AceV5Input, AceV5Output } from './types';
 
 // ============================================================
+// 🆕 v74: 좌뇌 self_expression pass-through (LLM 판단 그대로 전달)
+// ============================================================
+
+/**
+ * 좌뇌가 자체 판단한 self_expression 을 그대로 우뇌에 전달.
+ * 코드 휴리스틱 없음 — LLM 이 맥락 이해로 결정.
+ * 시그널이 전혀 없으면 null (우뇌 프롬프트 부하 경감).
+ */
+function passSelfExpression(llm: any): {
+  should_express_thought: boolean;
+  projection_seed: string | null;
+  consecutive_questions_last3: number;
+  must_avoid_question: boolean;
+  self_disclosure_opportunity: string | null;
+} | null {
+  if (!llm) return null;
+  const hasSignal =
+    llm.should_express_thought === true ||
+    llm.must_avoid_question === true ||
+    (typeof llm.projection_seed === 'string' && llm.projection_seed.trim().length > 0);
+  if (!hasSignal) return null;
+
+  return {
+    should_express_thought: llm.should_express_thought === true,
+    projection_seed: typeof llm.projection_seed === 'string' && llm.projection_seed.trim().length > 0
+      ? llm.projection_seed
+      : null,
+    consecutive_questions_last3: typeof llm.consecutive_questions_last3 === 'number'
+      ? llm.consecutive_questions_last3
+      : 0,
+    must_avoid_question: llm.must_avoid_question === true,
+    self_disclosure_opportunity: typeof llm.self_disclosure_opportunity === 'string' && llm.self_disclosure_opportunity.trim().length > 0
+      ? llm.self_disclosure_opportunity
+      : null,
+  };
+}
+
+// ============================================================
 // 메인 스트리밍 함수
 // ============================================================
 
@@ -70,6 +108,7 @@ export async function* executeAceV5(
     onChunk: undefined,
     metaAwareness: (input.leftBrain as any)?.meta_awareness ?? null,
     previousLunaText: input.previousLunaText ?? null,
+    selfExpression: passSelfExpression((input.leftBrain as any)?.self_expression),
   }, logCollector);
 
   // ────────────────────────────────────────
@@ -123,6 +162,7 @@ export async function* executeAceV5(
         onChunk: undefined,
         metaAwareness: (refinedAnalysis.analysis as any)?.meta_awareness ?? null,
         previousLunaText: input.previousLunaText ?? null,
+        selfExpression: passSelfExpression((refinedAnalysis.analysis as any)?.self_expression),
       }, logCollector);
 
       finalText = secondCallResult.fullText;
@@ -232,15 +272,23 @@ interface SingleCallParams {
   /** 🆕 v56: 우뇌 모델 선택 */
   model: 'gemini' | 'claude';
   onChunk?: (chunk: string) => void;
-  /** 🆕 v73: 메타-자각 */
+  /** 🆕 v73+74: 메타-자각 (+ too_many_questions) */
   metaAwareness?: {
     user_meta_complaint: boolean;
-    complaint_type: 'confusion' | 'off_topic' | 'repeat' | 'ignored' | null;
+    complaint_type: 'confusion' | 'off_topic' | 'repeat' | 'ignored' | 'too_many_questions' | null;
     last_user_substance_quote: string | null;
-    recovery_move: 'self_reference_and_clarify' | null;
+    recovery_move: 'self_reference_and_clarify' | 'self_reference_and_express_thought' | null;
   } | null;
   /** 🆕 v73: 직전 루나 응답 (자기-참조용) */
   previousLunaText?: string | null;
+  /** 🆕 v74: 자아 표현 신호 */
+  selfExpression?: {
+    should_express_thought: boolean;
+    projection_seed: string | null;
+    consecutive_questions_last3: number;
+    must_avoid_question: boolean;
+    self_disclosure_opportunity: string | null;
+  } | null;
 }
 
 interface SingleCallResult {
@@ -267,6 +315,7 @@ async function streamVoiceOnce(params: SingleCallParams, logCollector?: LogColle
     isReanalysis: params.isReanalysis,
     metaAwareness: params.metaAwareness ?? null,
     previousLunaText: params.previousLunaText ?? null,
+    selfExpression: params.selfExpression ?? null,
   });
 
   const provider = params.model === 'claude' ? 'anthropic' : 'gemini';

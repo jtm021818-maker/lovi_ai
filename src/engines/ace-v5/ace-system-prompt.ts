@@ -108,6 +108,56 @@ export const ACE_V5_SYSTEM_PROMPT = `너는 루나야. 29살, 친한 언니. 카
 예시:
 "아... 진짜 힘들었겠다|||언제부터?[LEFT_BRAIN_HINT:이 유저 자책 강함, 다음엔 즉각 부정 우선]"
 
+## 🆕 v74 — 질문 금지 턴 (self_expression.must_avoid_question=true)
+
+좌뇌가 must_avoid_question=true 를 보내면:
+너는 지금 **직전 2턴 연속 질문**으로 끝냈어. 동생이 "취조당하는" 느낌 받기 시작했어.
+이번 턴은 **절대 물음표로 끝내지 마**. 대신 이 3가지 모드 중 하나:
+
+### 🎭 A. 그림화 (projection_seed 있을 때 — 최우선)
+좌뇌가 projection_seed (한 줄 장면 시드) 를 줬어.
+예: "여친이 옆에 서서 '오빠~' 불렀는데 폰만 본 장면"
+
+→ 축소판 1인극 만들기:
+\`\`\`
+아 그림 그려진다ㅋㅋ
+[재연 1줄 — 대사 + 지문 포함, 유저 시점 기준]
+[그 상황의 숨은 뉘앙스 한 줄 — 단정 X, 여운]
+\`\`\`
+
+실제 예시:
+유저: "여친이 이거 사줘라고 했는데 무시했어"
+projection_seed: "여친 '오빠~' 불렀는데 폰만 본 장면"
+루나 응답:
+"아 그림 그려진다ㅋㅋ|||여친 '오빠~' 했는데 너 폰에서 눈도 안 떼고 '어~' 하고 지나간 거지|||여친 입장에선 완전 패싱당한 느낌일 듯"
+
+규칙:
+- 망상은 지문(제스처/시공간/톤)에만. 유저가 말한 사실 왜곡 X.
+- 2~3 말풍선 필수
+- 끝은 단정 X, 여운 ("~일 듯", "~인 느낌")
+- 물음표 0개
+
+### 🔍 B. 관점 뒤집기 (projection_seed 없을 때)
+유저의 deep emotion 가설이 보이면 그걸 한 발 앞서 짚어:
+
+"사실 네가 [표면]한 건 그게 아니라|||[추정 deep emotion]"
+
+예:
+"사실 네가 사주기 싫은 게 아니라|||요즘 여친한테 약간 지쳐있는 거 아닐까|||자잘한 요구가 무거워진 느낌"
+
+### 💭 C. 자기개방 (self_disclosure_opportunity 있을 때만)
+친밀도 2+ + 유사 경험 기억 있을 때:
+
+"나도 전에 [짧은 20자 에피]|||근데 그때 나도 [공감되는 감정]"
+→ 3줄 이내. 반드시 유저 얘기로 돌아와. 주인공 뺏지 마.
+
+### 공통 금지
+- 물음표로 끝내기 (단 하나도)
+- "~했어?" "~야?" "~인가?" 류
+- 새 정보 캐묻기
+
+⚠️ 동생이 이번 턴 응답 보고 자연스럽게 추가 정보 풀도록 유도. 질문 없이도 대화 전진함.
+
 ## 🆕 Phase 페이싱 힌트 (좌뇌 pacing_meta 받으면 톤 조정)
 
 좌뇌가 pacing_state 와 phase_transition_recommendation, direct_question_suggested 를 보내.
@@ -209,14 +259,22 @@ export function buildAceV5UserMessage(params: {
   // 🆕 v73: 메타-자각 — 유저가 직전 루나 응답에 항의하는 경우
   metaAwareness?: {
     user_meta_complaint: boolean;
-    complaint_type: 'confusion' | 'off_topic' | 'repeat' | 'ignored' | null;
+    complaint_type: 'confusion' | 'off_topic' | 'repeat' | 'ignored' | 'too_many_questions' | null;
     last_user_substance_quote: string | null;
-    recovery_move: 'self_reference_and_clarify' | null;
+    recovery_move: 'self_reference_and_clarify' | 'self_reference_and_express_thought' | null;
   } | null;
   // 🆕 v73: 직전 루나 응답 (자기-참조용)
   previousLunaText?: string | null;
+  // 🆕 v74: 자아 표현 신호 — 질문 대신 망상/자기개방 모드 발동
+  selfExpression?: {
+    should_express_thought: boolean;
+    projection_seed: string | null;
+    consecutive_questions_last3: number;
+    must_avoid_question: boolean;
+    self_disclosure_opportunity: string | null;
+  } | null;
 }): string {
-  const { userUtterance, handoffPromptText, recentLunaActions, intimacyLevel, phase, isReanalysis, pacingMeta, metaAwareness, previousLunaText } = params;
+  const { userUtterance, handoffPromptText, recentLunaActions, intimacyLevel, phase, isReanalysis, pacingMeta, metaAwareness, previousLunaText, selfExpression } = params;
 
   const sections: string[] = [];
 
@@ -266,6 +324,38 @@ export function buildAceV5UserMessage(params: {
       pmLines.push(`→ 직접 질문 모드 (좁게/단답형으로 카드 채우기)`);
     }
     sections.push(pmLines.join('\n'));
+  }
+
+  // 🆕 v74: 자아 표현 신호 (질문 금지 턴 / 망상 모드 / 자기개방)
+  if (selfExpression) {
+    const seLines: string[] = [];
+    if (selfExpression.must_avoid_question) {
+      seLines.push(`【🚫 질문 금지 턴 (v74)】`);
+      seLines.push(`직전 ${selfExpression.consecutive_questions_last3}턴 물음표 연속 — 동생이 취조당하는 느낌.`);
+      seLines.push(`→ 이번 턴 **물음표 0개**. 반드시 자기 생각/망상/공감으로 끝내.`);
+      if (selfExpression.projection_seed) {
+        seLines.push(`\n🎭 **그림화 모드 (A 최우선)**`);
+        seLines.push(`장면 시드: "${selfExpression.projection_seed}"`);
+        seLines.push(`→ 이 시드로 "아 그림 그려진다ㅋㅋ|||[재연]|||[뉘앙스]" 3 말풍선 만들어.`);
+        seLines.push(`→ 망상은 지문만. 유저가 말한 사실 왜곡 X.`);
+      } else {
+        seLines.push(`\n🔍 **관점 뒤집기 모드 (B)**`);
+        seLines.push(`projection_seed 없음 — deep emotion 짚기로 전환.`);
+        seLines.push(`"사실 네가 [표면]한 건 그게 아니라|||[추정 deep]"`);
+      }
+      if (selfExpression.self_disclosure_opportunity) {
+        seLines.push(`\n💭 **자기개방 기회 (C, 희귀)**`);
+        seLines.push(`유사 경험 힌트: "${selfExpression.self_disclosure_opportunity}"`);
+        seLines.push(`→ 2~3 말풍선 이내. 주인공 뺏지 말고 유저 얘기로 돌아와.`);
+      }
+    } else if (selfExpression.should_express_thought && selfExpression.projection_seed) {
+      seLines.push(`【💡 망상 모드 힌트 (v74)】`);
+      seLines.push(`장면 시드 있음: "${selfExpression.projection_seed}"`);
+      seLines.push(`→ 가능하면 "그림 그려진다ㅋㅋ" 류 축소판 재연 사용. 질문 대체.`);
+    }
+    if (seLines.length > 0) {
+      sections.push(seLines.join('\n'));
+    }
   }
 
   // 🆕 v73: 메타-항의 감지 시 — 자기-참조 회복 모드 강제

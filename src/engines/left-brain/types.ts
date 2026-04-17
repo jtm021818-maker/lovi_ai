@@ -266,9 +266,30 @@ export interface LeftBrainAnalysis {
   /** 🆕 v73: 메타-자각 — 유저가 직전 루나 응답에 항의하는 경우 */
   meta_awareness?: {
     user_meta_complaint: boolean;
-    complaint_type: 'confusion' | 'off_topic' | 'repeat' | 'ignored' | null;
+    complaint_type: 'confusion' | 'off_topic' | 'repeat' | 'ignored' | 'too_many_questions' | null;
     last_user_substance_quote: string | null;
-    recovery_move: 'self_reference_and_clarify' | null;
+    recovery_move: 'self_reference_and_clarify' | 'self_reference_and_express_thought' | null;
+  };
+
+  /**
+   * 🆕 v74: 자아 표현 신호 — 질문 대신 루나가 자기 생각/망상/경험을 꺼낼 여지
+   * 루나가 "질문봇" 이 되는 걸 막는 핵심 스위치.
+   */
+  self_expression?: {
+    /** 이번 턴 질문 대신 자기 생각을 꺼낼 여지가 있나 */
+    should_express_thought: boolean;
+    /**
+     * 유저 발화를 재연할 "장면 시드" — 한 줄 (10~40자).
+     * 우뇌가 이걸 받아 "그림 그려진다" 류 축소판 망상을 꺼냄.
+     * 없으면 null.
+     */
+    projection_seed: string | null;
+    /** 직전 2턴 루나 응답에 물음표가 몇 개였는지 (질문 과잉 탐지) */
+    consecutive_questions_last3: number;
+    /** 이번 턴 물음표 금지 (true면 우뇌가 질문으로 끝내지 않음) */
+    must_avoid_question: boolean;
+    /** 자기개방 기회 — 친밀도 + 유사 경험 있을 때만 */
+    self_disclosure_opportunity: string | null;
   };
 
   // 기존 dual-brain 호환 필드
