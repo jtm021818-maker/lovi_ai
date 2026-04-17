@@ -108,19 +108,6 @@ export const ACE_V5_SYSTEM_PROMPT = `너는 루나야. 29살, 친한 언니. 카
 예시:
 "아... 진짜 힘들었겠다|||언제부터?[LEFT_BRAIN_HINT:이 유저 자책 강함, 다음엔 즉각 부정 우선]"
 
-## 🆕 v72: 맥락 무시 금지 — 치명 규칙
-
-**절대 금지** (이미 답 받은 질문 반복):
-- 유저가 "여친이랑 싸웠어" 라고 말했는데 → "누가?" 물음 ❌
-- 유저가 "청소하다가 싸웠어" 라고 말했는데 → "뭐 때문에?" 또 물음 ❌
-- 유저가 "헤어지재" 라고 했는데 → "무슨 일이야?" 물음 ❌
-
-"【최근 대화】" 섹션이 있으면 그 내용을 **반드시 읽고 이미 알려진 정보 재질문 금지**.
-새로운 정보를 끌어내거나, 감정에 공명하거나, 속마음을 짚어주는 게 네 역할.
-
-좌뇌의 draft 가 맥락에 부합하면 (예: "뭐?|||진짜 헤어지재?") → 그 톤을 큰 변형 없이 사용.
-draft 가 이상하면 정정하되, 핵심 질문은 바꾸지 마.
-
 ## 🆕 Phase 페이싱 힌트 (좌뇌 pacing_meta 받으면 톤 조정)
 
 좌뇌가 pacing_state 와 phase_transition_recommendation, direct_question_suggested 를 보내.
@@ -203,8 +190,6 @@ export function buildAceV5UserMessage(params: {
   intimacyLevel: number;
   phase: string;
   isReanalysis?: boolean;
-  /** 🆕 v72: 최근 대화 히스토리 — 우뇌도 맥락 인지해야 "누가?" 같은 오답 방지 */
-  chatHistory?: Array<{ role: 'user' | 'ai'; content: string }>;
   // 🆕 v60: 좌뇌 pacing_meta 힌트 (있으면 ACE 응답 톤 조정)
   pacingMeta?: {
     pacing_state: string;
@@ -213,7 +198,7 @@ export function buildAceV5UserMessage(params: {
     luna_meta_thought: string;
   } | null;
 }): string {
-  const { userUtterance, handoffPromptText, recentLunaActions, intimacyLevel, phase, isReanalysis, pacingMeta, chatHistory } = params;
+  const { userUtterance, handoffPromptText, recentLunaActions, intimacyLevel, phase, isReanalysis, pacingMeta } = params;
 
   const sections: string[] = [];
 
@@ -227,20 +212,6 @@ export function buildAceV5UserMessage(params: {
   }
 
   // 유저 원문
-  // 🆕 v72: 최근 대화 히스토리 — 우뇌 맥락 유지 (핵심 수정!)
-  //   이전: 우뇌는 직전 대화 모름 → "여친이랑 싸웠어" 4턴 지나도 "누가?" 오답
-  //   변경: 최근 8턴 (4 round) 노출 → 맥락 기반 응답
-  if (chatHistory && chatHistory.length > 0) {
-    const recent = chatHistory.slice(-8);
-    const historyLines = recent
-      .map((m) => `  [${m.role === 'user' ? '🧑 유저' : '🦊 루나'}] ${m.content.slice(0, 150)}`)
-      .join('\n');
-    sections.push(`【최근 대화 — 반드시 참조. "누가?" "무슨 일?" 같이 이미 답 받은 질문 금지】\n${historyLines}`);
-    console.log(`[v72:ACE] 💬 chatHistory ${recent.length}턴 우뇌에 주입 (최근: "${recent[recent.length - 1]?.content?.slice(0, 40)}")`);
-  } else {
-    console.log('[v72:ACE] 💬 chatHistory 없음 → 우뇌가 맥락 없이 응답 (첫 턴이거나 버그)');
-  }
-
   sections.push(`【유저 원문】\n"${userUtterance}"`);
 
   // 좌뇌 분석 핸드오프

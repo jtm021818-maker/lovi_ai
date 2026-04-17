@@ -786,28 +786,7 @@ export async function POST(req: NextRequest) {
           }
 
           // 🆕 v35: session_metadata (작전 모드 포함) 영구 저장
-          // 🆕 v72: working_memory 키 보존 — saveScratchpad 로 저장된 WM 이 덮어써지지 않게
-          //   기존: runningSessionMeta 로 통째로 덮어씀 → WM 매 턴 사라짐
-          //   변경: 기존 DB session_metadata.working_memory 를 읽어서 병합
-          try {
-            const { data: existingSess } = await supabase
-              .from('counseling_sessions')
-              .select('session_metadata')
-              .eq('id', sessionId)
-              .maybeSingle();
-            const existingMeta = (existingSess?.session_metadata as any) ?? {};
-            const hadWM = !!existingMeta.working_memory;
-            const wmTurn = existingMeta.working_memory?.turn_idx ?? '?';
-            unifiedSessionUpdate.session_metadata = {
-              ...existingMeta,
-              ...runningSessionMeta,
-              working_memory: existingMeta.working_memory ?? runningSessionMeta?.working_memory,
-            };
-            console.log(`[v72:WM-guard] 🛡️ session_metadata 병합: 기존WM ${hadWM ? `있음(turn=${wmTurn})` : '없음'} → 보존`);
-          } catch (e: any) {
-            console.warn('[v72:WM-guard] ⚠️ 기존 meta 읽기 실패, 덮어쓰기 진행:', e?.message);
-            unifiedSessionUpdate.session_metadata = runningSessionMeta;
-          }
+          unifiedSessionUpdate.session_metadata = runningSessionMeta;
 
           // 🎯 v66: safeSupabaseRetry 로 fetch failed 시 자동 재시도
           //   기존: 단일 fire-and-forget → fetch failed 1회로 영구 손실

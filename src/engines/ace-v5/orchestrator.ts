@@ -68,7 +68,6 @@ export async function* executeAceV5(
     isReanalysis: input.alreadyReanalyzed === true,
     model: selectedModel,
     onChunk: undefined,
-    chatHistory: input.chatHistory,  // 🆕 v72: 맥락 전달
   }, logCollector);
 
   // ────────────────────────────────────────
@@ -120,7 +119,6 @@ export async function* executeAceV5(
         isReanalysis: true,
         model: 'claude',    // 재요청은 Claude 로 고정
         onChunk: undefined,
-        chatHistory: input.chatHistory,  // 🆕 v72: 재요청도 맥락 유지
       }, logCollector);
 
       finalText = secondCallResult.fullText;
@@ -224,8 +222,6 @@ interface SingleCallParams {
   /** 🆕 v56: 우뇌 모델 선택 */
   model: 'gemini' | 'claude';
   onChunk?: (chunk: string) => void;
-  /** 🆕 v72: 우뇌도 대화 맥락 받음 */
-  chatHistory?: Array<{ role: 'user' | 'ai'; content: string }>;
 }
 
 interface SingleCallResult {
@@ -250,7 +246,6 @@ async function streamVoiceOnce(params: SingleCallParams, logCollector?: LogColle
     intimacyLevel: params.intimacyLevel,
     phase: params.phase,
     isReanalysis: params.isReanalysis,
-    chatHistory: params.chatHistory,  // 🆕 v72
   });
 
   const provider = params.model === 'claude' ? 'anthropic' : 'gemini';

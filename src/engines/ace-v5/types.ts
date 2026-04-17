@@ -94,9 +94,6 @@ export interface AceV5Input {
 
   /** 우뇌의 의심사항 (재요청 시 좌뇌에 전달용) */
   claudeConcern?: string;
-
-  /** 🆕 v72: 최근 대화 히스토리 — 우뇌 맥락 유지 (핵심!) */
-  chatHistory?: Array<{ role: 'user' | 'ai'; content: string }>;
 }
 
 // ============================================================

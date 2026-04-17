@@ -269,14 +269,6 @@ export class PhaseManager {
       return nextPhase;
     }
 
-    // 🆕 v72: Phase 긴급 점프 — HOOK 에서 위기/강한 재료가 있는데 좌뇌가 STAY 만 고집할 때
-    //   감정 -4 이하 + phase 3턴+ → MIRROR 강제 점프 (정체 방지)
-    //   유저가 이미 충분히 풀어놨으면 이야기듣기 지나서 마음읽기로.
-    if (currentPhase === 'HOOK' && turnsInPhase >= 3 && ctx.currentEmotionScore !== undefined && ctx.currentEmotionScore <= -3) {
-      console.warn(`[PhaseManager] 🚀 v72 긴급 점프: HOOK ${turnsInPhase}턴 + 강한 감정(${ctx.currentEmotionScore}) → ${nextPhase}`);
-      return nextPhase;
-    }
-
     // 2. 🆕 v60: 좌뇌 pacing_meta 기반 전환 (가장 우선)
     if (pacingMeta) {
       if (pacingMeta.phase_transition_recommendation === 'JUMP') {
