@@ -178,7 +178,7 @@ export class CounselingPipeline {
     userMessage: string,
     chatHistory: { role: 'user' | 'ai'; content: string }[],
     context: string = '',
-    ragContext?: { supabase: any; userId: string },
+    ragContext?: { supabase: any; userId: string; sessionId?: string },
     /** 페르소나 모드 (상담사/친구/전문가 패널) */
     persona: PersonaMode = 'counselor',
     /** 현재 대화 턴 수 */
@@ -1477,12 +1477,33 @@ ${researchResult.insight}
         // KBE 비활성 시 기존 방식(Claude 출력 직접 스트림)
         let claudeBuffer = '';
 
+        // 🆕 v70: Working Memory scratchpad 로드 (세션 내 연속성)
+        let workingMemory: any = null;
+        if (ragContext?.supabase && ragContext?.sessionId) {
+          try {
+            const { loadScratchpad } = await import('@/engines/working-memory');
+            workingMemory = await loadScratchpad(
+              ragContext.supabase,
+              ragContext.sessionId,
+              ragContext.userId,
+            );
+          } catch (e: any) {
+            console.warn('[Pipeline:v70] WM load 실패 (무시):', e?.message);
+          }
+        }
+
         try {
           for await (const chunk of executeDualBrain({
             userInput: userMessage,
             contextBlock: systemPrompt,
-            sessionId: ragContext?.userId ?? 'unknown',
+            sessionId: ragContext?.sessionId ?? ragContext?.userId ?? 'unknown',
             turnIdx: turnCount,
+            // 🆕 v70: 풍부한 컨텍스트 주입
+            userId: ragContext?.userId,
+            currentPhase: newPhaseV2 as any,
+            phaseStartTurn: updatedPhaseStartTurn ?? phaseStartTurn,
+            workingMemory,
+            supabase: ragContext?.supabase,
           }, logCollector)) {
             if (chunk.type === 'text') {
               if (useKBE) {
@@ -1499,6 +1520,64 @@ ${researchResult.insight}
           console.warn('[Pipeline] ⚠️ DualBrain 실패 — 레거시 단일 모델로 폴백:', err?.message);
           fullText = '';
           claudeBuffer = '';
+        }
+
+        // 🆕 v70: Working Memory 턴 종료 후 업데이트 + 저장 (fire-and-forget)
+        let finalWorkingMemory: any = null;
+        if (workingMemory && ragContext?.supabase && ragContext?.sessionId) {
+          try {
+            const { updateFromTurn, saveScratchpad } = await import('@/engines/working-memory');
+            const updatedWM = updateFromTurn(workingMemory, {
+              turnIdx: turnCount,
+              userMessage,
+              lunaResponse: fullText || claudeBuffer,
+              leftBrainAnalysis: capturedLeftBrainAnalysis,
+              emotionScore: stateResult.emotionScore,
+            });
+            finalWorkingMemory = updatedWM;
+            // fire-and-forget
+            saveScratchpad(ragContext.supabase, ragContext.sessionId, updatedWM)
+              .then(res => {
+                if (!res.success) console.warn('[Pipeline:v70] WM save 실패:', res.error);
+              })
+              .catch((e: any) => console.warn('[Pipeline:v70] WM save 예외:', e?.message));
+          } catch (e: any) {
+            console.warn('[Pipeline:v70] WM update 실패 (무시):', e?.message);
+          }
+        }
+
+        // 🆕 v70: Reflection 트리거 (매 6턴, fire-and-forget)
+        if (finalWorkingMemory && ragContext?.supabase && ragContext?.sessionId) {
+          try {
+            const { shouldTriggerReflection, performReflection } = await import('@/engines/consolidation/reflection');
+            if (shouldTriggerReflection(turnCount)) {
+              console.log(`[Memory:v70] 🧠 Reflection 트리거 (turn=${turnCount})`);
+              const supa = ragContext.supabase;
+              const uid = ragContext.userId;
+              const sid = ragContext.sessionId;
+              performReflection(supa, uid, sid, finalWorkingMemory)
+                .then(async (result) => {
+                  if (!result) return;
+                  // scratchpad 의 session_scratchpad 를 업데이트 + 저장
+                  const updated = {
+                    ...finalWorkingMemory,
+                    session_scratchpad: {
+                      ...finalWorkingMemory.session_scratchpad,
+                      main_topic: result.main_topic ?? finalWorkingMemory.session_scratchpad.main_topic,
+                      situation_summary: result.situation_summary ?? finalWorkingMemory.session_scratchpad.situation_summary,
+                      user_primary_stance: result.user_primary_stance ?? finalWorkingMemory.session_scratchpad.user_primary_stance,
+                      key_characters: result.key_characters ?? finalWorkingMemory.session_scratchpad.key_characters,
+                      unresolved_points: result.unresolved_points ?? finalWorkingMemory.session_scratchpad.unresolved_points,
+                    },
+                  };
+                  const { saveScratchpad } = await import('@/engines/working-memory');
+                  await saveScratchpad(supa, sid, updated);
+                })
+                .catch((e: any) => console.warn('[Pipeline:v70] Reflection 실패:', e?.message));
+            }
+          } catch (e: any) {
+            console.warn('[Pipeline:v70] Reflection 모듈 로드 실패 (무시):', e?.message);
+          }
         }
 
         // KBE 실행 — Claude 원문을 "친구라면 어떻게 보낼까" 판단

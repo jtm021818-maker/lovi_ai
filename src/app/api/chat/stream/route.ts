@@ -400,7 +400,7 @@ export async function POST(req: NextRequest) {
           (profile?.onboarding_situation
             ? `\n[사용자 성별: ${profile.onboarding_situation === 'male' ? '남성' : profile.onboarding_situation === 'female' ? '여성' : '선택하지 않음'}] (참고만 하되 호칭이나 말투에 반영하지 마. 루나는 성별 관계없이 동일한 말투를 사용해.)`
             : '\n[사용자 성별: 선택하지 않음]') + previousSessionContext,
-          { supabase, userId: user.id },
+          { supabase, userId: user.id, sessionId }, // 🆕 v70: sessionId 전달 (working memory 로드용)
           persona,
           turnCount,
           suggestionMeta,
@@ -943,10 +943,19 @@ async function savePostProcessing(
     }) : Promise.resolve(),
   ]);
 
-  // RAG 인제스팅 (fire-and-forget)
+  // RAG 인제스팅 (fire-and-forget) — 유저 메시지
   ingestMessage({ supabase, userId, sessionId, content: userMessage,
     emotionScore: stateResult?.emotionScore, strategyUsed: strategyResult?.strategyType,
   }).catch((err) => console.error('[PostProcess] RAG 인제스팅 실패:', err));
+
+  // 🆕 v70: AI 응답도 임베딩 — 루나 자기 말 기억용 (fire-and-forget)
+  if (aiContent && aiContent.trim().length > 0) {
+    import('@/lib/rag/ingestor').then(({ ingestAiResponse }) => {
+      ingestAiResponse({ supabase, userId, sessionId, content: aiContent,
+        strategyUsed: strategyResult?.strategyType,
+      }).catch((err) => console.warn('[PostProcess:v70] AI 임베딩 실패:', err?.message));
+    }).catch(() => { /* ignore */ });
+  }
 
   // 🆕 v33: 시나리오 잠금 (1회 SELECT 필요 — 세션 UPDATE와 독립)
   const detectedScenario = stateResult?.scenario;

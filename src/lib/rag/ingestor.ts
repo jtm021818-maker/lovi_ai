@@ -114,6 +114,88 @@ export async function ingestMessage(params: IngestMessageParams): Promise<void> 
   });
 
   if (error) {
-    console.error('[RAG Ingestor] message_memories 저장 실패:', error.message);
+    console.error('[Memory:UserEmbed] ❌ message_memories 저장 실패:', error.message);
+  } else {
+    console.log(`[Memory:UserEmbed] 💾 유저 메시지 저장 (${result.text.length}자, emotion=${emotionScore ?? 'N/A'})`);
+  }
+}
+
+/**
+ * 🆕 v70: AI 응답 임베딩 — 루나가 자기 말 기억할 수 있게
+ * 유저 메시지와 동일하게 message_memories 에 저장 (sender_type='ai')
+ * 기본 OFF (LUNA_AI_EMBED_V70=0 으로 끌 수 있음, 기본 1)
+ */
+export async function ingestAiResponse(params: {
+  supabase: SupabaseClient;
+  userId: string;
+  sessionId: string;
+  content: string;
+  strategyUsed?: string;
+}): Promise<void> {
+  if (process.env.LUNA_AI_EMBED_V70 === '0') {
+    console.log('[Memory:AIEmbed] ⏸️ 비활성 (LUNA_AI_EMBED_V70=0)');
+    return;
+  }
+
+  const { supabase, userId, sessionId, content, strategyUsed } = params;
+
+  // 필터: 최소 길이 + 의미 있는 내용
+  const cleaned = content
+    .replace(/\[SITUATION_READ:[^\]]*\]/gi, '')
+    .replace(/\[LUNA_THOUGHT:[^\]]*\]/gi, '')
+    .replace(/\[PHASE_SIGNAL:[^\]]*\]/gi, '')
+    .replace(/\[SITUATION_CLEAR:[^\]]*\]/gi, '')
+    .replace(/\[LEFT_BRAIN_HINT:[^\]]*\]/gi, '')
+    .replace(/\[STICKER:[^\]]*\]/gi, '')
+    .replace(/\|\|\|/g, ' ')
+    .trim();
+
+  if (!shouldEmbed(cleaned)) {
+    console.log(`[Memory:AIEmbed] 🚫 임베딩 스킵 (${cleaned.length}자, 잡음)`);
+    return;
+  }
+
+  const result = await embedText(cleaned);
+  if (!result) {
+    console.log('[Memory:AIEmbed] 🚫 embedText null');
+    return;
+  }
+
+  // 🆕 v70: sender_type='ai' 로 저장. 컬럼이 없으면 무시 (fallback).
+  //        마이그레이션 적용 전이어도 깨지지 않게 try/catch.
+  try {
+    const { error } = await supabase.from('message_memories').insert({
+      user_id: userId,
+      session_id: sessionId,
+      content: result.text,
+      embedding: result.embedding,
+      strategy_used: strategyUsed ?? null,
+      sender_type: 'ai',
+    } as any);
+
+    if (error) {
+      // sender_type 컬럼 없으면 한 번 더 시도 (마이그레이션 아직 안 됐을 때)
+      if (error.message?.includes('sender_type')) {
+        console.warn('[Memory:AIEmbed] ⚠️ sender_type 컬럼 없음 → 마이그레이션 필요. fallback insert.');
+        const { error: fallbackErr } = await supabase.from('message_memories').insert({
+          user_id: userId,
+          session_id: sessionId,
+          content: result.text,
+          embedding: result.embedding,
+          strategy_used: strategyUsed ?? null,
+        });
+        if (fallbackErr) {
+          console.warn('[Memory:AIEmbed] ❌ fallback 저장도 실패:', fallbackErr.message);
+        } else {
+          console.log(`[Memory:AIEmbed] 💾 fallback 저장 (${result.text.length}자, sender_type 없이)`);
+        }
+      } else {
+        console.warn('[Memory:AIEmbed] ❌ 저장 실패:', error.message);
+      }
+    } else {
+      console.log(`[Memory:AIEmbed] 💾 루나 응답 저장 (${result.text.length}자): "${result.text.slice(0, 60)}..."`);
+    }
+  } catch (e: any) {
+    console.warn('[Memory:AIEmbed] ❌ 예외:', e?.message);
   }
 }

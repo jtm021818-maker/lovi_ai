@@ -60,6 +60,12 @@ async function callGeminiBrain(params: {
   contextBlock: string;
   sessionId: string;
   turnIdx: number;
+  // 🆕 v70: 풍부한 컨텍스트 주입용 옵셔널 필드
+  userId?: string;
+  currentPhase?: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER';
+  phaseStartTurn?: number;
+  workingMemory?: any;  // WorkingMemoryScratchpad
+  supabase?: any;       // SupabaseClient
 }, logCollector?: LogCollector): Promise<{
   output: BrainOutput | null;
   latencyMs: number;
@@ -72,13 +78,38 @@ async function callGeminiBrain(params: {
   // Path A: 좌뇌 사용 (기본)
   // ────────────────────────────────
   if (LEFT_BRAIN_CONFIG.enabled) {
+    // 🆕 v70: context-assembler 로 풍부한 컨텍스트 조립 (실패 허용)
+    let richContext: Partial<import('@/engines/left-brain/types').LeftBrainInput> = {};
+    try {
+      const { assembleLeftBrainContext } = await import('@/engines/left-brain/context-assembler');
+      richContext = await assembleLeftBrainContext({
+        userId: params.userId ?? params.sessionId,
+        sessionId: params.sessionId,
+        userMessage: params.userInput,
+        turnIdx: params.turnIdx,
+        currentPhase: params.currentPhase ?? (extractPhase(params.contextBlock) as any),
+        phaseStartTurn: params.phaseStartTurn ?? 0,
+        intimacyLevel: extractIntimacy(params.contextBlock),
+        workingMemory: params.workingMemory,
+        supabase: params.supabase,
+      });
+    } catch (e: any) {
+      console.warn('[DualBrain] context-assembler 실패 (fallback to legacy):', e?.message);
+    }
+
     const { analysis, latencyMs, error } = await analyzeLeftBrain({
       userUtterance: params.userInput,
       sessionId: params.sessionId,
       turnIdx: params.turnIdx,
-      recentTrajectory: [],   // TODO: 세션 스토어에서 가져오기
+      recentTrajectory: richContext.recentTrajectory ?? [],
       phase: extractPhase(params.contextBlock),
       intimacyLevel: extractIntimacy(params.contextBlock),
+      // 🆕 v70: 조립된 풍부한 필드 주입
+      relevantEpisodes: richContext.relevantEpisodes,
+      userProfile: richContext.userProfile,
+      personalProfile: richContext.personalProfile,
+      timeContext: richContext.timeContext,
+      pacing_context: richContext.pacing_context,
     }, logCollector);
 
     // 좌뇌 로깅
@@ -318,6 +349,13 @@ export interface DualBrainStreamYield {
 }
 
 export interface DualBrainInput {
+  /** 🆕 v70: 풍부한 컨텍스트 주입 (옵셔널) */
+  userId?: string;
+  currentPhase?: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER';
+  phaseStartTurn?: number;
+  workingMemory?: any;
+  supabase?: any;
+  // ─────────────────────────────
   userInput: string;
   contextBlock: string;
   sessionId: string;
@@ -347,6 +385,12 @@ export async function* executeDualBrain(
     contextBlock: input.contextBlock,
     sessionId: input.sessionId,
     turnIdx: input.turnIdx,
+    // 🆕 v70: 풍부한 컨텍스트 pass-through
+    userId: input.userId,
+    currentPhase: input.currentPhase,
+    phaseStartTurn: input.phaseStartTurn,
+    workingMemory: input.workingMemory,
+    supabase: input.supabase,
   }, logCollector);
 
   // 🆕 v63: brainResult 즉시 디버그 — output null 케이스 추적

@@ -77,11 +77,17 @@ export async function retrieveMemories(
   });
 
   if (error) {
-    console.error('[RAG Retriever] match_past_memories RPC 실패:', error.message);
+    console.error('[Memory:RAG] ❌ match_past_memories RPC 실패:', error.message);
     return [];
   }
 
-  return (data as MemoryMatch[]) ?? [];
+  const results = (data as MemoryMatch[]) ?? [];
+  if (results.length > 0) {
+    console.log(`[Memory:RAG] 🔍 회상 ${results.length}건 (threshold=${threshold}, topK=${topK}): ${results.map(r => `"${r.content.slice(0, 30)}"(${r.similarity.toFixed(2)})`).join(' | ')}`);
+  } else {
+    console.log(`[Memory:RAG] 🔍 회상 0건 (threshold=${threshold}, query="${enrichedQuery.slice(0, 30)}")`);
+  }
+  return results;
 }
 
 /**
