@@ -382,10 +382,17 @@ export function useChat(sessionId: string): UseChatReturn {
                     'color: #ffeb3b; font-weight: bold; font-size: 12px;'
                   );
                   ctx.engineLogs.forEach((log: any) => {
+                    // v61: 방어적 처리 — log 가 문자열이거나 category 가 없어도 안전
+                    if (typeof log === 'string') {
+                      console.log('%c• ' + log, 'color: #e0e0e0;');
+                      return;
+                    }
+                    if (!log || typeof log !== 'object') return;
+
                     let icon = '⚪';
                     let color = '#9e9e9e';
-                    const cat = log.category.toUpperCase();
-                    
+                    const cat = (log.category ?? 'GENERAL').toString().toUpperCase();
+
                     if (cat.includes('LEFT')) { icon = '📘'; color = '#2196f3'; }
                     else if (cat.includes('RIGHT') || cat.includes('ACE')) { icon = '🎨'; color = '#e91e63'; }
                     else if (cat.includes('ACC')) { icon = '🛡️'; color = '#4caf50'; }
@@ -395,11 +402,11 @@ export function useChat(sessionId: string): UseChatReturn {
                     else if (cat.includes('HLRE')) { icon = '🔥'; color = '#ff5722'; }
 
                     console.log(
-                      `%c${icon} [${log.category}] %c${log.message}`,
+                      `%c${icon} [${cat}] %c${log.message ?? ''}`,
                       `color: ${color}; font-weight: bold;`,
                       'color: #e0e0e0; font-weight: normal;'
                     );
-                    if (log.data && Object.keys(log.data).length > 0) {
+                    if (log.data && typeof log.data === 'object' && Object.keys(log.data).length > 0) {
                       console.log('%c└ Data:', 'color: #757575; font-style: italic;', log.data);
                     }
                   });
