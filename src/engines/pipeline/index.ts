@@ -611,20 +611,38 @@ export class CounselingPipeline {
     }
 
     // 🆕 v19: 루나의 마음 거울 (MIRROR 구간) — 동적 감정 분석 기반
+    // 🆕 v65: 동적 데이터 없으면 이벤트 발동 X. HOOK 단계 유지 + 루나가 더 궁금해하기.
     if (canFireEvent() && PhaseManager.shouldTriggerEvent(newPhaseV2, 'EMOTION_MIRROR', makeCtxForEvent())) {
       let mirrorData: EmotionMirrorData | null = null;
       if (isReadyForMirror(updatedAccumulator)) {
-        try {
-          const userGender = (memoryProfile as any)?.basicInfo?.gender;
-          mirrorData = await generateDynamicMirror(updatedAccumulator, currentScenario, chatHistory, userGender);
-          console.log(`[Pipeline] 🪞 동적 거울 생성 성공: 겉="${mirrorData?.surfaceEmotion}" / 속="${mirrorData?.deepEmotion}"`);
-        } catch (e) {
-          console.warn('[Pipeline] 🪞 동적 거울 생성 실패, 폴백 사용:', e);
+        const userGender = (memoryProfile as any)?.basicInfo?.gender;
+        // 🆕 v65: 1차 시도 → 실패 시 즉시 1회 재시도
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            mirrorData = await generateDynamicMirror(updatedAccumulator, currentScenario, chatHistory, userGender);
+            if (mirrorData) {
+              console.log(`[Pipeline] 🪞 거울 생성 성공 (시도 ${attempt}/2): 겉="${mirrorData?.surfaceEmotion}" / 속="${mirrorData?.deepEmotion}"`);
+              break;
+            }
+            console.warn(`[Pipeline] 🪞 거울 생성 시도 ${attempt}/2 → 재료 부족 (LLM ready=false)`);
+          } catch (e) {
+            console.warn(`[Pipeline] 🪞 거울 생성 시도 ${attempt}/2 에러:`, e);
+          }
         }
+      } else {
+        console.log('[Pipeline] 🪞 isReadyForMirror=false → 거울 스킵, HOOK 단계 유지');
       }
-      eventsToFire.push(createEmotionMirror(stateResult, currentScenario, mirrorData));
-      updatedCompletedEvents.push('EMOTION_MIRROR');
-      updatedLastEventTurn = turnCount;
+
+      const mirrorEvent = createEmotionMirror(stateResult, currentScenario, mirrorData);
+      if (mirrorEvent) {
+        eventsToFire.push(mirrorEvent);
+        updatedCompletedEvents.push('EMOTION_MIRROR');
+        updatedLastEventTurn = turnCount;
+      } else {
+        // 🆕 v65: 거울 데이터 없으면 이벤트 자체 발동 X. completedEvents 도 갱신 안 함.
+        // → MIRROR Phase 유지 → 루나가 다음 턴에 더 궁금해하기
+        console.log('[Pipeline] 🪞 거울 이벤트 스킵 (재료 부족) → 다음 턴에 루나가 더 캐묻도록');
+      }
     }
 
     // 🆕 v49: LUNA_STRATEGY 발동 — 루나가 "이제 작전 짜자" 판단하는 타이밍
@@ -1486,8 +1504,19 @@ ${researchResult.insight}
         // KBE 실행 — Claude 원문을 "친구라면 어떻게 보낼까" 판단
         if (useKBE && claudeBuffer) {
           try {
+            // 🆕 v66: KBE 입력 정제 — 좌뇌 메타 태그 ([SITUATION_READ:...] 등) 제거
+            //   ACE 응답에 태그가 붙어있으면 KBE 가 burst 분리 시 태그를 본문으로 오해
+            const cleanedClaudeBuffer = claudeBuffer
+              .replace(/\[SITUATION_READ:[^\]]*\]/gi, '')
+              .replace(/\[LUNA_THOUGHT:[^\]]*\]/gi, '')
+              .replace(/\[PHASE_SIGNAL:[^\]]*\]/gi, '')
+              .replace(/\[SITUATION_CLEAR:[^\]]*\]/gi, '')
+              .replace(/\[LEFT_BRAIN_HINT:[^\]]*\]/gi, '')
+              .replace(/\[REQUEST_REANALYSIS:[^\]]*\]/gi, '')
+              .trim();
+
             const kbeStream = runKBE({
-              claude_response: claudeBuffer,
+              claude_response: cleanedClaudeBuffer,
               user_utterance: userMessage,
               left_brain_summary: {
                 tone: strategyResult.strategyType,
@@ -1499,7 +1528,8 @@ ${researchResult.insight}
               limbic_mood: limbicHandoffText.slice(0, 200) || '평이한 상태',
               session_meta: {
                 turn_idx: turnCount,
-                intimacy_level: 3,   // TODO: 실제 친밀도 시스템 연동
+                // 🆕 v66: 하드코딩 3 제거 → hlre 친밀도 시스템에서 실제 level 가져옴
+                intimacy_level: (hlre.getIntimacyState('luna') as any)?.level ?? 1,
                 stickers_used_this_session: 0,
                 last_sticker_turns_ago: -1,
                 last_event_turns_ago: -1,
@@ -1648,23 +1678,41 @@ ${researchResult.insight}
             const dramaT0 = Date.now();
 
             // EMOTION_MIRROR 직접 생성 (VN 비주얼 노벨 스타일)
+            // 🆕 v65: 1차 + 1회 재시도. 그래도 실패면 이벤트 발동 X (HOOK 유지).
             let mirrorData: EmotionMirrorData | null = null;
             if (isReadyForMirror(updatedAccumulator)) {
-              try {
-                const userGender = (memoryProfile as any)?.basicInfo?.gender;
-                mirrorData = await generateDynamicMirror(updatedAccumulator, currentScenario, chatHistory, userGender);
-                console.log(`[Pipeline] 🎭 VN 연극 생성 성공: "${mirrorData?.sceneTitle}" (${mirrorData?.sceneLines?.length}줄)`);
-              } catch (e) {
-                console.warn('[Pipeline] 🎭 VN 연극 생성 실패, 폴백:', e);
+              const userGender = (memoryProfile as any)?.basicInfo?.gender;
+              for (let attempt = 1; attempt <= 2; attempt++) {
+                try {
+                  mirrorData = await generateDynamicMirror(updatedAccumulator, currentScenario, chatHistory, userGender);
+                  if (mirrorData) {
+                    console.log(`[Pipeline] 🎭 VN 연극 생성 성공 (시도 ${attempt}/2): "${mirrorData?.sceneTitle}" (${mirrorData?.sceneLines?.length}줄)`);
+                    break;
+                  }
+                  console.warn(`[Pipeline] 🎭 VN 연극 시도 ${attempt}/2 → 재료 부족 (LLM ready=false)`);
+                } catch (e) {
+                  console.warn(`[Pipeline] 🎭 VN 연극 시도 ${attempt}/2 에러:`, e);
+                }
               }
+            } else {
+              console.log('[Pipeline] 🎭 isReadyForMirror=false → VN 스킵, 더 듣기 모드');
             }
 
             // 로딩 완료
             yield { type: 'luna_thinking_deep', data: { status: 'done', durationMs: Date.now() - dramaT0 }};
 
-            eventsToFire.push(createEmotionMirror(stateResult, currentScenario, mirrorData));
-            updatedCompletedEvents.push('EMOTION_MIRROR');
-            console.log(`[Pipeline] 📋 AI 자율 → EMOTION_MIRROR(VN) 발동! (${Date.now() - dramaT0}ms)`);
+            const vnEvent = createEmotionMirror(stateResult, currentScenario, mirrorData);
+            if (vnEvent) {
+              eventsToFire.push(vnEvent);
+              updatedCompletedEvents.push('EMOTION_MIRROR');
+              console.log(`[Pipeline] 📋 AI 자율 → EMOTION_MIRROR(VN) 발동! (${Date.now() - dramaT0}ms)`);
+            } else {
+              // 🆕 v65: 재료 부족 — 이벤트 안 띄우고 EMOTION_THERMOMETER 도 롤백
+              //   → 다음 턴에 루나가 더 캐묻도록 유도
+              console.log('[Pipeline] 🚫 VN 재료 부족 → 이벤트 발동 안 함, HOOK 유지하며 더 듣기');
+              const idx = updatedCompletedEvents.indexOf('EMOTION_THERMOMETER');
+              if (idx >= 0) updatedCompletedEvents.splice(idx, 1);
+            }
           } else if (hlrePost.mindReadReady) {
             console.log(`[Pipeline] ⚠️ MIND_READ 차단: canFire=${canFireEvent()}, completed=${updatedCompletedEvents.includes('EMOTION_THERMOMETER')}, inQueue=${eventsToFire.some(e => e.type === 'EMOTION_THERMOMETER')}`);
           }
@@ -1686,19 +1734,36 @@ ${researchResult.insight}
               }};
               const dramaT0f = Date.now();
 
+              // 🆕 v65: 1차 + 1회 재시도. 그래도 null 이면 이벤트 발동 X.
               let mirrorData: EmotionMirrorData | null = null;
               if (isReadyForMirror(updatedAccumulator)) {
-                try {
-                  const userGender = (memoryProfile as any)?.basicInfo?.gender;
-                  mirrorData = await generateDynamicMirror(updatedAccumulator, currentScenario, chatHistory, userGender);
-                } catch (_) { /* 폴백 */ }
+                const userGender = (memoryProfile as any)?.basicInfo?.gender;
+                for (let attempt = 1; attempt <= 2; attempt++) {
+                  try {
+                    mirrorData = await generateDynamicMirror(updatedAccumulator, currentScenario, chatHistory, userGender);
+                    if (mirrorData) {
+                      console.log(`[Pipeline] 🎭 안전망 VN 생성 성공 (시도 ${attempt}/2)`);
+                      break;
+                    }
+                  } catch (e) {
+                    console.warn(`[Pipeline] 🎭 안전망 VN 시도 ${attempt}/2 에러:`, e);
+                  }
+                }
               }
 
               yield { type: 'luna_thinking_deep', data: { status: 'done', durationMs: Date.now() - dramaT0f }};
 
-              eventsToFire.push(createEmotionMirror(stateResult, currentScenario, mirrorData));
-              updatedCompletedEvents.push('EMOTION_MIRROR');
-              console.log(`[Pipeline] 📋 코드 안전망 → EMOTION_MIRROR(VN) 발동! "${formulationCheck.summary}" | "${formulationCheck.problem}" (${Date.now() - dramaT0f}ms)`);
+              const safetyVnEvent = createEmotionMirror(stateResult, currentScenario, mirrorData);
+              if (safetyVnEvent) {
+                eventsToFire.push(safetyVnEvent);
+                updatedCompletedEvents.push('EMOTION_MIRROR');
+                console.log(`[Pipeline] 📋 코드 안전망 → EMOTION_MIRROR(VN) 발동! "${formulationCheck.summary}" | "${formulationCheck.problem}" (${Date.now() - dramaT0f}ms)`);
+              } else {
+                // 🆕 v65: 안전망에서도 재료 부족 → EMOTION_THERMOMETER 롤백
+                console.log('[Pipeline] 🚫 안전망 VN 재료 부족 → 이벤트 발동 안 함, HOOK 유지');
+                const idx2 = updatedCompletedEvents.indexOf('EMOTION_THERMOMETER');
+                if (idx2 >= 0) updatedCompletedEvents.splice(idx2, 1);
+              }
             }
           }
 

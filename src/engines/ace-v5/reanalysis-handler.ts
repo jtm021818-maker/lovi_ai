@@ -235,11 +235,19 @@ export function appendTagsToResponse(
     SITUATION_CLEAR: string | null;
   },
 ): string {
-  const parts: string[] = [responseText.trim()];
-  parts.push(`[SITUATION_READ:${tags.SITUATION_READ}]`);
-  parts.push(`[LUNA_THOUGHT:${tags.LUNA_THOUGHT}]`);
-  parts.push(`[PHASE_SIGNAL:${tags.PHASE_SIGNAL}]`);
-  if (tags.SITUATION_CLEAR) {
+  // 🆕 v66: LLM 이 응답 본문에 이미 태그를 출력했으면 코드 append 스킵
+  //   → 같은 태그 두 번 박히는 중복 버그 차단
+  const trimmed = responseText.trim();
+  const hasSituationRead = /\[SITUATION_READ:[^\]]*\]/i.test(trimmed);
+  const hasLunaThought = /\[LUNA_THOUGHT:[^\]]*\]/i.test(trimmed);
+  const hasPhaseSignal = /\[PHASE_SIGNAL:[^\]]*\]/i.test(trimmed);
+  const hasSituationClear = /\[SITUATION_CLEAR:[^\]]*\]/i.test(trimmed);
+
+  const parts: string[] = [trimmed];
+  if (!hasSituationRead) parts.push(`[SITUATION_READ:${tags.SITUATION_READ}]`);
+  if (!hasLunaThought) parts.push(`[LUNA_THOUGHT:${tags.LUNA_THOUGHT}]`);
+  if (!hasPhaseSignal) parts.push(`[PHASE_SIGNAL:${tags.PHASE_SIGNAL}]`);
+  if (tags.SITUATION_CLEAR && !hasSituationClear) {
     parts.push(`[SITUATION_CLEAR:${tags.SITUATION_CLEAR}]`);
   }
   return parts.join('');

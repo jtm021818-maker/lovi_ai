@@ -34,25 +34,40 @@ function buildEmotionalMemorySummary(
 
 /** 🆕 v61: Supabase fetch failed 대응 재시도 헬퍼
  *  PostgrestBuilder는 PromiseLike(thenable)지만 Promise가 아니므로 PromiseLike로 받음
+ *  🆕 v67: 진단 로깅 강화 — 각 시도마다 에러 타입 분류 + 마지막 시도 result 보존
  */
-async function safeSupabaseRetry(fn: () => PromiseLike<any>, maxRetries = 2, delay = 500) {
-  let lastErr;
+async function safeSupabaseRetry(fn: () => PromiseLike<any>, maxRetries = 2, delay = 500): Promise<any> {
+  let lastResult: any = null;
+  let lastThrown: any = null;
   for (let i = 0; i <= maxRetries; i++) {
     try {
       const result = await fn();
       if (!result.error) return result;
-      lastErr = result.error;
+      // PostgREST 에러: status code 4xx/5xx 분류
+      lastResult = result;
+      const isTransient = result.status >= 500 || result.error?.message?.includes('fetch failed');
+      console.warn(`[Supabase Retry] 시도 ${i + 1}/${maxRetries + 1} PostgREST 에러: code=${result.error?.code}, status=${result.status}, msg=${result.error?.message?.slice(0, 100)}`);
+      if (!isTransient) {
+        // 4xx (컬럼 누락, RLS, validation) → 재시도 무의미
+        return result;
+      }
     } catch (e: any) {
-      lastErr = e;
-      if (e.message?.includes('fetch failed')) {
-        console.warn(`[Supabase Retry] 시도 ${i + 1}/${maxRetries + 1} 실패: fetch failed`);
+      lastThrown = e;
+      if (e.message?.includes('fetch failed') || e.message?.includes('ECONNRESET') || e.message?.includes('ETIMEDOUT')) {
+        console.warn(`[Supabase Retry] 시도 ${i + 1}/${maxRetries + 1} 네트워크 실패: ${e.message?.slice(0, 100)}`);
       } else {
-        throw e; // 예상치 못한 에러는 즉시 중단
+        // 예상치 못한 에러는 즉시 throw
+        console.error(`[Supabase Retry] 시도 ${i + 1}/${maxRetries + 1} 비-네트워크 예외 — 즉시 중단:`, e.message);
+        throw e;
       }
     }
-    if (i < maxRetries) await new Promise(res => setTimeout(res, delay));
+    if (i < maxRetries) await new Promise(res => setTimeout(res, delay * (i + 1))); // 지수 백오프
   }
-  return { error: lastErr };
+  // 모든 시도 소진
+  if (lastThrown) {
+    return { error: { message: lastThrown.message, code: 'NETWORK_EXHAUSTED', cause: lastThrown.cause?.message } };
+  }
+  return lastResult ?? { error: { message: 'unknown_retry_failure', code: 'UNKNOWN' } };
 }
 
 export async function POST(req: NextRequest) {
@@ -678,7 +693,8 @@ export async function POST(req: NextRequest) {
               if (ctxLog) {
                 const responseTimeMs = Date.now() - t0;
                 // 서버 콘솔 (간략)
-                console.log(`[AI Context] 🧠 턴${turnCount} | ${persona} | ${finalPhaseV2} | prompt=${ctxLog.systemPrompt.length}자 | msgs=${ctxLog.recentMessages.length}개 | ${responseTimeMs}ms`);
+                // 🆕 v66: prompt 길이는 디버그용 contextLog 길이일 뿐, 실제 LLM 입력은 좌뇌/ACE/KBE 가 자기 시스템 프롬프트 사용 (engine-prompt-logger 참조)
+                console.log(`[AI Context] 🧠 턴${turnCount} | ${persona} | ${finalPhaseV2} | ctxLog=${ctxLog.systemPrompt.length}자 (디버그용, 실제 LLM 입력은 LEFT_BRAIN/ACE_V5_RIGHT_BRAIN/KBE 로그 참조) | msgs=${ctxLog.recentMessages.length}개 | ${responseTimeMs}ms`);
                 // 🆕 v46: 캐스케이드 로그도 서버 콘솔에 요약
                 if (ctxLog.cascadeLog?.length) {
                   console.log(`[AI Cascade] 📊 시도 ${ctxLog.cascadeLog.length}건:`, ctxLog.cascadeLog.map((l: any) => `${l.provider}/${l.model}→${l.status}${l.totalMs ? `(${l.totalMs}ms)` : ''}`).join(' | '));
@@ -772,18 +788,54 @@ export async function POST(req: NextRequest) {
           // 🆕 v35: session_metadata (작전 모드 포함) 영구 저장
           unifiedSessionUpdate.session_metadata = runningSessionMeta;
 
-          // 🎯 단일 fire-and-forget UPDATE — Race Condition 제거
-          supabase
-            .from('counseling_sessions')
-            .update(unifiedSessionUpdate)
-            .eq('id', sessionId)
-            .then(({ error: updateError }: any) => {
-              if (updateError) {
-                console.error(`[Chat] ❌ 통합 세션 UPDATE 실패:`, updateError.message, updateError.code);
-              } else {
-                console.log(`[Chat] 🔒 통합 세션 저장: ${Object.keys(unifiedSessionUpdate).length}개 필드, phase=${finalPhaseV2}, turn=${turnCount}`);
+          // 🎯 v66: safeSupabaseRetry 로 fetch failed 시 자동 재시도
+          //   기존: 단일 fire-and-forget → fetch failed 1회로 영구 손실
+          //   변경: 2회 재시도 (총 3회) → 일시적 네트워크 끊김에 강건
+          // 🆕 v67: 에러 상세 진단 로깅 (DB 구성 문제 빠른 파악)
+          const updateStartedAt = Date.now();
+          const updateFieldKeys = Object.keys(unifiedSessionUpdate);
+          safeSupabaseRetry(() =>
+            supabase
+              .from('counseling_sessions')
+              .update(unifiedSessionUpdate)
+              .eq('id', sessionId),
+          ).then(({ error: updateError, status }: any) => {
+            const updateLatencyMs = Date.now() - updateStartedAt;
+            if (updateError) {
+              console.error('[Chat] ❌ 통합 세션 UPDATE 최종 실패 (3회 재시도 후)', {
+                message: updateError.message,
+                code: updateError.code,
+                details: updateError.details,
+                hint: updateError.hint,
+                statusCode: status,
+                sessionId,
+                turnCount,
+                phase: finalPhaseV2,
+                latencyMs: updateLatencyMs,
+                fieldCount: updateFieldKeys.length,
+                fieldKeys: updateFieldKeys,
+                supabaseUrlSet: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+                serviceKeySet: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+              });
+              // PostgREST 흔한 에러 진단 힌트
+              if (updateError.message?.includes('column') && updateError.message?.includes('does not exist')) {
+                console.error('[Chat] 💡 DB 컬럼 누락 — Supabase 마이그레이션 확인 필요:', updateError.message);
+              } else if (updateError.code === 'PGRST116' || updateError.code === 'PGRST301') {
+                console.error('[Chat] 💡 RLS 정책 차단 — counseling_sessions UPDATE policy 확인:', updateError.code);
+              } else if (updateError.message?.includes('fetch failed')) {
+                console.error('[Chat] 💡 네트워크/타임아웃 — Supabase 인스턴스 상태 또는 cold start 의심');
               }
+            } else {
+              console.log(`[Chat] 🔒 통합 세션 저장: ${updateFieldKeys.length}개 필드, phase=${finalPhaseV2}, turn=${turnCount}, ${updateLatencyMs}ms`);
+            }
+          }).catch((e: any) => {
+            console.error('[Chat] ❌ 통합 세션 UPDATE 예외 (catch):', {
+              message: e?.message,
+              cause: e?.cause?.message,
+              code: e?.code,
+              stack: e?.stack?.split('\n').slice(0, 3).join('\n'),
             });
+          });
           console.log(`[Perf] ⏱️ 총 응답 시간: ${Date.now() - t0}ms`);
         }
 

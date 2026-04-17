@@ -430,7 +430,7 @@ export function createEmotionMirror(
   stateResult: StateResult,
   scenario?: RelationshipScenario,
   dynamicMirrorData?: EmotionMirrorData | null,
-): PhaseEvent {
+): PhaseEvent | null {
   // 🆕 v19: 동적 데이터가 있으면 바로 사용 (LLM 기반 증거 거울)
   if (dynamicMirrorData) {
     return {
@@ -440,6 +440,18 @@ export function createEmotionMirror(
     };
   }
 
+  // 🆕 v65: 동적 데이터 없으면 이벤트 자체 발동 X (null 반환).
+  //   → 파이프라인에서 캐치해서 "이야기 듣기" 단계 유지 + 루나가 더 궁금해하도록.
+  //   → 이전 v48 의 시나리오별 고정 대본은 "가짜 맞춤" 처럼 보여서 제거.
+  console.warn('[EmotionMirror] 🚫 동적 데이터 없음 → 이벤트 스킵 (고정 대본 금지)');
+  return null;
+}
+
+/** @deprecated v65: 고정 대본 폴백은 UX 저해로 비활성화. 호환용 스텁. */
+function _deprecated_buildFallbackMirror(
+  stateResult: StateResult,
+  scenario?: RelationshipScenario,
+): PhaseEvent {
   // 🆕 v48: 폴백 — 시나리오별 1인 연극 하드코딩
   const score = stateResult.emotionScore;
 
