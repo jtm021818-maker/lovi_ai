@@ -129,17 +129,21 @@ ${conflictsText}
       });
 
       try {
+        // 🆕 v69: maxTokens 3000 → 8000 (절대 잘리지 않도록 여유 확보)
+        //        + 프롬프트에 "간결 출력" 규칙 명시 → LLM 이 자진해서 짧게 출력
+        //        timeout 15초 유지
+        //        3모델 모두 실패하던 증상 완전 차단
         const rawOutput = await Promise.race([
           generateWithProvider(
             'gemini',
             fullSystemPrompt,
             [{ role: 'user' as const, content: input.userUtterance }],
             'haiku',
-            1024,
+            8000, // v69: 3000 → 8000 (확실한 여유)
             model.id,
           ),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`left_brain_timeout:${model.name}`)), 8000),
+            setTimeout(() => reject(new Error(`left_brain_timeout:${model.name}`)), 15000),
           ),
         ]);
 
@@ -262,20 +266,46 @@ function parseAndValidate(raw: string, logCollector?: LogCollector): LeftBrainAn
     if (codeBlockMatch && codeBlockMatch[1]) {
       jsonStr = codeBlockMatch[1].trim();
     } else {
-      // 2. 코드블록이 없으면 첫 '{' 와 마지막 '}' 사이 추출
-      const firstBrace = text.indexOf('{');
-      const lastBrace = text.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1) {
-        jsonStr = text.slice(firstBrace, lastBrace + 1);
+      // 🆕 v68: 닫히지 않은 ```json 도 처리 (토큰 잘림으로 백틱 3개 안 나온 경우)
+      const openMatch = text.match(/```json\s*([\s\S]*)$/i);
+      if (openMatch && openMatch[1]) {
+        jsonStr = openMatch[1].trim();
       } else {
-        jsonStr = text; // 최후의 수단
+        // 2. 코드블록이 없으면 첫 '{' 와 마지막 '}' 사이 추출
+        const firstBrace = text.indexOf('{');
+        const lastBrace = text.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          jsonStr = text.slice(firstBrace, lastBrace + 1);
+        } else if (firstBrace !== -1) {
+          // 🆕 v68: 닫는 } 없음 = 토큰 잘림 → 첫 { 부터 전체 가져와서 복구 시도
+          jsonStr = text.slice(firstBrace);
+        } else {
+          jsonStr = text; // 최후의 수단
+        }
       }
     }
 
     // 3. 제어 문자 제거 (Gemini 3.1 특성 대응)
     jsonStr = jsonStr.replace(/[\x00-\x1F\x7F-\x9F]/g, ' ');
 
-    const p = JSON.parse(jsonStr);
+    // 🆕 v68: JSON 잘림 자동 복구 — 열린 괄호/배열 만큼 닫기
+    let p: any;
+    try {
+      p = JSON.parse(jsonStr);
+    } catch (e: any) {
+      // 잘린 JSON 복구 시도
+      const repaired = repairTruncatedJSON(jsonStr);
+      if (repaired) {
+        try {
+          p = JSON.parse(repaired);
+          console.warn('[LeftBrain] 🔧 JSON 잘림 자동 복구 성공');
+        } catch (_) {
+          throw e; // 복구 실패 → 원래 에러
+        }
+      } else {
+        throw e;
+      }
+    }
 
     // 필드별 보정 (안전망)
     const valid: LeftBrainAnalysis = {
@@ -316,6 +346,71 @@ function parseAndValidate(raw: string, logCollector?: LogCollector): LeftBrainAn
     });
     return null;
   }
+}
+
+/**
+ * 🆕 v68: 토큰 잘림으로 불완전한 JSON 복구
+ * - 따옴표 안에서 잘렸는지 판단 → 닫기
+ * - 열린 배열/객체만큼 ] } 추가
+ * - 마지막 콤마/키-미완성-value 제거
+ */
+function repairTruncatedJSON(input: string): string | null {
+  if (!input || input.length < 10) return null;
+  let s = input.trim();
+
+  // 1. 열려있는 문자열 닫기 (홀수 개 따옴표)
+  //    — escape 된 따옴표 제외 카운트
+  let quoteCount = 0;
+  let escaped = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (escaped) { escaped = false; continue; }
+    if (c === '\\') { escaped = true; continue; }
+    if (c === '"') quoteCount++;
+  }
+  if (quoteCount % 2 === 1) {
+    // 마지막 열린 따옴표 찾아서 거기서부터 잘라내고 null 로 대체
+    // 간단히: 문자열 끝에 " 추가 → 불완전한 value 를 마감
+    s += '"';
+  }
+
+  // 2. 마지막 토큰이 키:value 미완성 인 경우 제거
+  //    예: `"key": "value` 또는 `"key":` → 마지막 콤마 이후 제거
+  //    `,\s*"[^"]*"\s*:\s*(?:"[^"]*)?$` 같은 패턴
+  // 간단 버전: 마지막 } 또는 ] 가 나올 때까지의 찌꺼기가 문제일 수 있음
+  // 일단 trailing 콤마 제거
+  s = s.replace(/,\s*$/, '');
+
+  // 3. 객체/배열 스택 추적하여 닫아주기
+  const stack: string[] = [];
+  let inString = false;
+  escaped = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (escaped) { escaped = false; continue; }
+    if (c === '\\') { escaped = true; continue; }
+    if (c === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (c === '{' || c === '[') stack.push(c);
+    else if (c === '}' || c === ']') stack.pop();
+  }
+
+  // 남은 스택 역순으로 닫기
+  while (stack.length > 0) {
+    const open = stack.pop();
+    // 닫기 전에 불완전한 key-value 패턴 제거 시도
+    s = s.replace(/,\s*$/, '');   // 매번 trailing comma 제거
+    // 객체 내부에 key 뒤 value 없으면 제거
+    s = s.replace(/,?\s*"[^"]*"\s*:\s*$/, '');
+    s = s.replace(/,?\s*"[^"]*"\s*:\s*"[^"]*$/, ''); // 잘린 문자열 value
+    s = s.replace(/,?\s*"[^"]*"\s*:\s*\{[^}]*$/, ''); // 잘린 객체 value
+    s = s.replace(/,?\s*\{[^}]*$/, ''); // 배열의 잘린 객체 요소
+    s = s.replace(/,\s*$/, '');
+
+    s += open === '{' ? '}' : ']';
+  }
+
+  return s;
 }
 
 function validateStateVector(v: any): StateVector {
