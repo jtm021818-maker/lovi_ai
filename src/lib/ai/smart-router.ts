@@ -71,29 +71,32 @@ export function getProviderCascade(
     }
 
     // ──────────────────────────────────────────
-    // 이벤트 생성 (VN 연극, 감정거울 등) — 창의 + 일관성
-    //   1순위: 3.1 Flash Lite (가성비 추론)
-    //   2순위: 3 Flash (강한 추론)
-    //   3순위: 2.5 Flash (안정 폴백)
+    // 이벤트 생성 (VN 연극, 감정거울 등) — 큰 JSON (facts+characterSetup+sceneLines) 안정성 우선
+    //   v63.1: JSON 깨짐 빈번 → 2.5 Lite 1순위로
+    //   1순위: 2.5 Flash Lite ($0.10) — 검증된 JSON 안정성
+    //   2순위: 2.5 Flash ($0.30) — 안정 폴백
+    //   3순위: 3.1 Flash Lite ($0.25) — 최후 시도
     // ──────────────────────────────────────────
     case 'event_generation':
       return [
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 }, // $0.10
+        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },      // $0.30
         { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_31 }, // $0.25
-        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_3 },       // $0.50
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_25 },      // $0.30
       ];
 
     // ──────────────────────────────────────────
-    // 상태 분석 (좌뇌 7D + 페이싱 + 호르몬) — JSON 구조화 + 추론 필요
-    //   1순위: 3.1 Flash Lite (빠름 + 추론)
-    //   2순위: 2.5 Flash (안정)
-    //   3순위: 2.5 Flash Lite (최후 폴백, $0.10)
+    // 상태 분석 (좌뇌 7D + 페이싱 + 호르몬) — JSON 구조화 안정성 우선
+    //   v63.1: JSON 출력은 2.5 Flash Lite 가 가장 안정적
+    //          (3.1 Lite 는 큰 JSON 가끔 깨짐 → 비용 낭비 + parse 실패)
+    //   1순위: 2.5 Flash Lite ($0.10) — 검증된 JSON 안정성
+    //   2순위: 2.5 Flash ($0.30) — 안정 폴백
+    //   3순위: 3.1 Flash Lite ($0.25) — 최후 시도
     // ──────────────────────────────────────────
     case 'state_analysis':
       return [
-        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_31 }, // $0.25
-        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },      // $0.30
         { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_25 }, // $0.10
+        { provider: 'gemini', tier: 'opus',   modelOverride: GEMINI_MODELS.FLASH_25 },      // $0.30
+        { provider: 'gemini', tier: 'sonnet', modelOverride: GEMINI_MODELS.FLASH_LITE_31 }, // $0.25
       ];
 
     // ──────────────────────────────────────────

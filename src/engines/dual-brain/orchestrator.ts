@@ -142,7 +142,7 @@ async function callGeminiBrain(params: {
         [{ role: 'user' as const, content: params.userInput }],
         'haiku',
         800,
-        GEMINI_MODELS.FLASH_LITE_31, // 🆕 v62: 3.1 Flash Lite ($0.25) — 가성비 추론
+        GEMINI_MODELS.FLASH_LITE_25, // 🔁 v63.1: JSON 출력 안정성 우선 → 2.5 Flash Lite ($0.10)
       ),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('brain_timeout')), DUAL_BRAIN_CONFIG.brainTimeoutMs),
@@ -331,6 +331,15 @@ export async function* executeDualBrain(
     turnIdx: input.turnIdx,
   }, logCollector);
 
+  // 🆕 v63: brainResult 즉시 디버그 — output null 케이스 추적
+  console.log('[DualBrain:brainResult]', {
+    hasOutput: !!brainResult.output,
+    hasLeftBrain: !!brainResult.leftBrainAnalysis,
+    error: brainResult.error,
+    draftLen: brainResult.output?.draft_utterances?.length ?? 0,
+    latencyMs: brainResult.latencyMs,
+  });
+
   // Step 2.5: 좌뇌 분석 결과로 Claude 힌트 강화
   let enrichedStakeHint = stakeHintBase;
   if (brainResult.leftBrainAnalysis) {
@@ -408,6 +417,7 @@ export async function* executeDualBrain(
 
     if (useAceForGemini) {
       const voiceStart = Date.now();
+      let aceChunkCount = 0;
       try {
         const handoff = buildHandoff(brainResult.leftBrainAnalysis!);
         for await (const chunk of executeAceV5({
@@ -421,15 +431,24 @@ export async function* executeDualBrain(
           model: 'gemini',    // 🆕 Gemini 모드로 ACE v5 (저비용)
         }, logCollector)) {
           if (chunk.type === 'text') {
+            aceChunkCount++;
             fullResponseText += chunk.data;
             yield { type: 'text', data: chunk.data };
           }
         }
         voiceLatencyMs = Date.now() - voiceStart;
+
+        // 🆕 v63: ACE 빈 응답 검출 → Gemini draft 폴백
+        if (fullResponseText.trim().length === 0) {
+          console.warn('[DualBrain:ACEEmpty] ACE v5 가 빈 응답 → draft 폴백', { aceChunkCount, draftLen: draft?.length });
+          fullResponseText = draft || generateEchoResponse(input.userInput);
+          yield { type: 'text', data: fullResponseText };
+        }
       } catch (err: any) {
         // ACE v5 Gemini 실패 → Gemini draft 그대로
-        fullResponseText = draft;
-        yield { type: 'text', data: draft };
+        console.warn('[DualBrain:ACEError]', err?.message);
+        fullResponseText = draft || generateEchoResponse(input.userInput);
+        yield { type: 'text', data: fullResponseText };
       }
     } else {
       // Fallback: 기존 품질 게이트 + draft 그대로
@@ -496,6 +515,14 @@ export async function* executeDualBrain(
           // meta는 ACE v5 내부에서 이미 로깅됨
         }
         voiceLatencyMs = Date.now() - voiceStart;
+
+        // 🆕 v63: ACE Claude 빈 응답 검출 → draft 폴백
+        if (fullResponseText.trim().length === 0) {
+          const fallbackText = brainResult.output.draft_utterances || generateEchoResponse(input.userInput);
+          console.warn('[DualBrain:ACEClaudeEmpty] ACE Claude 빈 응답 → draft 폴백');
+          fullResponseText = fallbackText;
+          yield { type: 'text', data: fallbackText };
+        }
       } else {
         // 기존 경로 (Fallback)
         for await (const chunk of streamClaudeVoice({
@@ -537,11 +564,18 @@ export async function* executeDualBrain(
     }
   }
 
-  // Step 4c: Brain 자체가 실패 — 에러 응답
+  // Step 4c: Brain 자체가 실패 — v63: 디버그 로깅 + echo 폴백 (자연스러운 누나 톤)
   else {
-    const fallbackMsg = '음... 잠깐|||내가 좀 생각 정리가 안 되는데 다시 말해줄래?';
-    fullResponseText = fallbackMsg;
-    yield { type: 'text', data: fallbackMsg };
+    console.warn('[DualBrain:Step4c] 폴백 진입', {
+      hasOutput: !!brainResult.output,
+      hasLeftBrain: !!brainResult.leftBrainAnalysis,
+      brainError: brainResult.error,
+      routePath: route.path,
+      stakesType: stakes.type,
+    });
+    const echoFallback = generateEchoResponse(input.userInput);
+    fullResponseText = echoFallback;
+    yield { type: 'text', data: echoFallback };
   }
 
   // Step 5: 로깅
@@ -603,6 +637,34 @@ export async function* executeDualBrain(
 
   // 메타 정보 yield (pipeline에서 사용)
   yield { type: 'meta', data: logEntry };
+}
+
+/**
+ * 🆕 v63: 폴백 echo 응답 생성기
+ * Brain 실패 시에도 자연스러운 누나 톤으로 응답 (LLM 안 부르고 즉답).
+ * 키워드 기반 분기 + 안전한 보수적 멘트.
+ */
+function generateEchoResponse(userInput: string): string {
+  const text = (userInput ?? '').trim();
+  if (!text) return '음...|||다시 말해줄래?';
+
+  // 긍정 키워드
+  const isPositive = /(좋아|기뻐|행복|설레|생겼|만났|사귀|고백|성공|붙었|합격|뿌듯)/.test(text);
+  // 부정/위기 키워드
+  const isCrisis = /(죽고싶|자살|살기 싫|끝내고싶)/.test(text);
+  const isNegative = /(힘들|짜증|울|싫|헤어|배신|읽씹|싸웠|불안|무서|외로)/.test(text);
+
+  if (isCrisis) {
+    return '야 잠깐|||지금 많이 힘든 거 같아|||어디야 너?';
+  }
+  if (isPositive) {
+    return '오 진짜?ㅋㅋ|||어떻게 된 건데?';
+  }
+  if (isNegative) {
+    return '아... 무슨 일이야|||말해봐';
+  }
+  // 기본: 호기심 표현
+  return '오 잠깐|||그게 어떻게 된 건데?';
 }
 
 /** 태그만 있는 suffix 생성 헬퍼 */

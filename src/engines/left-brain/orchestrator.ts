@@ -96,27 +96,65 @@ ${conflictsText}
       console.log(`======================================================================\n`);
     }
 
-    const rawOutput = await Promise.race([
-      generateWithProvider(
-        'gemini',
-        fullSystemPrompt,
-        [{ role: 'user' as const, content: input.userUtterance }],
-        'haiku',
-        1024,                              // 출력 충분히
-        GEMINI_MODELS.FLASH_LITE_31,       // 🆕 v62: 3.1 Flash Lite ($0.25) — 가성비 추론 (좌뇌 복잡 JSON)
-      ),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('left_brain_timeout')), 6000)
-      ),
-    ]);
+    // 🆕 v63.1: 좌뇌는 큰 JSON (10+ 필드) 출력해야 해서 안정성 우선
+    //   1순위: 2.5 Flash Lite ($0.10) — 검증된 안정 JSON 출력 (가장 가성비)
+    //   2순위: 2.5 Flash ($0.30) — 안정 폴백
+    //   3순위: 3.1 Flash Lite ($0.25) — 최후 시도 (가끔 큰 JSON 깨짐)
+    //
+    //   각 시도: 호출 → JSON parseAndValidate 검증 → 실패면 다음 모델
+    //   타임아웃: 모델당 8초
+    const LEFT_BRAIN_CASCADE = [
+      { name: '2.5-flash-lite', id: GEMINI_MODELS.FLASH_LITE_25 },
+      { name: '2.5-flash',      id: GEMINI_MODELS.FLASH_25 },
+      { name: '3.1-flash-lite', id: GEMINI_MODELS.FLASH_LITE_31 },
+    ];
 
-    // Step 3: JSON 파싱 + 필드 보정
-    const parsed = parseAndValidate(rawOutput);
+    let parsed: LeftBrainAnalysis | null = null;
+    let lastError: string | undefined;
+    let lastRaw: string | undefined;
+
+    for (const model of LEFT_BRAIN_CASCADE) {
+      const attemptStart = Date.now();
+      try {
+        const rawOutput = await Promise.race([
+          generateWithProvider(
+            'gemini',
+            fullSystemPrompt,
+            [{ role: 'user' as const, content: input.userUtterance }],
+            'haiku',
+            1024,
+            model.id,
+          ),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`left_brain_timeout:${model.name}`)), 8000),
+          ),
+        ]);
+
+        lastRaw = rawOutput;
+        const attemptMs = Date.now() - attemptStart;
+        console.log(`[LeftBrain:try] ${model.name} success ${attemptMs}ms, rawLen=${rawOutput?.length ?? 0}`);
+
+        const candidate = parseAndValidate(rawOutput, logCollector);
+        if (candidate) {
+          parsed = candidate;
+          console.log(`[LeftBrain:parseOK] model=${model.name}, draftLen=${candidate.draft_utterances?.length ?? 0}, tone=${candidate.tone_to_use}`);
+          break;
+        }
+        // 파싱 실패 → 다음 모델 시도
+        lastError = `parse_failed_${model.name}`;
+        console.warn(`[LeftBrain:parseFail] model=${model.name}, raw 첫 200자:\n${rawOutput?.slice(0, 200)}`);
+      } catch (err: any) {
+        lastError = err?.message ?? `unknown_${model.name}`;
+        console.warn(`[LeftBrain:attemptError] model=${model.name}, err=${lastError}`);
+      }
+    }
+
     if (!parsed) {
+      console.error(`[LeftBrain:allFailed] turnIdx=${input.turnIdx}, lastError=${lastError}, lastRawLen=${lastRaw?.length ?? 0}`);
       return {
         analysis: null,
         latencyMs: Date.now() - t0,
-        error: 'json_parse_failed',
+        error: lastError ?? 'left_brain_all_models_failed',
       };
     }
 
@@ -191,21 +229,31 @@ ${conflictsText}
 // JSON 파싱 + 보정
 // ============================================================
 
-function parseAndValidate(raw: string): LeftBrainAnalysis | null {
+function parseAndValidate(raw: string, logCollector?: LogCollector): LeftBrainAnalysis | null {
   if (!raw) return null;
 
-  // ```json ... ``` 코드블록 제거
-  let text = raw.trim();
-  text = text.replace(/^```json\s*/i, '').replace(/\s*```\s*$/i, '');
-  text = text.replace(/^```\s*/, '').replace(/\s*```\s*$/, '');
-
-  // 첫 { ~ 마지막 } 추출
-  const firstBrace = text.indexOf('{');
-  const lastBrace = text.lastIndexOf('}');
-  if (firstBrace === -1 || lastBrace === -1) return null;
-  const jsonStr = text.slice(firstBrace, lastBrace + 1);
-
   try {
+    let jsonStr = '';
+    const text = raw.trim();
+
+    // 1. ```json ... ``` 코드블록 추출 시도
+    const codeBlockMatch = text.match(/```json\s*([\s\S]*?)\s*```/i);
+    if (codeBlockMatch && codeBlockMatch[1]) {
+      jsonStr = codeBlockMatch[1].trim();
+    } else {
+      // 2. 코드블록이 없으면 첫 '{' 와 마지막 '}' 사이 추출
+      const firstBrace = text.indexOf('{');
+      const lastBrace = text.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1) {
+        jsonStr = text.slice(firstBrace, lastBrace + 1);
+      } else {
+        jsonStr = text; // 최후의 수단
+      }
+    }
+
+    // 3. 제어 문자 제거 (Gemini 3.1 특성 대응)
+    jsonStr = jsonStr.replace(/[\x00-\x1F\x7F-\x9F]/g, ' ');
+
     const p = JSON.parse(jsonStr);
 
     // 필드별 보정 (안전망)
@@ -214,47 +262,37 @@ function parseAndValidate(raw: string): LeftBrainAnalysis | null {
       somatic_marker: validateSomaticMarker(p.somatic_marker),
       second_order_tom: validateSecondOrderTom(p.second_order_tom),
       derived_signals: validateDerivedSignals(p.derived_signals),
-
       memory_connections: Array.isArray(p.memory_connections) ? p.memory_connections : [],
-
-      // 🆕 v56: LLM 판단 기반 호르몬 영향
       hormonal_impact: validateHormonalImpact(p.hormonal_impact),
-
-      // 🆕 v57: 파생 감정 (복합 감정)
       emotion_blend: validateEmotionBlend(p.emotion_blend),
-
-      // 🆕 v56: 전략적 전환 (ACC 피드백 수용)
       strategic_shift: validateStrategicShift(p.strategic_shift),
-
-      // 🆕 v58: 이벤트 공동 판단 — 좌뇌가 이벤트 추천 (KBE 는 타이밍만)
       event_recommendation: validateEventRecommendation(p.event_recommendation),
-
-      // 🆕 v60: Phase 페이싱 메타인지
       pacing_meta: validatePacingMeta(p.pacing_meta),
       cards_filled_this_turn: validateFilledCards(p.cards_filled_this_turn),
-
       perceived_emotion: String(p.perceived_emotion ?? '').slice(0, 40),
       actual_need: String(p.actual_need ?? '').slice(0, 40),
       tone_to_use: String(p.tone_to_use ?? '따뜻함'),
       response_length: validateLength(p.response_length),
       draft_utterances: String(p.draft_utterances ?? ''),
-
       tags: {
         SITUATION_READ: String(p.tags?.SITUATION_READ ?? '').slice(0, 30),
         LUNA_THOUGHT: String(p.tags?.LUNA_THOUGHT ?? '').slice(0, 40),
         PHASE_SIGNAL: validatePhaseSignal(p.tags?.PHASE_SIGNAL),
         SITUATION_CLEAR: p.tags?.SITUATION_CLEAR ?? null,
       },
-
       complexity: clamp(Math.round(Number(p.complexity ?? 3)), 1, 5) as 1 | 2 | 3 | 4 | 5,
       confidence: clamp(Number(p.confidence ?? 0.5), 0, 1),
       ambiguity_signals: Array.isArray(p.ambiguity_signals) ? p.ambiguity_signals.map(String) : [],
-
       routing_decision: validateRoutingDecision(p.routing_decision),
     };
 
     return valid;
-  } catch {
+  } catch (e: any) {
+    console.error('[LeftBrain] ❌ JSON 파싱 실패:', e.message);
+    logCollector?.record('ENGINE_ERROR', `좌뇌 파싱 실패: ${e.message}`, {
+      raw_output: raw.slice(0, 500),
+      error: e.stack,
+    });
     return null;
   }
 }

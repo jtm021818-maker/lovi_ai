@@ -1,7 +1,8 @@
 /**
  * RAG 인제스터
  * 사용자 메시지를 임베딩으로 변환하여 message_memories 테이블에 저장
- * - Google Gemini text-embedding-004 사용 (768 차원, 무료)
+ * - v62: gemini-embedding-001 사용 (outputDimensionality=768 로 DB 호환)
+ * - text-embedding-004 deprecated 처리됨 (404 NOT_FOUND)
  * - 10자 미만 메시지는 임베딩 스킵
  */
 

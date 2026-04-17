@@ -98,10 +98,14 @@ export const MIN_EMBEDDING_TEXT_LENGTH = 10;
 // ============================================================
 // 임베딩 & RAG 설정
 // ============================================================
-/** Gemini 임베딩 모델 (최신 무료 모델) */
-export const EMBEDDING_MODEL = 'text-embedding-004';
+/**
+ * Gemini 임베딩 모델
+ * - v62: text-embedding-004 deprecated → gemini-embedding-001 으로 교체
+ * - 기본 3072차원이지만 outputDimensionality 옵션으로 768로 축소 (DB pgvector 호환)
+ */
+export const EMBEDDING_MODEL = 'gemini-embedding-001';
 
-/** 임베딩 벡터 차원 (Gemini: 768) */
+/** 임베딩 벡터 차원 (DB schema = 768, gemini-embedding-001 은 outputDimensionality 로 축소) */
 export const EMBEDDING_DIMENSIONS = 768;
 
 /** RAG 유사도 임계값 */

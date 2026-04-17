@@ -169,6 +169,14 @@ export async function* executeAceV5(
   // ACE v5는 진정한 스트리밍이 아닌 "버퍼링 후 전송"
   // (재요청 감지 위해 어차피 끝까지 받아야 함)
   // ────────────────────────────────────────
+  // 🆕 v63: ACE 출력 디버그 — 빈 응답 케이스 추적
+  console.log('[ACE:finalText]', {
+    model: input.model,
+    finalTextLen: finalText?.length ?? 0,
+    finalWithTagsLen: finalWithTags?.length ?? 0,
+    reanalysisRequested,
+    isEmpty: !finalWithTags || finalWithTags.trim().length === 0,
+  });
   yield { type: 'text', data: finalWithTags };
 
   // ────────────────────────────────────────
