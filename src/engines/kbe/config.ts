@@ -3,8 +3,10 @@
  */
 
 export const KBE_CONFIG = {
-  /** 마스터 스위치 */
-  enabled: process.env.KBE_ENABLED !== 'false',
+  /** 마스터 스위치
+   *  🆕 v79: 기본 OFF. 우뇌(ACE v5)가 인라인 힌트로 타이밍/스티커 직접 판단.
+   *  ENABLE 하려면 env KBE_ENABLED=true (레거시 호환용). */
+  enabled: process.env.KBE_ENABLED === 'true',
 
   /** 지연 전체 배율 (0.5 = 절반, 2 = 두 배). 빠른 테스트에 0.3 권장 */
   delay_multiplier: Number(process.env.KBE_DELAY_MULTIPLIER ?? 1),

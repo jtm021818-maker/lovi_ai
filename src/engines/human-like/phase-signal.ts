@@ -18,7 +18,9 @@ const SIGNAL_REGEX = /\[PHASE_SIGNAL:(STAY|READY|URGENT)\]\s*/;
 // 🆕 ACE v4: 마음읽기 준비 태그 — AI가 "파악됐다"고 판단하면 출력
 const MIND_READ_REGEX = /\[MIND_READ_READY\]\s*/;
 // 🆕 v4: 상황 파악 태그 — [SITUATION_CLEAR:상황요약|핵심문제]
+// 🆕 v78.7: LLM 이 `|` 없이 `키=값` 자유형식으로도 낼 수 있음 → strict + lenient 2단
 const SITUATION_CLEAR_REGEX = /\[SITUATION_CLEAR:([^|]+)\|([^\]]+)\]\s*/;
+const SITUATION_CLEAR_LENIENT = /\[SITUATION_CLEAR:([^\]]+)\]\s*/;
 // 🆕 ACE v4: 루나 이야기 준비 태그 — [STORY_READY:opener|situation|innerThought|cliffhanger]
 // AI가 자기개방으로 "나도 비슷한 거 겪어봤거든" 이야기를 생성하면 출력
 const STORY_READY_REGEX = /\[STORY_READY:([^|\]]+)\|([^|\]]+)\|([^|\]]+)\|([^\]]+)\]\s*/;
@@ -172,15 +174,28 @@ export function parsePhaseSignal(response: string): {
   let cleaned = response;
 
   // 🆕 v4: [SITUATION_CLEAR:상황|문제] 태그 감지 + 파싱 + 제거
+  // 🆕 v78.7: `|` 없는 자유형식도 허용. 파싱 실패해도 태그는 반드시 제거해서 UI 노출 방지.
   let situationSummary: string | null = null;
   let coreProblem: string | null = null;
-  const sitClearMatch = cleaned.match(SITUATION_CLEAR_REGEX);
-  if (sitClearMatch) {
-    situationSummary = sitClearMatch[1].trim();
-    coreProblem = sitClearMatch[2].trim();
+  const sitClearStrict = cleaned.match(SITUATION_CLEAR_REGEX);
+  if (sitClearStrict) {
+    situationSummary = sitClearStrict[1].trim();
+    coreProblem = sitClearStrict[2].trim();
     cleaned = cleaned.replace(SITUATION_CLEAR_REGEX, '').trim();
     console.log(`[PhaseSignal] 📋 상황파악: "${situationSummary}" | 핵심: "${coreProblem}"`);
+  } else {
+    const sitClearLenient = cleaned.match(SITUATION_CLEAR_LENIENT);
+    if (sitClearLenient) {
+      // 파이프 없는 자유형식: 전체를 situationSummary 로, coreProblem 은 null
+      situationSummary = sitClearLenient[1].trim();
+      coreProblem = null;
+      cleaned = cleaned.replace(SITUATION_CLEAR_LENIENT, '').trim();
+      console.log(`[PhaseSignal] 📋 상황파악(lenient): "${situationSummary}"`);
+    }
   }
+  // 🆕 v78.7: 혹시 남아있는 모든 SITUATION_CLEAR 변형 태그 강제 제거 (UI 노출 방어선)
+  cleaned = cleaned.replace(/\[SITUATION_CLEAR[^\]]*\]/gi, '').trim();
+  const sitClearMatch = sitClearStrict ?? cleaned.match(SITUATION_CLEAR_LENIENT);
 
   // 🆕 ACE v4: [MIND_READ_READY] 태그 감지 + 제거 (하위 호환 유지)
   // SITUATION_CLEAR가 있으면 mindReadReady도 true로 설정 (게이트 호환)

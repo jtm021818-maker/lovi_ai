@@ -72,6 +72,12 @@ export async function* executeKakaoAction(
     }
 
     // 4-2. 텍스트 전송
+    // 🆕 v78.9: 버스트 사이 `|||` 구분자 — 프론트(useChat.ts) 가 이걸로 말풍선 분리.
+    //   이전: 버스트만 yield → 프론트에서 concatenate → 하나의 긴 풍선
+    //   지금: 버스트 + ||| → 프론트 split 으로 카톡 스타일 복원
+    if (i > 0) {
+      yield { type: 'text', data: '|||' };
+    }
     yield { type: 'text', data: burst.text };
   }
 
@@ -94,6 +100,10 @@ export async function* executeKakaoAction(
       yield { type: 'typing', data: { active: true } };
       await sleep(800);
       yield { type: 'typing', data: { active: false } };
+      // 🆕 v78.9: transition_line 도 버스트와 분리되도록 |||
+      if (plan.bursts.length > 0) {
+        yield { type: 'text', data: '|||' };
+      }
       yield { type: 'text', data: plan.event.transition_line };
       await sleep(500);
     }
@@ -119,9 +129,14 @@ export async function* executeKakaoActionTextOnly(
 ): AsyncGenerator<{ type: 'text'; data: string }> {
   if (plan.silence) return;
 
-  for (const burst of plan.bursts) {
+  for (let i = 0; i < plan.bursts.length; i++) {
+    const burst = plan.bursts[i];
     if (burst.delay_before_ms > 0) {
       await sleep(burst.delay_before_ms);
+    }
+    // 🆕 v78.9: 버스트 간 ||| (프론트 말풍선 분리)
+    if (i > 0) {
+      yield { type: 'text', data: '|||' };
     }
     yield { type: 'text', data: burst.text };
   }

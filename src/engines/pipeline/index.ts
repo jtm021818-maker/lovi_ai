@@ -1469,8 +1469,10 @@ ${researchResult.insight}
       const useKBE = KBE_CONFIG.enabled && persona === 'luna';
 
       if (useDualBrain) {
-        // 📱 v55: KBE 활성 시 Claude 출력을 버퍼링 → KBE 가 "카톡 행동" 결정 → 스트림
-        // KBE 비활성 시 기존 방식(Claude 출력 직접 스트림)
+        // 🆕 v79: 항상 ACE v5 출력을 버퍼링.
+        //   우뇌가 인라인 힌트 ([DELAY:fast/med/slow], [TYPING], [STICKER:x], [SILENCE]) 로
+        //   타이밍/스티커까지 직접 판단. 파싱 후 지연+말풍선 분리해서 yield.
+        //   (KBE 기본 OFF — 중간 재해석 없어 버그 원천 차단)
         let claudeBuffer = '';
 
         // 🆕 v70: Working Memory scratchpad 로드 (세션 내 연속성)
@@ -1505,12 +1507,8 @@ ${researchResult.insight}
             chatHistory: chatHistory,
           }, logCollector)) {
             if (chunk.type === 'text') {
-              if (useKBE) {
-                claudeBuffer += chunk.data;   // 버퍼링만
-              } else {
-                fullText += chunk.data;
-                yield { type: 'text', data: chunk.data };
-              }
+              // 🆕 v79: 항상 버퍼링 (인라인 힌트 파싱 위해)
+              claudeBuffer += chunk.data;
             } else if (chunk.type === 'analysis') {
               capturedLeftBrainAnalysis = chunk.data;
             }
@@ -1599,68 +1597,139 @@ ${researchResult.insight}
         }
 
         // KBE 실행 — Claude 원문을 "친구라면 어떻게 보낼까" 판단
-        if (useKBE && claudeBuffer) {
-          try {
-            // 🆕 v66: KBE 입력 정제 — 좌뇌 메타 태그 ([SITUATION_READ:...] 등) 제거
-            //   ACE 응답에 태그가 붙어있으면 KBE 가 burst 분리 시 태그를 본문으로 오해
-            const cleanedClaudeBuffer = claudeBuffer
-              .replace(/\[SITUATION_READ:[^\]]*\]/gi, '')
-              .replace(/\[LUNA_THOUGHT:[^\]]*\]/gi, '')
-              .replace(/\[PHASE_SIGNAL:[^\]]*\]/gi, '')
-              .replace(/\[SITUATION_CLEAR:[^\]]*\]/gi, '')
-              .replace(/\[LEFT_BRAIN_HINT:[^\]]*\]/gi, '')
-              .replace(/\[REQUEST_REANALYSIS:[^\]]*\]/gi, '')
-              .trim();
-
-            const kbeStream = runKBE({
-              claude_response: cleanedClaudeBuffer,
-              user_utterance: userMessage,
-              left_brain_summary: {
-                tone: strategyResult.strategyType,
-                somatic: limbicHandoffText ? '변연계 활성' : '평이',
-                complexity: 3,
-                ambiguity: false,
-                crisis: (stateResult.riskLevel as string) === 'CRITICAL' || stateResult.riskLevel === RiskLevel.HIGH,
-              },
-              limbic_mood: limbicHandoffText.slice(0, 200) || '평이한 상태',
-              session_meta: {
-                turn_idx: turnCount,
-                // 🆕 v66: 하드코딩 3 제거 → hlre 친밀도 시스템에서 실제 level 가져옴
-                intimacy_level: (hlre.getIntimacyState('luna') as any)?.level ?? 1,
-                stickers_used_this_session: 0,
-                last_sticker_turns_ago: -1,
-                last_event_turns_ago: -1,
-                events_fired_session: [],
-              },
-            });
-
-            for await (const kbeChunk of kbeStream) {
-              if (kbeChunk.type === 'text') {
-                fullText += kbeChunk.data;
-                yield { type: 'text', data: kbeChunk.data };
-              } else if (kbeChunk.type === 'sticker') {
-                // 스티커는 text 로 변환해서 기존 UI 호환
-                const stickerTag = `[STICKER:${kbeChunk.data}]`;
-                fullText += stickerTag;
-                yield { type: 'text', data: stickerTag };
-              } else if (kbeChunk.type === 'typing') {
-                // 타이핑 인디케이터는 retry_status 로 brigde (기존 UI 시스템 재사용)
-                // 또는 별도 이벤트 타입 추가 필요 — 현재는 무시
-              } else if (kbeChunk.type === 'event') {
-                // 이벤트는 phase_event 로 yield (단, 실제 이벤트 데이터는 기존 로직에서 생성)
-                console.log(`[Pipeline] 🎬 KBE 이벤트 트리거: ${kbeChunk.data}`);
+        // 🆕 v79: KBE 제거 → 우뇌(ACE v5) 인라인 힌트 파서
+        //   형식:
+        //     [SILENCE]              → 아예 답 안 보냄
+        //     [DELAY:fast|med|slow]  → 버스트 앞 지연 (각 300/1500/3500ms 베이스 + 랜덤)
+        //     [TYPING]               → 현재는 지연 구간으로 통합 (향후 UI 연결 시 활용)
+        //     [STICKER:name]         → 버스트 뒤 스티커 전송
+        //   ||| 기준으로 버스트 분리.
+        if (claudeBuffer) {
+          // [SILENCE] 전용 턴 — 응답 없이 침묵
+          if (/^\s*\[SILENCE\]\s*$/.test(claudeBuffer)) {
+            console.log('[Pipeline] 🤫 [SILENCE] — 응답 생략');
+            fullText = '';
+          } else if (useKBE) {
+            // 레거시 KBE 호환 경로 (env KBE_ENABLED=true 일 때만)
+            try {
+              const cleanedClaudeBuffer = claudeBuffer
+                .replace(/\[SITUATION_READ:[^\]]*\]/gi, '')
+                .replace(/\[LUNA_THOUGHT:[^\]]*\]/gi, '')
+                .replace(/\[PHASE_SIGNAL:[^\]]*\]/gi, '')
+                .replace(/\[SITUATION_CLEAR:[^\]]*\]/gi, '')
+                .replace(/\[LEFT_BRAIN_HINT:[^\]]*\]/gi, '')
+                .replace(/\[REQUEST_REANALYSIS:[^\]]*\]/gi, '')
+                .trim();
+              const kbeStream = runKBE({
+                claude_response: cleanedClaudeBuffer,
+                user_utterance: userMessage,
+                left_brain_summary: {
+                  tone: strategyResult.strategyType,
+                  somatic: limbicHandoffText ? '변연계 활성' : '평이',
+                  complexity: 3,
+                  ambiguity: false,
+                  crisis: (stateResult.riskLevel as string) === 'CRITICAL' || stateResult.riskLevel === RiskLevel.HIGH,
+                },
+                limbic_mood: limbicHandoffText.slice(0, 200) || '평이한 상태',
+                session_meta: {
+                  turn_idx: turnCount,
+                  intimacy_level: (hlre.getIntimacyState('luna') as any)?.level ?? 1,
+                  stickers_used_this_session: 0,
+                  last_sticker_turns_ago: -1,
+                  last_event_turns_ago: -1,
+                  events_fired_session: [],
+                },
+              });
+              for await (const kbeChunk of kbeStream) {
+                if (kbeChunk.type === 'text') {
+                  fullText += kbeChunk.data;
+                  yield { type: 'text', data: kbeChunk.data };
+                } else if (kbeChunk.type === 'sticker') {
+                  const stickerTag = `[STICKER:${kbeChunk.data}]`;
+                  fullText += stickerTag;
+                  yield { type: 'text', data: stickerTag };
+                }
               }
-              // 'meta' 는 로깅만
+            } catch (err: any) {
+              console.warn('[Pipeline] ⚠️ KBE 실패 — 원문 그대로:', err?.message);
+              fullText = claudeBuffer;
+              yield { type: 'text', data: claudeBuffer };
             }
-          } catch (err: any) {
-            console.warn('[Pipeline] ⚠️ KBE 실패 — Claude 원문 그대로 전송:', err?.message);
-            // KBE 실패 시 Claude 버퍼 그대로
-            fullText = claudeBuffer;
-            yield { type: 'text', data: claudeBuffer };
+          } else {
+            // 🆕 v79 기본 경로: 우뇌 인라인 힌트 파싱
+            //
+            // 메타 태그 (hlrePost 가 파싱할 것들) 는 fullText 에 보존, 표시용 버스트에선 제거
+            //   — SITUATION_READ/LUNA_THOUGHT/PHASE_SIGNAL/SITUATION_CLEAR
+            //   — MIND_READ_READY/STORY_READY/STRATEGY_READY/ACTION_PLAN/WARM_WRAP
+            //   — TAROT_READY/PATTERN_MIRROR_READY/THINKING_DEEP
+            //   — TONE_SELECT/DRAFT_CARD/ROLEPLAY_FEEDBACK/PANEL_REPORT/IDEA_REFINE
+            //   — REQUEST_REANALYSIS/LEFT_BRAIN_HINT/RP_IN/RP_OUT
+            const METADATA_TAG_RE = /\[(?:SITUATION_READ|LUNA_THOUGHT|PHASE_SIGNAL|SITUATION_CLEAR|MIND_READ_READY|STORY_READY|STRATEGY_READY|ACTION_PLAN|WARM_WRAP|TAROT_READY|PATTERN_MIRROR_READY|THINKING_DEEP|TONE_SELECT|DRAFT_CARD|ROLEPLAY_FEEDBACK|PANEL_REPORT|IDEA_REFINE|REQUEST_REANALYSIS|LEFT_BRAIN_HINT|RP_IN|RP_OUT)(?::[^\]]*)?\]/gi;
+
+            const rawBursts = claudeBuffer.split('|||');
+            const delayMap: Record<string, [number, number]> = {
+              fast: [200, 500],   // 200~700ms
+              med:  [1000, 1500], // 1000~2500ms
+              slow: [3000, 3000], // 3000~6000ms
+            };
+
+            for (let i = 0; i < rawBursts.length; i++) {
+              let burstText = rawBursts[i];
+              const burstOriginalForBuffer = burstText; // fullText 에는 메타 태그 포함된 원본
+
+              // [DELAY:fast|med|slow] 추출
+              const delayMatch = burstText.match(/\[DELAY:(fast|med|slow)\]/i);
+              let delayMs = i === 0 ? 100 : 600;
+              if (delayMatch) {
+                const [base, range] = delayMap[delayMatch[1].toLowerCase()];
+                delayMs = base + Math.floor(Math.random() * range);
+                burstText = burstText.replace(delayMatch[0], '');
+              }
+
+              // [TYPING] — 힌트만 제거 (UI 인디케이터 미연결)
+              burstText = burstText.replace(/\[TYPING\]/gi, '');
+
+              // [STICKER:name] 추출
+              const stickerMatch = burstText.match(/\[STICKER:([a-z_]+)\]/i);
+              const sticker = stickerMatch ? stickerMatch[1].toLowerCase() : null;
+              if (stickerMatch) burstText = burstText.replace(stickerMatch[0], '');
+
+              // 메타 태그 제거 (표시용)
+              burstText = burstText.replace(METADATA_TAG_RE, '').trim();
+
+              // fullText 에는 메타 태그 포함해서 누적 (hlre.postProcess 파싱용)
+              // — DELAY/TYPING 은 유지 불필요, 제거
+              const bufferSnippet = burstOriginalForBuffer
+                .replace(/\[DELAY:(fast|med|slow)\]/gi, '')
+                .replace(/\[TYPING\]/gi, '')
+                .replace(/\[STICKER:[a-z_]+\]/gi, '');
+
+              if (!burstText && !sticker && !bufferSnippet.trim()) continue;
+
+              // 지연
+              if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
+
+              // ||| 구분자 (첫 버스트 빼고)
+              if (i > 0 && fullText.length > 0) {
+                fullText += '|||';
+                yield { type: 'text', data: '|||' };
+              }
+
+              // 표시용 yield
+              if (burstText) {
+                yield { type: 'text', data: burstText };
+              }
+              if (sticker) {
+                const stickerTag = `[STICKER:${sticker}]`;
+                yield { type: 'text', data: stickerTag };
+              }
+
+              // fullText 누적 (메타 태그 포함, 후처리 파싱용)
+              fullText += bufferSnippet + (sticker ? `[STICKER:${sticker}]` : '');
+            }
+
+            console.log(`[Pipeline] 💬 인라인 파싱 완료: ${rawBursts.length}개 버스트 → ${fullText.length}자 (표시+메타)`);
           }
-        } else if (!useKBE && claudeBuffer) {
-          // KBE 비활성인데 어떤 이유로 버퍼됐으면 그대로
-          fullText = claudeBuffer;
         }
       }
 
@@ -1801,11 +1870,23 @@ ${researchResult.insight}
           //   이전 버그: pacing=READY 만으로도 VN 시도 → MIRROR 아닌 Phase 에서 엉뚱한 극장 발동
           //              + 좌뇌가 ACTION_PLAN 추천해도 VN 강행.
           //   유저 의도: "같이 준비 / 마음읽기 등 Phase 에 맞는 이벤트는 코드로 고정. 내용만 LLM."
-          const isMirrorPhase = newPhaseV2 === 'MIRROR';
-          const vnGate = isMirrorPhase;
+          //
+          // 🆕 v78.8: Phase 재판단은 이 블록 이후에 실행됨 → 여기서 `newPhaseV2` 는 아직 이전 턴 값.
+          //   이 턴이 MIRROR 로 전환 예정인지 예측 판단.
+          const lbRecommendsVN = capturedLeftBrainAnalysis?.event_recommendation?.suggested === 'VN_THEATER'
+            || capturedLeftBrainAnalysis?.event_recommendation?.suggested === 'EMOTION_MIRROR';
+          const willEnterMirror =
+            newPhaseV2 === 'MIRROR' ||
+            // HOOK → MIRROR 전환 신호
+            (newPhaseV2 === 'HOOK' && (
+              hlrePost.mindReadReady === true ||                           // Luna 가 [MIND_READ_READY] 또는 [SITUATION_CLEAR]
+              lbRecommendsVN ||                                            // 좌뇌가 VN_THEATER 추천
+              (lbPacingState === 'READY' && lbTransition === 'JUMP')       // 좌뇌가 이번 턴 다음 Phase JUMP
+            ));
+          const vnGate = willEnterMirror;
 
           if (vnGate && !vnAlreadyFired && canFireEvent()) {
-            const trigger = `PHASE=MIRROR (무조건 발동, lbPacing=${lbPacingState}/${lbTransition}, aiTag=${hlrePost.mindReadReady ?? false})`;
+            const trigger = `willEnterMirror (currentPhase=${newPhaseV2}, lbPacing=${lbPacingState}/${lbTransition}, aiTag=${hlrePost.mindReadReady ?? false}, lbRecVN=${lbRecommendsVN})`;
             console.log(`[Pipeline] 🎭 VN 극장 발동 시도 — 트리거: ${trigger}`);
 
             updatedLastEventTurn = turnCount;
