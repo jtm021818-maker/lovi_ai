@@ -83,13 +83,10 @@ export const useModeStore = create<ModeStoreState & ModeStoreActions>()(
 
       ensureSession: (sessionId) =>
         set((s) => {
-          // 🆕 v82.2: 현재 persist 된 모드가 다른 세션 것이면 강제 종료 (history 유지)
-          if (s.activeMode && s.modeSessionId && s.modeSessionId !== sessionId) {
+          // 🆕 v82.2: 활성 모드의 session 과 현재 세션이 다르면 제거.
+          //   session 태그 없는 기존 persist 된 모드도 다른 세션이라 간주해서 제거 — 오염 방지.
+          if (s.activeMode && s.modeSessionId !== sessionId) {
             return { activeMode: null, modeState: null, modeStartedAt: null, modeSessionId: null };
-          }
-          // 세션 ID 는 아직 없는데 모드가 활성이면 새 세션 ID 로 바인딩
-          if (s.activeMode && !s.modeSessionId) {
-            return { modeSessionId: sessionId };
           }
           return s;
         }),

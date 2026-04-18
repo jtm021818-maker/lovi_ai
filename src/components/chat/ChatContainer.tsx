@@ -763,7 +763,78 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
             />
           )}
 
-          {/* 🆕 v82: Roleplay 는 채팅 네이티브 — 마지막 말풍선 바로 아래 인라인 렌더 */}
+          {/* 🆕 v82: 채팅 네이티브 몰입 모드 — 마지막 말풍선 바로 아래 인라인 렌더 */}
+          {activeMode === 'tone' && modeState?.modeId === 'tone' && (
+            <ToneMode
+              initial={modeState}
+              onComplete={(chosen) => {
+                modeStoreExit(`톤 '${chosen.label}' 선택됨 — "${chosen.content.slice(0, 30)}..."`);
+                handleSuggestionSelect(
+                  `톤은 '${chosen.label}' 으로 갈게. 예시: "${chosen.content}"`,
+                  { source: 'tone_mode' as any, context: { tone: chosen.id, content: chosen.content, bridgeCompleted: true } as any }
+                );
+              }}
+            />
+          )}
+
+          {activeMode === 'idea' && modeState?.modeId === 'idea' && (
+            <IdeaMode
+              initial={modeState}
+              onRefine={async (original) => {
+                const res = await fetch('/api/mode/idea/refine', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ original, context: modeState.original ?? '' }),
+                });
+                return await res.json();
+              }}
+              onComplete={({ final, source }) => {
+                modeStoreExit(`아이디어 확정 (${source}): "${final.slice(0, 40)}"`);
+                handleSuggestionSelect(
+                  `이 아이디어로 갈게: "${final}"`,
+                  { source: 'idea_mode' as any, context: { final, source, bridgeCompleted: true } as any }
+                );
+              }}
+            />
+          )}
+
+          {activeMode === 'draft' && modeState?.modeId === 'draft' && (
+            <DraftMode
+              initial={modeState}
+              onComplete={({ draft, finalContent }) => {
+                fetch('/api/mode/draft/save', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    tone: draft.tone,
+                    content: finalContent,
+                    context: modeState.context,
+                    sessionId,
+                  }),
+                }).catch((e) => console.warn('[Draft] 저장 실패 (무시):', e));
+
+                modeStoreExit(`초안 '${draft.label}' 확정: "${finalContent.slice(0, 40)}..."`);
+                handleSuggestionSelect(
+                  `초안 확정했어 (${draft.label}): "${finalContent}" (초안함에 저장해뒀어)`,
+                  { source: 'draft_mode' as any, context: { draftId: draft.id, tone: draft.tone, content: finalContent, bridgeCompleted: true } as any }
+                );
+              }}
+            />
+          )}
+
+          {activeMode === 'panel' && modeState?.modeId === 'panel' && (
+            <PanelMode
+              initial={modeState}
+              onComplete={(persona) => {
+                modeStoreExit(`'${persona.name}' 관점 선택: "${persona.opinion.slice(0, 40)}..."`);
+                handleSuggestionSelect(
+                  `${persona.emoji} ${persona.name} 관점이 제일 와닿았어: "${persona.opinion}"`,
+                  { source: 'panel_mode' as any, context: { personaId: persona.id, opinion: persona.opinion, bridgeCompleted: true } as any }
+                );
+              }}
+            />
+          )}
+
           {activeMode === 'roleplay' && modeState?.modeId === 'roleplay' && (
             <RoleplayMode
               initial={modeState}
@@ -845,79 +916,6 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
             </div>
           )}
         </div>
-
-        {/* 🆕 v81: BRIDGE 몰입 모드 오버레이 — activeMode 따라 조건 렌더 */}
-        {activeMode === 'tone' && modeState?.modeId === 'tone' && (
-          <ToneMode
-            initial={modeState}
-            onComplete={(chosen) => {
-              modeStoreExit(`톤 '${chosen.label}' 선택됨 — "${chosen.content.slice(0, 30)}..."`);
-              handleSuggestionSelect(
-                `톤은 '${chosen.label}' 으로 갈게. 예시: "${chosen.content}"`,
-                { source: 'tone_mode' as any, context: { tone: chosen.id, content: chosen.content, bridgeCompleted: true } as any }
-              );
-            }}
-          />
-        )}
-
-        {activeMode === 'idea' && modeState?.modeId === 'idea' && (
-          <IdeaMode
-            initial={modeState}
-            onRefine={async (original) => {
-              const res = await fetch('/api/mode/idea/refine', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ original, context: modeState.original ?? '' }),
-              });
-              return await res.json();
-            }}
-            onComplete={({ final, source }) => {
-              modeStoreExit(`아이디어 확정 (${source}): "${final.slice(0, 40)}"`);
-              handleSuggestionSelect(
-                `이 아이디어로 갈게: "${final}"`,
-                { source: 'idea_mode' as any, context: { final, source, bridgeCompleted: true } as any }
-              );
-            }}
-          />
-        )}
-
-        {activeMode === 'draft' && modeState?.modeId === 'draft' && (
-          <DraftMode
-            initial={modeState}
-            onComplete={({ draft, finalContent }) => {
-              // 🆕 v81: 확정 초안 자동 저장 (fire-and-forget, 실패해도 UX 안 막음)
-              fetch('/api/mode/draft/save', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  tone: draft.tone,
-                  content: finalContent,
-                  context: modeState.context,
-                  sessionId,
-                }),
-              }).catch((e) => console.warn('[Draft] 저장 실패 (무시):', e));
-
-              modeStoreExit(`초안 '${draft.label}' 확정: "${finalContent.slice(0, 40)}..."`);
-              handleSuggestionSelect(
-                `초안 확정했어 (${draft.label}): "${finalContent}" (초안함에 저장해뒀어)`,
-                { source: 'draft_mode' as any, context: { draftId: draft.id, tone: draft.tone, content: finalContent, bridgeCompleted: true } as any }
-              );
-            }}
-          />
-        )}
-
-        {activeMode === 'panel' && modeState?.modeId === 'panel' && (
-          <PanelMode
-            initial={modeState}
-            onComplete={(persona) => {
-              modeStoreExit(`'${persona.name}' 관점 선택: "${persona.opinion.slice(0, 40)}..."`);
-              handleSuggestionSelect(
-                `${persona.emoji} ${persona.name} 관점이 제일 와닿았어: "${persona.opinion}"`,
-                { source: 'panel_mode' as any, context: { personaId: persona.id, opinion: persona.opinion, bridgeCompleted: true } as any }
-              );
-            }}
-          />
-        )}
 
         {/* 🆕 v81: 우상단 플로팅 — 설정 & 초안함 */}
         <div className="fixed top-3 right-3 z-[8000] flex flex-col gap-1.5 pointer-events-none">
