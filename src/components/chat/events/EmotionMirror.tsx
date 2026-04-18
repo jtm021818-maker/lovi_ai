@@ -7,6 +7,12 @@ import type { PhaseEvent, EmotionMirrorData, RelationshipScenario } from '@/type
 import type { SuggestionMeta } from '@/types/engine.types';
 import { useTypewriter } from '@/hooks/useTypewriter';
 import TheaterOpening from './TheaterOpening';
+import CinematicTransition from './CinematicTransition';
+
+// 🆕 v79: 루나극장 진입 시 시네마틱 전환 (필름릴 → 폭발 확장) 사용
+//   `true`  → CinematicTransition (CSS+Framer Motion, 번들 추가 0)
+//   `false` → TheaterOpening (mp4 비디오 — 레거시)
+const USE_CINEMATIC_TRANSITION = true;
 
 /**
  * v49: 루나의 1인/2인 연극 — Visual Novel 스타일
@@ -384,9 +390,11 @@ function VNScene({
           className="fixed inset-0 z-50 bg-black"
           style={{ height: '100dvh' }}
         >
-          {/* 🎬 오프닝 영상 (intro phase에서만) */}
+          {/* 🎬 오프닝 연출 (intro phase에서만) */}
           {phase === 'intro' && (
-            <TheaterOpening onComplete={handleIntroComplete} />
+            USE_CINEMATIC_TRANSITION
+              ? <CinematicTransition onComplete={handleIntroComplete} tagline={data.sceneTitle} />
+              : <TheaterOpening onComplete={handleIntroComplete} />
           )}
 
           {/* 씬 컨테이너 (풀스크린) */}
@@ -495,7 +503,7 @@ function VNScene({
                   opacity: { duration: 0.5 },
                   filter: { duration: 0.5 },
                 }}
-                className="absolute bottom-[2%] left-[2%]"
+                className="absolute bottom-[20%] left-[2%]"
               >
                 <AnimatePresence mode="wait">
                   <motion.div
@@ -524,7 +532,7 @@ function VNScene({
                   opacity: { duration: 0.5 },
                   filter: { duration: 0.5 },
                 }}
-                className="absolute bottom-[2%] right-[2%]"
+                className="absolute bottom-[20%] right-[2%]"
                 style={{ transform: 'scaleX(-1)' }}
               >
                 <div style={getSpriteStyle(0, femaleSheet, spriteSize)} />
@@ -543,7 +551,7 @@ function VNScene({
                 y: { duration: 3, repeat: Infinity, ease: 'easeInOut' },
                 rotate: { duration: 5, repeat: Infinity, ease: 'easeInOut' },
               }}
-              className="absolute bottom-[2%] left-1/2"
+              className="absolute bottom-[20%] left-1/2"
               style={{
                 marginLeft: -(spriteSize / 2),
                 filter: 'drop-shadow(0 8px 30px rgba(0,0,0,0.5))',
@@ -553,11 +561,11 @@ function VNScene({
                 {(phase === 'message' || phase === 'choice') ? (
                   <motion.div
                     key="special-luna"
-                    initial={{ scale: 0, rotate: -10, opacity: 0, y: 20 }}
+                    initial={{ scale: 0, rotate: -10, opacity: 0, y: 40 }}
                     animate={{
-                      scale: [0, 1.05, 0.85],
+                      scale: [0, 1.1, 0.9],
                       rotate: [-10, 5, 0],
-                      y: [20, -20, -50],
+                      y: [40, -30, -60],
                       opacity: 1
                     }}
                     transition={{

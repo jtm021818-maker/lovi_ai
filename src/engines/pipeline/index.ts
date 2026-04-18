@@ -1677,11 +1677,13 @@ ${researchResult.insight}
               let burstText = rawBursts[i];
               const burstOriginalForBuffer = burstText; // fullText 에는 메타 태그 포함된 원본
 
-              // [DELAY:fast|med|slow] 추출
-              const delayMatch = burstText.match(/\[DELAY:(fast|med|slow)\]/i);
+              // [DELAY:fast|med|slow] 추출 — 유연한 매칭 (AI 변형 대응)
+              const delayMatch = burstText.match(/\[DELAY(?:[:\s]*(?:fast|med|slow))?\s*\]/i);
               let delayMs = i === 0 ? 100 : 600;
               if (delayMatch) {
-                const [base, range] = delayMap[delayMatch[1].toLowerCase()];
+                const speedMatch = delayMatch[0].match(/fast|med|slow/i);
+                const speed = speedMatch ? speedMatch[0].toLowerCase() : 'med';
+                const [base, range] = delayMap[speed];
                 delayMs = base + Math.floor(Math.random() * range);
                 burstText = burstText.replace(delayMatch[0], '');
               }
@@ -1695,14 +1697,24 @@ ${researchResult.insight}
               if (stickerMatch) burstText = burstText.replace(stickerMatch[0], '');
 
               // 메타 태그 제거 (표시용)
-              burstText = burstText.replace(METADATA_TAG_RE, '').trim();
+              burstText = burstText.replace(METADATA_TAG_RE, '');
+
+              // 🆕 v80: catch-all — 잔여 인라인 힌트 태그 완전 제거 (AI 변형/오타 방어)
+              //   닫힌 태그: [DELAY:뭐든], [TYPING], [SILENCE], [STICKER:뭐든]
+              //   열린 태그: [DELAY... (닫는 ] 없이 비정상 종료)
+              burstText = burstText
+                .replace(/\[(?:DELAY|TYPING|SILENCE|STICKER)(?::[^\]]*)?\]/gi, '')
+                .replace(/\[(?:DELAY|TYPING|SILENCE|STICKER)[^\]\n]*/gi, '')
+                .trim();
 
               // fullText 에는 메타 태그 포함해서 누적 (hlre.postProcess 파싱용)
               // — DELAY/TYPING 은 유지 불필요, 제거
               const bufferSnippet = burstOriginalForBuffer
-                .replace(/\[DELAY:(fast|med|slow)\]/gi, '')
+                .replace(/\[DELAY(?::[^\]]*)?\]/gi, '')
+                .replace(/\[DELAY[^\]\n]*/gi, '')
                 .replace(/\[TYPING\]/gi, '')
-                .replace(/\[STICKER:[a-z_]+\]/gi, '');
+                .replace(/\[STICKER:[a-z_]+\]/gi, '')
+                .replace(/\[SILENCE\]/gi, '');
 
               if (!burstText && !sticker && !bufferSnippet.trim()) continue;
 

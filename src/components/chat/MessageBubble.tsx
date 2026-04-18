@@ -69,6 +69,11 @@ export default function MessageBubble({ message, isTyping, onSpeak, isSpeaking, 
     // 🆕 v36: 루나 인사이트 태그 방어 제거
     .replace(/\[SITUATION_READ:[^\]]*\]/g, '')
     .replace(/\[LUNA_THOUGHT:[^\]]*\]/g, '')
+    // 🆕 v80: 인라인 힌트 태그 안전망 (DELAY/TYPING/SILENCE — 파이프라인 누락 방어)
+    //   닫힌 태그: [DELAY:fast], [TYPING], [SILENCE] 등
+    .replace(/\[(?:DELAY|TYPING|SILENCE)(?::[^\]]*)?(?:\])?\s*/gi, '')
+    //   열린 태그: [DELAY... (닫는 ] 없이 비정상 종료)
+    .replace(/\[(?:DELAY|TYPING|SILENCE)[^\]\n]*/gi, '')
     // 🆕 v42: 빈 대괄호 [] 제거 (선택지 제거 후 남은 잔해)
     .replace(/\[\s*\]/g, '')
     .replace(/\n{3,}/g, '\n\n')

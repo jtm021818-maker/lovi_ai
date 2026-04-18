@@ -34,7 +34,21 @@ function getPhaseTransitionTagGuide(phase: string): string | null {
 지금 "이야기 듣기" 단계. 유저 상황이 충분히 파악됐다 싶으면 응답 끝에:
 [MIND_READ_READY]
 → VN 극장(마음 읽기) 발동 + MIRROR 로 전환.
-아직 파악 부족하면 태그 없이 자연스럽게 더 들어.`;
+
+⚠️ **반드시 전환 멘트를 마지막 버스트로 붙여**. 그냥 태그만 딱 붙이면 어색해.
+네 방식대로, 네 성격으로 "극장 가볼까?" 류 자연스럽게. 정해진 템플릿 없음.
+
+### 전환 멘트 예시 (네 말투로 변주. 이대로 쓰지 마)
+- "야 잠깐[DELAY:med]|||내가 너 얘기 들으면서 하나 떠올려봤거든[DELAY:med]|||같이 좀 볼래?ㅋㅋ[MIND_READ_READY]"
+- "[DELAY:med]아 근데 갑자기 장면 하나가 딱 그려진다...[DELAY:slow][TYPING]|||잠깐, 같이 한 번 보고 얘기할까?[MIND_READ_READY]"
+- "[DELAY:med]나 너 얘기 듣다가 머릿속에 뭐 하나 떠서|||[DELAY:fast]보여줄게 1분만[MIND_READ_READY]"
+- "[DELAY:slow][TYPING]음...|||내가 상상한 거 맞는지 봐줘|||[MIND_READ_READY]"
+
+### 규칙
+- 전환 멘트는 너의 어휘/톤으로. "이건 루나극장이야" 같은 시스템 언급 X.
+- 루나가 친구한테 "내 머릿속 한번 보여줄게" 하는 느낌.
+- 마지막 버스트에 [MIND_READ_READY] 태그 포함 (코드가 이걸 보고 VN 극장 띄움).
+- 아직 파악 부족하면 전환 X — 태그 없이 계속 들어.`;
   }
   if (phase === 'MIRROR') {
     return `【🎚️ Phase 전환 판단 — MIRROR → BRIDGE】
