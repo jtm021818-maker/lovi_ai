@@ -268,15 +268,21 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
 
   // 🆕 v81: 몰입 모드 진입 — ModeSelector 에서 호출
   const modeStoreEnter = useModeStore((s) => s.enter);
-  const activeMode = useModeStore((s) => s.activeMode);
-  const modeState = useModeStore((s) => s.modeState);
+  const activeModeRaw = useModeStore((s) => s.activeMode);
+  const modeStateRaw = useModeStore((s) => s.modeState);
+  const modeSessionId = useModeStore((s) => s.modeSessionId);
   const modeStoreExit = useModeStore((s) => s.exit);
   const modeEnsureSession = useModeStore((s) => s.ensureSession);
 
-  // 🆕 v82.2: 세션 교체 시 이전 세션 모드 잔상 제거 — persist 된 modeState 오염 방지
+  // 🆕 v82.3: 세션 교체 시 이전 세션 모드 잔상 제거 (mount 및 sessionId 변경 시)
   useEffect(() => {
     modeEnsureSession(sessionId);
   }, [sessionId, modeEnsureSession]);
+
+  // 🆕 v82.3: 렌더 시 sessionId 가드 — hydration race 방지.
+  //   persist 된 modeSessionId 가 현재 세션과 일치할 때만 활성화된 것으로 간주.
+  const activeMode = modeSessionId === sessionId ? activeModeRaw : null;
+  const modeState = modeSessionId === sessionId ? modeStateRaw : null;
   // 🆕 v81: 설정 / 초안함 토글
   const [showSettings, setShowSettings] = useState(false);
   const [showDraftsVault, setShowDraftsVault] = useState(false);

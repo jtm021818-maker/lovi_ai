@@ -92,7 +92,9 @@ export const useModeStore = create<ModeStoreState & ModeStoreActions>()(
         }),
     }),
     {
-      name: 'luna-bridge-mode-v81',
+      // 🆕 v82.3: persist key 버전 업 — modeSessionId 필드 추가된 스키마라서 구 v81 데이터 무효화.
+      //   구 key 'luna-bridge-mode-v81' 의 stale 잔상이 "새 상담" 에서도 렌더되는 이슈 차단.
+      name: 'luna-bridge-mode-v82',
       partialize: (s) => ({
         activeMode: s.activeMode,
         modeState: s.modeState,
