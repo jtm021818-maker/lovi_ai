@@ -278,18 +278,14 @@ function VNScene({
   // intro → playing: TheaterOpening 완료 시 전환 (콜백으로)
   const handleIntroComplete = useCallback(() => setPhase('playing'), []);
 
-  // reveal → message 자동 전환
+  // 🆕 v82.6: reveal/message 는 탭으로 넘기도록 변경 — 자동 타이머 제거.
+  //   기존: reveal 2.5s → message 2s → choice  (글 읽기도 전에 지나감)
+  //   지금: 탭으로 reveal → message → choice. 안전망으로 15s 지나면 자동 진행.
   useEffect(() => {
-    if (phase === 'reveal') {
-      const timer = setTimeout(() => setPhase('message'), 2500);
-      return () => clearTimeout(timer);
-    }
-  }, [phase]);
-
-  // message → choice 자동 전환
-  useEffect(() => {
-    if (phase === 'message') {
-      const timer = setTimeout(() => setPhase('choice'), 2000);
+    if (phase === 'reveal' || phase === 'message') {
+      const timer = setTimeout(() => {
+        setPhase(phase === 'reveal' ? 'message' : 'choice');
+      }, 15000);
       return () => clearTimeout(timer);
     }
   }, [phase]);
@@ -322,7 +318,7 @@ function VNScene({
   void (isDuo && currentLineGender !== undefined && currentLineGender !== gender);
   void (currentLineGender === 'male' ? SPRITE_SHEET.male : currentLineGender === 'female' ? SPRITE_SHEET.female : mainSheet);
 
-  // 탭으로 진행
+  // 탭으로 진행 — 🆕 v82.6: reveal/message 도 탭으로 넘김
   const handleTap = useCallback(() => {
     if (phase === 'playing') {
       if (lineIndex < lines.length - 1) {
@@ -330,6 +326,10 @@ function VNScene({
       } else {
         setPhase('reveal');
       }
+    } else if (phase === 'reveal') {
+      setPhase('message');
+    } else if (phase === 'message') {
+      setPhase('choice');
     }
   }, [phase, lineIndex, lines.length]);
 
@@ -703,6 +703,18 @@ function VNScene({
                       — {data.imperfectionDisclaimer}
                     </motion.p>
                   )}
+
+                  {/* 🆕 v82.6: 탭 힌트 — 자동 넘김 제거돼서 유저가 직접 탭해야 함 */}
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: [0, 0.6, 0.3, 0.6] }}
+                    transition={{ delay: 1.5, duration: 2.5, repeat: Infinity }}
+                    className="flex items-center justify-center gap-1.5 mt-4"
+                  >
+                    <div className="w-3 h-[1px] bg-purple-300/40" />
+                    <span className="text-purple-200/60 text-[9px] tracking-widest uppercase font-medium">tap</span>
+                    <div className="w-3 h-[1px] bg-purple-300/40" />
+                  </motion.div>
                 </div>
               </motion.div>
             )}

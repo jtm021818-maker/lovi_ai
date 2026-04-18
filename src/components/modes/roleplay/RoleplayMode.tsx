@@ -43,6 +43,20 @@ function roleBadge(archetype: string): string {
   return '상대';
 }
 
+/** 🆕 v82.7: 코치 피드백 히스토리 엔트리 — 유저 턴 인덱스 기준으로 타임라인에 삽입 */
+interface CoachEntry {
+  id: string;
+  afterUserTurn: number; // 이 유저 턴 번호 뒤에 삽입
+  feedback: string;
+  tone: string;
+}
+
+/** 한국어 평균 읽기 속도 기반 동적 타이머 — 15자/초, 최소 7초, 최대 30초 */
+function computeReadMs(text: string): number {
+  const byChar = text.length * 67; // 15자/초 = 67ms/char
+  return Math.max(7000, Math.min(30000, byChar));
+}
+
 export default function RoleplayMode({ initial, onComplete, onTurn }: RoleplayModeProps) {
   const scenario = initial.scenario;
   const badge = roleBadge(scenario.role.archetype);
@@ -55,8 +69,24 @@ export default function RoleplayMode({ initial, onComplete, onTurn }: RoleplayMo
   const [customInput, setCustomInput] = useState('');
   const [customMode, setCustomMode] = useState(false);
   const [loading, setLoading] = useState(false);
+  // 🆕 v82.7: 실시간 팝업 + 탭 일시정지 + 히스토리 누적
   const [coachFeedback, setCoachFeedback] = useState<{ feedback: string; tone: string } | null>(null);
+  const [coachPaused, setCoachPaused] = useState(false);
+  const [coachHistory, setCoachHistory] = useState<CoachEntry[]>([]);
+  const coachTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // 🆕 v82.7: 코치 팝업 타이머 — paused 이면 멈춤, 재개 시 동적 시간 새로 돌림
+  useEffect(() => {
+    if (!coachFeedback) {
+      if (coachTimerRef.current) clearTimeout(coachTimerRef.current);
+      return;
+    }
+    if (coachPaused) return; // paused 상태에선 타이머 X
+    const ms = computeReadMs(coachFeedback.feedback);
+    coachTimerRef.current = setTimeout(() => setCoachFeedback(null), ms);
+    return () => { if (coachTimerRef.current) clearTimeout(coachTimerRef.current); };
+  }, [coachFeedback, coachPaused]);
 
   useEffect(() => {
     playBgm(pickBgmForRoleplay(scenario), 0.22);
@@ -97,7 +127,7 @@ export default function RoleplayMode({ initial, onComplete, onTurn }: RoleplayMo
         else if (result.spriteFrame === 1) effectBus.fire({ id: 'particle.tears', target: 'particle' });
       }
 
-      // 코치 피드백 (3턴마다)
+      // 🆕 v82.7: 코치 피드백 (3턴마다) — 히스토리 누적 + 동적 타이머 + 탭 일시정지
       const userTurns = nh.filter((h) => h.role === 'user').length;
       if (userTurns > 0 && userTurns % 3 === 0) {
         fetch('/api/mode/roleplay/coach', {
@@ -108,8 +138,14 @@ export default function RoleplayMode({ initial, onComplete, onTurn }: RoleplayMo
           .then((r) => r.json())
           .then((d) => {
             if (d.feedback) {
+              // 타임라인 영구 기록
+              setCoachHistory((prev) => [
+                ...prev,
+                { id: `coach-${userTurns}-${Date.now()}`, afterUserTurn: userTurns, feedback: d.feedback, tone: d.tone },
+              ]);
+              // 실시간 팝업 (동적 타이머는 useEffect 가 처리)
+              setCoachPaused(false);
               setCoachFeedback({ feedback: d.feedback, tone: d.tone });
-              setTimeout(() => setCoachFeedback(null), 5000);
             }
           })
           .catch(() => {});
@@ -143,11 +179,44 @@ export default function RoleplayMode({ initial, onComplete, onTurn }: RoleplayMo
         />
       </div>
 
-      {/* 대화 이력 */}
+      {/* 🆕 v82.7: 대화 이력 + 코치 엔트리 인라인 삽입 (유저 턴 번호 매치) */}
       <div className="space-y-2.5">
-        {history.map((turn, idx) => (
-          <TurnBubble key={idx} turn={turn} scenario={scenario} badge={badge} />
-        ))}
+        {(() => {
+          let userTurnCount = 0;
+          const nodes: React.ReactNode[] = [];
+          history.forEach((turn, idx) => {
+            nodes.push(<TurnBubble key={`turn-${idx}`} turn={turn} scenario={scenario} badge={badge} />);
+            if (turn.role === 'user') {
+              userTurnCount += 1;
+              const coachEntry = coachHistory.find((c) => c.afterUserTurn === userTurnCount);
+              if (coachEntry) {
+                nodes.push(
+                  <motion.div
+                    key={coachEntry.id}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="ml-10 px-2.5 py-1.5 rounded-xl border text-[10.5px] leading-relaxed"
+                    style={{
+                      background:
+                        coachEntry.tone === 'positive' ? 'rgba(209,250,229,0.5)' :
+                        coachEntry.tone === 'caution' ? 'rgba(254,243,199,0.5)' :
+                        'rgba(231,229,228,0.5)',
+                      borderColor:
+                        coachEntry.tone === 'positive' ? 'rgba(16,185,129,0.35)' :
+                        coachEntry.tone === 'caution' ? 'rgba(245,158,11,0.35)' :
+                        'rgba(120,113,108,0.3)',
+                    }}
+                  >
+                    <span className="text-[10px] mr-1">🦊</span>
+                    <span className="text-[9px] font-bold text-[#5D4037] mr-1.5">코치</span>
+                    <span className="text-[#3f2a20]">{coachEntry.feedback}</span>
+                  </motion.div>
+                );
+              }
+            }
+          });
+          return nodes;
+        })()}
         {loading && (
           <div className="flex items-center gap-2 ml-10">
             <div className="flex gap-0.5">
@@ -235,15 +304,17 @@ export default function RoleplayMode({ initial, onComplete, onTurn }: RoleplayMo
         </button>
       )}
 
-      {/* 코치 피드백 */}
+      {/* 🆕 v82.7: 코치 피드백 — 탭하면 일시정지/해제, 동적 타이머 (읽기 속도 비례) */}
       <AnimatePresence>
         {coachFeedback && (
-          <motion.div
+          <motion.button
+            type="button"
+            onClick={() => setCoachPaused((p) => !p)}
             initial={{ opacity: 0, y: 20, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10 }}
             transition={{ type: 'spring', stiffness: 320 }}
-            className="mt-3 p-2.5 rounded-2xl shadow-md"
+            className="mt-3 p-2.5 rounded-2xl shadow-md w-full text-left active:scale-[0.99]"
             style={{
               background:
                 coachFeedback.tone === 'positive' ? 'linear-gradient(135deg, #ecfdf5, #d1fae5)' :
@@ -254,12 +325,17 @@ export default function RoleplayMode({ initial, onComplete, onTurn }: RoleplayMo
           >
             <div className="flex items-start gap-2">
               <span className="text-base">🦊</span>
-              <div>
-                <div className="text-[9px] font-bold text-[#5D4037] mb-0.5">루나 코치</div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-0.5">
+                  <span className="text-[9px] font-bold text-[#5D4037]">루나 코치</span>
+                  <span className="text-[8px] text-[#5D4037]/60 tabular-nums">
+                    {coachPaused ? '⏸ 고정됨 (다시 탭 → 닫기)' : '탭하면 고정'}
+                  </span>
+                </div>
                 <div className="text-[11px] text-[#3f2a20] leading-relaxed">{coachFeedback.feedback}</div>
               </div>
             </div>
-          </motion.div>
+          </motion.button>
         )}
       </AnimatePresence>
     </motion.div>

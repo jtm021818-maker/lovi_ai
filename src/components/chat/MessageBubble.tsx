@@ -89,7 +89,10 @@ export default function MessageBubble({ message, isTyping, onSpeak, isSpeaking, 
     .replace(/\[OPERATION_COMPLETE[^\]]*\]/gi, '')
     // 🆕 v42: 빈 대괄호 [] 제거 (선택지 제거 후 남은 잔해)
     .replace(/\[\s*\]/g, '')
-    .replace(/\n{3,}/g, '\n\n')
+    // 🆕 v82.5: 카톡 스타일 — 한 버블 안에서 newline 불필요. 공백 1개로 정리.
+    //   `\n{3,}` 만 collapse 하던 이전 로직은 `\n\n` (빈 줄) 을 남겨서 중간에 공백 줄 떴음.
+    .replace(/\s*\n\s*/g, ' ')
+    .replace(/ {2,}/g, ' ')
     .trim();
   const isStickerOnly = stickerId && isValidSticker(stickerId) && !textContent;
 
