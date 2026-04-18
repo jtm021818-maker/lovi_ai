@@ -272,6 +272,30 @@ export interface LeftBrainAnalysis {
   };
 
   /**
+   * 🆕 v77: 친밀도 신호 — 매턴 관계 깊이 변화량 판단
+   * Social Penetration Theory + Knapp Model 기반.
+   * 좌뇌가 유저-루나 상호작용의 6차원 signals 출력 → 파이프라인이 score 에 누적.
+   */
+  intimacy_signals?: {
+    /** 유저 자기개방 수준 (0~3). 0=일상, 3=첫 비밀 공개 */
+    self_disclosure_delta: number;
+    /** 유저가 루나 말에 공명/확장 (0~2) */
+    reciprocity_delta: number;
+    /** 농담 주고받음 (0~2) */
+    humor_delta: number;
+    /** 취약성 공유 (0~3) */
+    trust_investment_delta: number;
+    /** 관계 결정적 순간 (세션당 1회만 true 가능) */
+    significant_moment: boolean;
+    significant_moment_reason: string | null;
+    /** 부정 신호 (0~3). 차가움/회피/거부 */
+    negative_signal: number;
+    /** 참고용 총합 */
+    total_delta_hint: number;
+    reasoning: string;
+  };
+
+  /**
    * 🆕 v74: 자아 표현 신호 — 질문 대신 루나가 자기 생각/망상/경험을 꺼낼 여지
    * 루나가 "질문봇" 이 되는 걸 막는 핵심 스위치.
    */

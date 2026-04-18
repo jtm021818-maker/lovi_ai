@@ -15,6 +15,25 @@ import type { LeftToRightHandoff } from './types';
 // 메인 빌더 — 좌뇌 전체 필드 pass-through
 // ============================================================
 
+/**
+ * 🆕 v76: 시간 차이 → 자연어 변환 ("며칠 전", "저번주")
+ */
+export function timeAgoNatural(createdAt: string | Date): string {
+  const then = typeof createdAt === 'string' ? new Date(createdAt) : createdAt;
+  const diffMs = Date.now() - then.getTime();
+  const diffH = diffMs / (1000 * 60 * 60);
+  const diffD = diffH / 24;
+  if (diffH < 2) return '방금 전';
+  if (diffH < 12) return '오늘 아까';
+  if (diffD < 1.5) return '어제';
+  if (diffD < 3) return '그저께';
+  if (diffD < 7) return '며칠 전';
+  if (diffD < 14) return '저번주';
+  if (diffD < 30) return '지난달쯤';
+  if (diffD < 60) return '몇 주 전';
+  return '오래 전에';
+}
+
 export function buildHandoff(analysis: LeftBrainAnalysis): LeftToRightHandoff {
   const stateSummary = describeStateInWords(analysis.state_vector);
 
@@ -75,6 +94,52 @@ export function buildHandoff(analysis: LeftBrainAnalysis): LeftToRightHandoff {
     meta_awareness: analysis.meta_awareness,
     self_expression: (analysis as any).self_expression,
     cards_filled_this_turn: analysis.cards_filled_this_turn ?? [],
+    // 🆕 v76: memory_recalls / long_term_impression 은 pipeline 에서 주입 (이 함수 밖)
+  };
+}
+
+/**
+ * 🆕 v76: 기존 handoff 에 memory 정보 병합
+ * pipeline 에서 loadWorkingMemory 결과를 받아 handoff 에 주입.
+ */
+export function mergeMemoryIntoHandoff(
+  handoff: LeftToRightHandoff,
+  wm: { facts: any[]; recent: any[]; topSalient: any[] } | null,
+  longTermImpression?: string | null,
+  intimacyState?: LeftToRightHandoff['intimacy_state'],
+): LeftToRightHandoff {
+  if (!wm) {
+    return {
+      ...handoff,
+      long_term_impression: longTermImpression ?? null,
+      intimacy_state: intimacyState,
+    };
+  }
+
+  // 추억 카드 3-5개 선별: topSalient + recent
+  const raw = [...(wm.topSalient ?? []), ...(wm.recent ?? [])];
+  // 중복 제거 (id 기준)
+  const seen = new Set<string>();
+  const unique = raw.filter((m) => {
+    const id = m?.id ?? m?.content?.slice(0, 30);
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+
+  const recalls = unique.slice(0, 5).map((m) => ({
+    content: m.content as string,
+    summary: (m.summary as string | null) ?? null,
+    luna_feeling: (m.luna_feeling as string | null) ?? null,
+    time_ago: m.created_at ? timeAgoNatural(m.created_at) : undefined,
+    emotional_weight: (m.emotional_weight as number | undefined) ?? 0.5,
+  }));
+
+  return {
+    ...handoff,
+    memory_recalls: recalls.length > 0 ? recalls : undefined,
+    long_term_impression: longTermImpression ?? null,
+    intimacy_state: intimacyState,
   };
 }
 
@@ -168,6 +233,64 @@ export function formatHandoffForPrompt(handoff: LeftToRightHandoff): string {
       lines.push(`- ${m.hint} (관련도 ${(m.relevance * 10).toFixed(0)}/10)`);
       if (m.suggestion) lines.push(`  → ${m.suggestion}`);
     });
+    lines.push('');
+  }
+
+  // 🆕 v76: 루나가 떠올린 기억 — 1인칭 독백 스타일
+  // DB 에서 가져왔다는 티 X. "방금 문득 떠올랐다" 처럼 자연스럽게.
+  if (handoff.memory_recalls && handoff.memory_recalls.length > 0) {
+    lines.push(`## 📖 문득 떠오른 기억`);
+    lines.push('');
+    lines.push(`얘 얘기 듣다보니 내 머릿속에 이게 떠올랐어 —`);
+    lines.push('');
+    handoff.memory_recalls.slice(0, 3).forEach((m, i) => {
+      const when = m.time_ago ? `**${m.time_ago}** — ` : '';
+      const content = m.summary ?? m.content;
+      lines.push(`${i + 1}. ${when}${content}`);
+      if (m.luna_feeling) {
+        lines.push(`   내 그때 느낌: ${m.luna_feeling}`);
+      }
+    });
+    lines.push('');
+    lines.push(`→ 지금 대화 흐름에 자연스러우면 "아 맞다 그때..." 식으로 꺼내.`);
+    lines.push(`   억지로 쓰지 마. 흐름 안 맞으면 마음에만 두고 패스.`);
+    lines.push('');
+  }
+
+  // 🆕 v76: 이 유저에 대한 루나의 장기 인상
+  if (handoff.long_term_impression) {
+    lines.push(`### 이 친구에 대해 내가 아는 것`);
+    lines.push(`${handoff.long_term_impression}`);
+    lines.push('');
+  }
+
+  // 🆕 v77: 친밀도 상태 — 관계 깊이 + 해제 행동 힌트
+  if (handoff.intimacy_state) {
+    const it = handoff.intimacy_state;
+    lines.push(`## 🧬 지금 이 친구와의 관계`);
+    lines.push('');
+    lines.push(`**Lv.${it.level} — ${it.name}** (score ${it.score}/100)`);
+    lines.push(`${it.description}`);
+    if (it.days_since_last !== undefined && it.days_since_last >= 2) {
+      lines.push(`${Math.round(it.days_since_last)}일 만에 다시 봄${it.reunion ? ' — 반가움 🎁' : ''}`);
+    }
+    lines.push('');
+    if (it.unlocked_behaviors.length > 0) {
+      lines.push(`이 단계에서 자연스럽게 할 수 있는 것:`);
+      it.unlocked_behaviors.forEach((b) => lines.push(`- ${b}`));
+    }
+    if (it.locked_behaviors.length > 0) {
+      lines.push('');
+      lines.push(`아직 이르거나 부담될 수 있는 것:`);
+      it.locked_behaviors.forEach((b) => lines.push(`- ${b}`));
+    }
+    if (it.level_up_moment) {
+      lines.push('');
+      lines.push(`🎉 **지금 막 Lv.${it.level} 로 올라감!**`);
+      lines.push(`원하면 자연스럽게 인지해도 OK ("야 우리 이제 좀 친한 듯 ㅋㅋ" 류). 억지로 X.`);
+    }
+    lines.push('');
+    lines.push(`→ 강제 규칙 아냐. 맥락 맞으면 해제 행동 활용, 아니면 무시.`);
     lines.push('');
   }
 

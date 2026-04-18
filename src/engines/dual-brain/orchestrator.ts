@@ -101,8 +101,8 @@ async function callGeminiBrain(params: {
 
     // 🆕 v71: 좌뇌가 받는 userUtterance 에 최근 대화 히스토리 prepend → 맥락 유지
     //   기존: 단일 메시지만 → 매 턴 첫 만남처럼 분석
-    //   변경: 최근 6턴 (3 round) 함께 보내서 "방금 청소 얘기 했음" 인지
-    const recentHistory = (params.chatHistory ?? []).slice(-6);
+    //   v78.1: 50턴 하드캡 — 5 Phase 세션 전체 커버. pipeline 토큰 트리밍이 방어선.
+    const recentHistory = (params.chatHistory ?? []).slice(-50);
     const historyBlock = recentHistory.length > 0
       ? recentHistory.map((m) => `[${m.role === 'user' ? '유저' : '루나'}] ${m.content}`).join('\n')
       : '';
@@ -301,6 +301,8 @@ export async function* streamClaudeVoice(params: {
   userUtterance: string;
   brainAnalysis: BrainOutput;
   stakeHint?: string;
+  // 🆕 v78: 치매 방지 — 대화 히스토리 직접 전달
+  chatHistory?: Array<{ role: 'user' | 'ai'; content: string }>;
 }): AsyncGenerator<string> {
   const userMessage = buildVoiceUserMessage({
     userUtterance: params.userUtterance,
@@ -312,6 +314,7 @@ export async function* streamClaudeVoice(params: {
       draft_utterances: params.brainAnalysis.draft_utterances,
     },
     stakeHint: params.stakeHint,
+    chatHistory: params.chatHistory,
   });
 
   const stream = streamWithProvider(
@@ -359,6 +362,83 @@ export function assembleWithTags(params: {
 export interface DualBrainStreamYield {
   type: 'text' | 'meta' | 'analysis';
   data: any;
+}
+
+/**
+ * 🆕 v76: ACE v5 로 전달할 장기 기억 번들 로드
+ * supabase / userId 없으면 undefined (무해 스킵).
+ * 에러 시 undefined (폴백).
+ */
+async function loadMemoryBundleSafe(
+  supabase: any,
+  userId?: string,
+): Promise<{
+  facts: any[];
+  recent: any[];
+  topSalient: any[];
+  longTermImpression?: string | null;
+  intimacyState?: any;
+} | undefined> {
+  if (!supabase || !userId) return undefined;
+  try {
+    const { loadWorkingMemory } = await import('@/engines/human-like/memory-engine');
+    const wm = await loadWorkingMemory(supabase, userId);
+
+    // 장기 인상: user_profiles.memory_profile.core_persona + luna_impression 우선 참조
+    let longTermImpression: string | null = null;
+    try {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('memory_profile')
+        .eq('id', userId)
+        .single();
+      const mp = profile?.memory_profile as any;
+      if (mp?.core_persona) {
+        longTermImpression = mp.core_persona;
+      }
+      // luna_impression 이 가장 최근 메모리에 있으면 그걸로 갱신
+      const latestWithImpression = (wm.recent as any[])?.find((m: any) => m?.luna_impression);
+      if (latestWithImpression?.luna_impression) {
+        longTermImpression = latestWithImpression.luna_impression as string;
+      }
+    } catch {
+      /* 무시 */
+    }
+
+    // 🆕 v77: 친밀도 상태 로드 + 세션 시작 감쇠
+    let intimacyState: any = undefined;
+    try {
+      const { applyDecayAtSessionStart, INTIMACY_LEVELS } = await import('@/engines/intimacy/v77-core');
+      const { state, reunion, decayApplied } = await applyDecayAtSessionStart(supabase, userId);
+      const def = INTIMACY_LEVELS[state.level];
+      const daysSince = (Date.now() - state.lastInteractionAt.getTime()) / 86400000;
+      intimacyState = {
+        level: state.level,
+        name: def.name,
+        score: state.score,
+        description: def.description,
+        unlocked_behaviors: def.unlockedBehaviors,
+        locked_behaviors: def.lockedBehaviors,
+        days_since_last: daysSince,
+        reunion,
+      };
+      if (decayApplied > 0 || reunion) {
+        console.log(`[Intimacy:v77] 세션 시작 Lv.${state.level} score=${state.score} (decay=${decayApplied}${reunion ? ', 재회 +5' : ''})`);
+      }
+    } catch (e: any) {
+      console.warn('[Intimacy:v77] 로드 실패 (무시):', e?.message);
+    }
+
+    return {
+      facts: wm.facts,
+      recent: wm.recent,
+      topSalient: wm.topSalient,
+      longTermImpression,
+      intimacyState,
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 export interface DualBrainInput {
@@ -499,6 +579,8 @@ export async function* executeDualBrain(
       let aceChunkCount = 0;
       try {
         const handoff = buildHandoff(brainResult.leftBrainAnalysis!);
+        // 🆕 v76: 장기 기억 로드 (루나가 "떠올린 기억" 으로 handoff 주입)
+        const memoryBundle = await loadMemoryBundleSafe(input.supabase, input.userId);
         for await (const chunk of executeAceV5({
           userUtterance: input.userInput,
           sessionId: input.sessionId,
@@ -508,6 +590,8 @@ export async function* executeDualBrain(
           intimacyLevel: extractIntimacy(input.contextBlock),
           phase: extractPhase(input.contextBlock),
           model: 'gemini',    // 🆕 Gemini 모드로 ACE v5 (저비용)
+          memoryBundle,       // 🆕 v76
+          chatHistory: input.chatHistory,   // 🆕 v78: 치매 방지 — 우뇌가 맥락 직접 봄
         }, logCollector)) {
           if (chunk.type === 'text') {
             aceChunkCount++;
@@ -543,6 +627,7 @@ export async function* executeDualBrain(
             userUtterance: input.userInput,
             brainAnalysis: brainResult.output,
             stakeHint,
+            chatHistory: input.chatHistory,   // 🆕 v78
           })) {
             fullResponseText += chunk;
             yield { type: 'text', data: chunk };
@@ -578,6 +663,8 @@ export async function* executeDualBrain(
       if (useAceV5) {
         // ACE v5 — 풍부한 핸드오프 + 양방향 피드백
         const handoff = buildHandoff(brainResult.leftBrainAnalysis!);
+        // 🆕 v76: 장기 기억 번들 주입
+        const memoryBundle = await loadMemoryBundleSafe(input.supabase, input.userId);
 
         for await (const chunk of executeAceV5({
           userUtterance: input.userInput,
@@ -588,6 +675,8 @@ export async function* executeDualBrain(
           intimacyLevel: extractIntimacy(input.contextBlock),
           phase: extractPhase(input.contextBlock),
           model: 'claude',   // 🆕 v56: claude_rephrase 경로는 Claude 모델 명시
+          memoryBundle,      // 🆕 v76
+          chatHistory: input.chatHistory,   // 🆕 v78: 치매 방지 — 우뇌가 맥락 직접 봄
         }, logCollector)) {
           if (chunk.type === 'text') {
             fullResponseText += chunk.data;
@@ -610,6 +699,7 @@ export async function* executeDualBrain(
           userUtterance: input.userInput,
           brainAnalysis: brainResult.output,
           stakeHint,
+          chatHistory: input.chatHistory,   // 🆕 v78
         })) {
           fullResponseText += chunk;
           yield { type: 'text', data: chunk };

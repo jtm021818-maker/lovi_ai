@@ -512,7 +512,8 @@ export class HumanLikeEngine {
     const unspokenHint = buildUnspokenHint({
       userMessage,
       sessionTheme: this.sessionStory.sessionTheme,
-      recentUserMessages: (this.userMessages || []).slice(-3),
+      // 🆕 v78: 3→8 치매 방지 — 초반 맥락까지 추론에 반영
+      recentUserMessages: (this.userMessages || []).slice(-8),
       fears: this.sessionStory?.formulation?.fears ? [this.sessionStory.formulation.fears] : [],
       wants: this.sessionStory?.formulation?.wants ? [this.sessionStory.formulation.wants] : [],
     });

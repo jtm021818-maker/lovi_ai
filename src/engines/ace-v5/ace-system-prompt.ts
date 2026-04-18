@@ -108,10 +108,13 @@ export const ACE_V5_SYSTEM_PROMPT = `너는 루나야.
 
 ## 입력 형식
 
-【유저 원문】 — 방금 동생이 보낸 카톡
+【대화 맥락】 — 지금까지 유저↔루나 주고받은 카톡 (시간순)
+【유저 원문】 — 방금 동생이 보낸 카톡 (이번 턴)
 【너의 내면 독백】 — 네 무의식이 이미 처리한 것 (감각/독해/현재/선택지)
 【관계 상태】 — Phase, 친밀도, 세션 흐름
 【내가 방금 한 말】 — 직전 3턴
+
+**중요: 이미 나온 정보 다시 묻지 마.** 유저가 이전에 "여친이 밥사래"라고 했으면 나중에 "누구한테?" 같은 거 묻지 마 — 바보처럼 보여. 대화 맥락 읽고 그 위에 이어가.
 
 이게 너야. 이제 친구로서 반응해.
 
@@ -129,6 +132,8 @@ export function buildAceV5UserMessage(params: {
   intimacyLevel: number;
   phase: string;
   isReanalysis?: boolean;
+  // 🆕 v78: 대화 히스토리 — 치매 방지용
+  chatHistory?: Array<{ role: 'user' | 'ai'; content: string }>;
   // 🆕 v60: 좌뇌 pacing_meta 힌트 (있으면 ACE 응답 톤 조정)
   pacingMeta?: {
     pacing_state: string;
@@ -156,7 +161,7 @@ export function buildAceV5UserMessage(params: {
 }): string {
   // v75: 좌뇌 handoff 가 이미 모든 신호 (pacingMeta, metaAwareness, selfExpression 포함) 를
   //      내면 독백 포맷으로 담음. 별도 주입 섹션 모두 제거 — 중복 안티패턴.
-  const { userUtterance, handoffPromptText, recentLunaActions, intimacyLevel, phase, isReanalysis, previousLunaText, metaAwareness } = params;
+  const { userUtterance, handoffPromptText, recentLunaActions, intimacyLevel, phase, isReanalysis, previousLunaText, metaAwareness, chatHistory } = params;
 
   const sections: string[] = [];
 
@@ -166,7 +171,20 @@ export function buildAceV5UserMessage(params: {
     );
   }
 
-  sections.push(`【유저 원문】\n"${userUtterance}"`);
+  // 🆕 v78: 대화 히스토리 — 치매 방지. 유저 원문 앞에 둬서 맥락 먼저 읽히게.
+  //   한 턴 전에 유저가 뭐라 했는지, 루나가 뭘 물어봤는지 직접 보게 함.
+  //   이전 버전: handoff 만 봤음 → 초반 맥락("여친이 밥사래") 소실돼 루나 치매.
+  //   v78.1: 12턴 → 50턴 하드캡. 5 Phase × ~8턴 = 40턴 세션 전체 커버.
+  //          파이프라인(pipeline/index.ts:1418)의 25,600 토큰 트리밍이 최종 방어선.
+  if (chatHistory && chatHistory.length > 0) {
+    const recent = chatHistory.slice(-50);
+    const historyBlock = recent
+      .map((m) => `  ${m.role === 'user' ? '[동생]' : '[나=루나]'} ${m.content}`)
+      .join('\n');
+    sections.push(`【대화 맥락 (최근 ${recent.length}턴, 시간순)】\n${historyBlock}`);
+  }
+
+  sections.push(`【유저 원문 (이번 턴)】\n"${userUtterance}"`);
 
   // 좌뇌의 3단계 내면 독백 (handoff 에 이미 감각 / 직관 / 표현 다 들어감)
   sections.push(`【너의 내면 독백 (방금 0.5초 안에 일어난 일)】\n${handoffPromptText}`);

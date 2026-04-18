@@ -105,14 +105,26 @@ export function buildVoiceUserMessage(params: {
     draft_utterances: string;
   };
   stakeHint?: string;
+  // 🆕 v78: 대화 히스토리 — 치매 방지
+  chatHistory?: Array<{ role: 'user' | 'ai'; content: string }>;
 }): string {
-  const { userUtterance, brainAnalysis, stakeHint } = params;
+  const { userUtterance, brainAnalysis, stakeHint, chatHistory } = params;
 
   const hintBlock = stakeHint
     ? `\n【고위험 힌트】\n${stakeHint}\n`
     : '';
 
-  return `【유저 원문】
+  // 🆕 v78.1: 세션 전체 대화 맥락 (50턴 하드캡) — 이미 나온 정보 다시 묻지 않게
+  //   파이프라인 25,600 토큰 트리밍이 최종 방어선이라 여기선 풍부하게 전달.
+  const historyBlock = chatHistory && chatHistory.length > 0
+    ? `【대화 맥락 (최근 ${Math.min(50, chatHistory.length)}턴)】\n` +
+      chatHistory.slice(-50)
+        .map((m) => `  ${m.role === 'user' ? '[동생]' : '[나=루나]'} ${m.content}`)
+        .join('\n') +
+      '\n\n'
+    : '';
+
+  return `${historyBlock}【유저 원문 (이번 턴)】
 "${userUtterance}"
 
 【Gemini 분석 힌트 (참고만, 엇나가면 무시)】
@@ -122,5 +134,6 @@ export function buildVoiceUserMessage(params: {
 길이: ${brainAnalysis.response_length}
 초안: ${brainAnalysis.draft_utterances}
 ${hintBlock}
+중요: 대화 맥락에 이미 나온 정보 다시 묻지 마. 예: 유저가 "여친이 밥사래"라고 했으면 "누구한테?" 묻지 마.
 이제 루나의 말풍선만 출력해. 태그 없이. |||로 구분.`;
 }

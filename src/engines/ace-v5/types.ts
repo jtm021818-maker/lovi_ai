@@ -97,6 +97,40 @@ export interface LeftToRightHandoff {
 
   /** 🆕 v75: 이번 턴 채워진 정보 카드들 */
   cards_filled_this_turn: LeftBrainAnalysis['cards_filled_this_turn'];
+
+  /**
+   * 🆕 v76: 루나의 "떠오른 기억" — 장기 기억 RAG 결과
+   * user_memories 에서 가져온 카드들. 1인칭 독백으로 handoff 에 렌더링.
+   */
+  memory_recalls?: Array<{
+    content: string;
+    summary?: string | null;
+    luna_feeling?: string | null;
+    time_ago?: string; // "며칠 전", "저번주", "오늘 아까"
+    emotional_weight?: number;
+  }>;
+
+  /**
+   * 🆕 v76: 이 유저에 대한 루나의 장기 인상 (한 줄)
+   * 예: "얘는 자책이 강하고 직설을 힘들어함"
+   */
+  long_term_impression?: string | null;
+
+  /**
+   * 🆕 v77: 친밀도 상태 — 매턴 업데이트
+   * 우뇌가 현재 Lv 기반으로 해제된 행동 자연스럽게 활용.
+   */
+  intimacy_state?: {
+    level: 1 | 2 | 3 | 4 | 5;
+    name: string;                // "아는 사이" / "편해진 사이" / ...
+    score: number;               // 0-100
+    description: string;         // 관계 상태 서술
+    unlocked_behaviors: string[];
+    locked_behaviors: string[];
+    days_since_last?: number;
+    reunion?: boolean;
+    level_up_moment?: boolean;   // 이번 턴 Lv 올라갔는가
+  };
 }
 
 // ============================================================
@@ -110,6 +144,13 @@ export interface AceV5Input {
   /** 세션 식별 */
   sessionId: string;
   turnIdx: number;
+
+  /**
+   * 🆕 v78: 실제 대화 히스토리 (치매 방지 핵심)
+   * 우뇌(Claude/Gemini)가 직접 볼 수 있는 유저↔루나 전체 주고받음.
+   * handoff/draft 만 보고 답하면 초반 맥락("여친이 밥사래") 소실.
+   */
+  chatHistory?: Array<{ role: 'user' | 'ai'; content: string }>;
 
   /**
    * 🆕 v56: 우뇌 모델 선택
@@ -141,6 +182,20 @@ export interface AceV5Input {
 
   /** 🆕 v73: 직전 루나 응답 (메타-항의 시 자기-참조용) */
   previousLunaText?: string | null;
+
+  /**
+   * 🆕 v76: 루나의 장기 기억 번들
+   * caller (pipeline) 가 loadWorkingMemory 호출 후 그 결과 + 장기 인상을 넘김.
+   * ACE v5 가 buildHandoff 후 mergeMemoryIntoHandoff 로 주입.
+   */
+  memoryBundle?: {
+    facts: any[];
+    recent: any[];
+    topSalient: any[];
+    longTermImpression?: string | null;
+    /** 🆕 v77: 친밀도 상태 (handoff 에 주입됨) */
+    intimacyState?: LeftToRightHandoff['intimacy_state'];
+  };
 }
 
 // ============================================================

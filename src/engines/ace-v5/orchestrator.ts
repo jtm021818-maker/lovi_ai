@@ -16,7 +16,7 @@ import { LogCollector } from '@/lib/utils/logger';
 
 import { logEnginePrompt } from '@/lib/utils/engine-prompt-logger';
 import { ACE_V5_SYSTEM_PROMPT, buildAceV5UserMessage } from './ace-system-prompt';
-import { buildHandoff, formatHandoffForPrompt } from './handoff-builder';
+import { buildHandoff, formatHandoffForPrompt, mergeMemoryIntoHandoff } from './handoff-builder';
 import {
   detectReanalysisRequest,
   detectLeftBrainHints,         // 🆕 v57
@@ -112,7 +112,17 @@ export async function* executeAceV5(
   // ────────────────────────────────────────
   // 1단계: 핸드오프 조립
   // ────────────────────────────────────────
-  const handoff = buildHandoff(input.leftBrain);
+  // 🆕 v76: buildHandoff + memoryBundle 병합 (pipeline 에서 미리 로드한 장기 기억)
+  // 🆕 v77: intimacy_state 도 함께 주입
+  const baseHandoff = buildHandoff(input.leftBrain);
+  const handoff = input.memoryBundle
+    ? mergeMemoryIntoHandoff(
+        baseHandoff,
+        input.memoryBundle,
+        input.memoryBundle.longTermImpression,
+        input.memoryBundle.intimacyState,
+      )
+    : baseHandoff;
   const handoffText = formatHandoffForPrompt(handoff);
 
   // ────────────────────────────────────────
@@ -132,6 +142,8 @@ export async function* executeAceV5(
     previousLunaText: input.previousLunaText ?? null,
     selfExpression: passSelfExpression((input.leftBrain as any)?.self_expression),
     thinkingLevel: pickThinkingLevel(input.leftBrain, input.alreadyReanalyzed === true),
+    // 🆕 v78: 치매 방지 — 우뇌가 직접 대화 히스토리 봄
+    chatHistory: input.chatHistory,
   }, logCollector);
 
   // ────────────────────────────────────────
@@ -187,6 +199,8 @@ export async function* executeAceV5(
         previousLunaText: input.previousLunaText ?? null,
         selfExpression: passSelfExpression((refinedAnalysis.analysis as any)?.self_expression),
         thinkingLevel: 'high',  // 재분석은 high
+        // 🆕 v78: 치매 방지 — 재분석에도 히스토리 전달
+        chatHistory: input.chatHistory,
       }, logCollector);
 
       finalText = secondCallResult.fullText;
@@ -315,6 +329,8 @@ interface SingleCallParams {
   } | null;
   /** 🆕 v76: Gemini 3 reasoning 강도 (gemini 모델일 때만 사용) */
   thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high';
+  /** 🆕 v78: 대화 히스토리 — 치매 방지. 우뇌가 직접 맥락 봄. */
+  chatHistory?: Array<{ role: 'user' | 'ai'; content: string }>;
 }
 
 interface SingleCallResult {
@@ -342,6 +358,8 @@ async function streamVoiceOnce(params: SingleCallParams, logCollector?: LogColle
     metaAwareness: params.metaAwareness ?? null,
     previousLunaText: params.previousLunaText ?? null,
     selfExpression: params.selfExpression ?? null,
+    // 🆕 v78: 대화 히스토리 — 우뇌가 직접 맥락 봄 (치매 방지)
+    chatHistory: params.chatHistory,
   });
 
   const provider = params.model === 'claude' ? 'anthropic' : 'gemini';

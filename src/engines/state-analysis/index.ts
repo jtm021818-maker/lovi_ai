@@ -158,7 +158,8 @@ export class StateAnalysisEngine {
     try {
       const haikuResponse = await analyzeStateWithHaiku(
         userMessage,
-        recentUserMessages.slice(-5),
+        // 🆕 v78: 5→10 치매 방지 — 초반 사건 맥락("여친이 밥사래") 유지
+        recentUserMessages.slice(-10),
         context,
         scenarioHint,  // 🆕 v33: 시나리오 힌트 전달
       );

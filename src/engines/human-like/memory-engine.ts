@@ -298,6 +298,10 @@ export async function saveMemory(
     isPinned?: boolean;
     sessionId?: string;
     partnerName?: string;
+    /** 🆕 v76: 루나가 그 순간 느낀 감정 결 */
+    lunaFeeling?: string;
+    /** 🆕 v76: 루나가 형성한 유저 인상 한 줄 */
+    lunaImpression?: string;
   },
 ) {
   try {
@@ -314,6 +318,8 @@ export async function saveMemory(
       is_pinned: memory.isPinned ?? false,
       session_id: memory.sessionId,
       partner_name: memory.partnerName,
+      luna_feeling: memory.lunaFeeling,          // 🆕 v76
+      luna_impression: memory.lunaImpression,    // 🆕 v76
     });
   } catch (e) {
     console.warn('[MemoryEngine] 저장 실패:', e);

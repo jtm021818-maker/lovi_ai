@@ -143,7 +143,7 @@ export async function PATCH(
 
       console.log(`[Memory] ✅ 메모리 추출 완료: ${extraction.newFacts.length}개 새 사실, hook="${extraction.nextSessionHook}"`);
 
-      // 🆕 v29: user_memories 테이블에도 저장
+      // 🆕 v29+v76: user_memories 테이블에도 저장 (루나 감정 결 포함)
       for (const fact of extraction.newFacts) {
         await saveMemory(supabase, user.id, {
           content: fact,
@@ -154,6 +154,9 @@ export async function PATCH(
           emotionTag: session.locked_scenario === 'BREAKUP_CONTEMPLATION' ? 'sad' : undefined,
           emotionalWeight: 0.5,
           sessionId,
+          // 🆕 v76: 루나 감정 결/인상 모든 fact 에 공통 적용
+          lunaFeeling: extraction.lunaFeeling,
+          lunaImpression: extraction.lunaImpression,
         });
       }
       // 핵심 감정 발견도 저장
@@ -167,6 +170,9 @@ export async function PATCH(
           keywordTags: extractKeywordsForMemory(extraction.nextSessionHook),
           emotionalWeight: 0.7,
           sessionId,
+          // 🆕 v76
+          lunaFeeling: extraction.lunaFeeling,
+          lunaImpression: extraction.lunaImpression,
         });
       }
       console.log(`[Memory] ✅ user_memories 저장 완료: ${extraction.newFacts.length + 1}개`);

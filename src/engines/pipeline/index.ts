@@ -1541,6 +1541,24 @@ ${researchResult.insight}
             } catch (e: any) {
               console.warn('[Pipeline:v73] WM save 예외:', e?.message);
             }
+
+            // 🆕 v77: 친밀도 실시간 누적 — 좌뇌 intimacy_signals 적용
+            try {
+              const signals = (capturedLeftBrainAnalysis as any)?.intimacy_signals;
+              if (signals && ragContext?.userId) {
+                const { applyIntimacyDeltaFromSignals } = await import('@/engines/intimacy/v77-core');
+                const result = await applyIntimacyDeltaFromSignals(
+                  ragContext.supabase,
+                  ragContext.userId,
+                  signals,
+                );
+                const marker = result.levelUp ? ' 🎉 LEVEL UP!' : result.levelDown ? ' ⬇️ LEVEL DOWN' : '';
+                const sign = result.delta >= 0 ? '+' : '';
+                console.log(`[Intimacy:v77] delta=${sign}${result.delta} → Lv.${result.state.level} (score=${result.state.score})${marker}`);
+              }
+            } catch (e: any) {
+              console.warn('[Intimacy:v77] delta 적용 실패 (무시):', e?.message);
+            }
           } catch (e: any) {
             console.warn('[Pipeline:v70] WM update 실패 (무시):', e?.message);
           }
