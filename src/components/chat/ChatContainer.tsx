@@ -756,6 +756,29 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
               onSelect={sendMessage}
             />
           )}
+
+          {/* 🆕 v82: Roleplay 는 채팅 네이티브 — 마지막 말풍선 바로 아래 인라인 렌더 */}
+          {activeMode === 'roleplay' && modeState?.modeId === 'roleplay' && (
+            <RoleplayMode
+              initial={modeState}
+              onTurn={async (userChoice, history) => {
+                const res = await fetch('/api/mode/roleplay/turn', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ scenario: modeState.scenario, history, userChoice }),
+                });
+                return await res.json();
+              }}
+              onComplete={(summary, history) => {
+                modeStoreExit(`롤플레이 완료 — ${summary}`);
+                const userLines = history.filter((h) => h.role === 'user').map((h) => h.content).slice(-3);
+                handleSuggestionSelect(
+                  `롤플레이 연습 끝. 핵심은: ${summary}. 내가 시도해본 대사: ${userLines.join(' / ')}`,
+                  { source: 'roleplay_mode' as any, context: { summary, turns: history.length, bridgeCompleted: true } as any }
+                );
+              }}
+            />
+          )}
         </div>
 
       {/* 하단 영역: 완료된 세션 vs 입력창 */}
@@ -910,28 +933,6 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
 
         <FxBgmSettings open={showSettings} onClose={() => setShowSettings(false)} />
         <DraftsVault open={showDraftsVault} onClose={() => setShowDraftsVault(false)} />
-
-        {activeMode === 'roleplay' && modeState?.modeId === 'roleplay' && (
-          <RoleplayMode
-            initial={modeState}
-            onTurn={async (userChoice, history) => {
-              const res = await fetch('/api/mode/roleplay/turn', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ scenario: modeState.scenario, history, userChoice }),
-              });
-              return await res.json();
-            }}
-            onComplete={(summary, history) => {
-              modeStoreExit(`롤플레이 완료 — ${summary}`);
-              const userLines = history.filter((h) => h.role === 'user').map((h) => h.content).slice(-3);
-              handleSuggestionSelect(
-                `롤플레이 연습 끝. 핵심은: ${summary}. 내가 시도해본 대사: ${userLines.join(' / ')}`,
-                { source: 'roleplay_mode' as any, context: { summary, turns: history.length, bridgeCompleted: true } as any }
-              );
-            }}
-          />
-        )}
     </div>
   );
 }

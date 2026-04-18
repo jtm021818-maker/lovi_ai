@@ -2208,12 +2208,13 @@ ${researchResult.insight}
       }
 
       // 🆕 v15: 이벤트 전송 (AI 응답 완료 후)
-      // 🆕 v80: 주요 이벤트는 마지막 말풍선과 시간차 — 동시 등장하면 말풍선이 묻힘
-      //   2초 텀 주면 유저가 "루나 말 읽고 → 아 이벤트 떴네" 자연스러운 리듬
+      // 🆕 v82: Phase 전환 주요 이벤트는 **5초** 텀 — 유저가 마지막 말풍선 충분히 읽은 뒤 등장
+      //   이전(v80): 2초 — 빠른 느낌. 유저 피드백으로 5초로 확장.
       const MAJOR_EVENT_TYPES = new Set(['EMOTION_MIRROR', 'LUNA_STRATEGY', 'LUNA_STORY', 'ACTION_PLAN', 'WARM_WRAP']);
+      const MAJOR_EVENT_DELAY_MS = 5000;
       for (const event of eventsToFire) {
         if (MAJOR_EVENT_TYPES.has(event.type as string) && fullText.length > 0) {
-          await new Promise((r) => setTimeout(r, 2000));
+          await new Promise((r) => setTimeout(r, MAJOR_EVENT_DELAY_MS));
         }
         yield { type: 'phase_event', data: event };
         console.log(`[Pipeline] 🎮 이벤트 발생: ${event.type} (${newPhaseV2})`);

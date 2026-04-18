@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import type { PanelState, PanelPersona } from '@/engines/bridge-modes/types';
+import LunaChainBubble from '../_shared/LunaChainBubble';
 
 interface PanelModeProps {
   initial: PanelState & { modeId: 'panel' };
@@ -82,7 +83,7 @@ export default function PanelMode({ initial, onComplete }: PanelModeProps) {
             x: 0,
             scale: p.userReaction === 'resonate' ? 1.02 : 1,
           }}
-          transition={{ delay: 0.2 + idx * 0.2, type: 'spring', stiffness: 300, damping: 26 }}
+          transition={{ delay: 0.9 + idx * 0.45, type: 'spring', stiffness: 300, damping: 26 }}
           className="flex items-end gap-2"
         >
           <div className="w-8 h-8 rounded-full bg-white border border-[#D5C2A5] flex items-center justify-center text-base shrink-0">
@@ -194,6 +195,10 @@ export default function PanelMode({ initial, onComplete }: PanelModeProps) {
 }
 
 function LunaBubble({ children }: { children: React.ReactNode }) {
+  // 🆕 v82.1: string 이면 ||| 분리 → 채팅 네이티브. ReactNode 면 단일 bubble 렌더.
+  if (typeof children === 'string') {
+    return <LunaChainBubble text={children} />;
+  }
   return (
     <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="flex items-end gap-2">
       <div className="w-8 h-8 rounded-full bg-[#F4EFE6] border border-[#EACbb3] overflow-hidden shrink-0">

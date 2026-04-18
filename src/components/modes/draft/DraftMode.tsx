@@ -14,6 +14,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { DraftState, DraftOption } from '@/engines/bridge-modes/types';
+import LunaChainBubble from '../_shared/LunaChainBubble';
 
 interface DraftModeProps {
   initial: DraftState & { modeId: 'draft' };
@@ -49,22 +50,10 @@ export default function DraftMode({ initial, onComplete }: DraftModeProps) {
       animate={{ opacity: 1, y: 0 }}
       className="max-w-[92%] mx-auto my-4 space-y-2"
     >
-      {/* Luna 오프닝 멘트 */}
-      <motion.div
-        initial={{ opacity: 0, x: -10 }}
-        animate={{ opacity: 1, x: 0 }}
-        className="flex items-end gap-2"
-      >
-        <div className="w-8 h-8 rounded-full bg-[#F4EFE6] border border-[#EACbb3] overflow-hidden shrink-0">
-          <img src="/luna_fox_transparent.png" alt="루나" className="w-full h-full object-cover" />
-        </div>
-        <div>
-          <div className="text-[10px] font-bold text-[#5D4037] ml-1 mb-0.5">루나</div>
-          <div className="px-3 py-2 rounded-2xl rounded-tl-sm bg-[#F4EFE6] border border-[#D5C2A5] text-[13px] text-[#4E342E]">
-            야 내가 3개 써봤어{selectedId ? '' : ' ㅎㅎ'}|||어떤 게 제일 맘에 와?
-          </div>
-        </div>
-      </motion.div>
+      {/* Luna 오프닝 멘트 — ||| 로 분리돼서 연속 카톡 느낌 */}
+      <LunaChainBubble
+        text={`야 내가 3개 써봤어${selectedId ? '' : ' ㅎㅎ'}|||어떤 게 제일 맘에 와?`}
+      />
 
       {/* 3개 초안 말풍선 — Luna 가 연속으로 보낸 느낌 */}
       {drafts.map((d, idx) => {
@@ -83,7 +72,7 @@ export default function DraftMode({ initial, onComplete }: DraftModeProps) {
               y: 0,
               scale: isSelected ? 1.02 : 1,
             }}
-            transition={{ delay: 0.2 + idx * 0.2, type: 'spring', stiffness: 300, damping: 26 }}
+            transition={{ delay: 0.9 + idx * 0.45, type: 'spring', stiffness: 300, damping: 26 }}
             className="flex items-start gap-2 ml-10"
           >
             <div className="flex-1">

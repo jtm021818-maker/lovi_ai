@@ -16,6 +16,7 @@ import confetti from 'canvas-confetti';
 import { playBgm, stopBgm, pickBgmForRoleplay } from '@/lib/bgm/bgm-manager';
 import { effectBus, isFxEnabled } from '@/lib/fx/effect-bus';
 import type { RoleplayState } from '@/engines/bridge-modes/types';
+import LunaChainBubble from '../_shared/LunaChainBubble';
 
 type HistoryTurn = RoleplayState['history'][number];
 
@@ -135,18 +136,12 @@ export default function RoleplayMode({ initial, onComplete, onTurn }: RoleplayMo
         />
       )}
 
-      {/* Luna 오프닝 + 시나리오 */}
-      <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="flex items-end gap-2 mb-3">
-        <div className="w-8 h-8 rounded-full bg-[#F4EFE6] border border-[#EACbb3] overflow-hidden shrink-0">
-          <img src="/luna_fox_transparent.png" alt="루나" className="w-full h-full object-cover" />
-        </div>
-        <div>
-          <div className="text-[10px] font-bold text-[#5D4037] ml-1 mb-0.5">루나</div>
-          <div className="px-3 py-2 rounded-2xl rounded-tl-sm bg-[#F4EFE6] border border-[#D5C2A5] text-[13px] text-[#4E342E]">
-            🎬 내가 {badge} 역할 해볼게|||상황: {scenario.situation}|||준비됐어? 그냥 답장하듯 해봐
-          </div>
-        </div>
-      </motion.div>
+      {/* Luna 오프닝 + 시나리오 — ||| 로 3개 버블 */}
+      <div className="mb-3">
+        <LunaChainBubble
+          text={`🎬 내가 ${badge} 역할 해볼게|||상황: ${scenario.situation}|||준비됐어? 그냥 답장하듯 해봐`}
+        />
+      </div>
 
       {/* 대화 이력 */}
       <div className="space-y-2.5">
@@ -275,14 +270,29 @@ export default function RoleplayMode({ initial, onComplete, onTurn }: RoleplayMo
 
 function TurnBubble({ turn, scenario, badge }: { turn: HistoryTurn; scenario: RoleplayState['scenario']; badge: string }) {
   if (turn.role === 'user') {
+    // 🆕 v82.1: 유저 답장도 ||| 으로 여러 버블 가능
+    const userBubbles = turn.content.split('|||').map((s) => s.trim()).filter(Boolean);
     return (
-      <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="flex justify-end">
-        <div className="max-w-[80%] px-3 py-2 rounded-2xl rounded-tr-sm bg-[#B56576] text-white text-[13px] leading-relaxed shadow-sm">
-          {turn.content}
-        </div>
-      </motion.div>
+      <div className="space-y-1">
+        {userBubbles.map((t, idx) => (
+          <motion.div
+            key={idx}
+            initial={{ opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: idx * 0.35 }}
+            className="flex justify-end"
+          >
+            <div className="max-w-[80%] px-3 py-2 rounded-2xl rounded-tr-sm bg-[#B56576] text-white text-[13px] leading-relaxed shadow-sm">
+              {t}
+            </div>
+          </motion.div>
+        ))}
+      </div>
     );
   }
+
+  // 🆕 v82.1: NPC 대사도 ||| 분리 — 첫 버블만 아바타/이름, 나머지는 들여쓰기
+  const npcBubbles = turn.content.split('|||').map((s) => s.trim()).filter(Boolean);
 
   return (
     <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-1">
@@ -292,30 +302,41 @@ function TurnBubble({ turn, scenario, badge }: { turn: HistoryTurn; scenario: Ro
           {turn.narration}
         </div>
       )}
-      <div className="flex items-end gap-2">
-        {/* 아바타 + 뱃지 */}
-        <div className="relative shrink-0">
-          <div className="w-8 h-8 rounded-full bg-[#F4EFE6] border border-pink-300 overflow-hidden">
-            <img src="/luna_fox_transparent.png" alt="루나" className="w-full h-full object-cover" />
+      {npcBubbles.map((t, idx) => (
+        <motion.div
+          key={idx}
+          initial={{ opacity: 0, x: -10, y: 4 }}
+          animate={{ opacity: 1, x: 0, y: 0 }}
+          transition={{ delay: idx * 0.45, type: 'spring', stiffness: 320, damping: 26 }}
+          className="flex items-end gap-2"
+        >
+          {idx === 0 ? (
+            <div className="relative shrink-0">
+              <div className="w-8 h-8 rounded-full bg-[#F4EFE6] border border-pink-300 overflow-hidden">
+                <img src="/luna_fox_transparent.png" alt="루나" className="w-full h-full object-cover" />
+              </div>
+              <motion.div
+                layoutId="luna-role-badge"
+                className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-full bg-pink-500 text-white text-[8px] font-black shadow-sm"
+              >
+                {badge}
+              </motion.div>
+            </div>
+          ) : (
+            <div className="w-8 shrink-0" aria-hidden />
+          )}
+          <div>
+            {idx === 0 && (
+              <motion.div layoutId="luna-name-tag" className="text-[10px] font-bold text-pink-600 ml-1 mb-0.5">
+                {scenario.role.name}
+              </motion.div>
+            )}
+            <div className="max-w-[85%] px-3 py-2 rounded-2xl rounded-tl-sm bg-white border border-pink-200 text-[13px] text-[#4E342E] leading-relaxed shadow-sm">
+              {t}
+            </div>
           </div>
-          {/* Role 뱃지 */}
-          <motion.div
-            layoutId="luna-role-badge"
-            className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-full bg-pink-500 text-white text-[8px] font-black shadow-sm"
-          >
-            {badge}
-          </motion.div>
-        </div>
-        <div>
-          {/* 이름 morph */}
-          <motion.div layoutId="luna-name-tag" className="text-[10px] font-bold text-pink-600 ml-1 mb-0.5">
-            {scenario.role.name}
-          </motion.div>
-          <div className="max-w-[85%] px-3 py-2 rounded-2xl rounded-tl-sm bg-white border border-pink-200 text-[13px] text-[#4E342E] leading-relaxed shadow-sm">
-            {turn.content}
-          </div>
-        </div>
-      </div>
+        </motion.div>
+      ))}
     </motion.div>
   );
 }

@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import type { ToneState, ToneOption } from '@/engines/bridge-modes/types';
+import LunaChainBubble from '../_shared/LunaChainBubble';
 
 interface ToneModeProps {
   initial: ToneState & { modeId: 'tone' };
@@ -34,22 +35,8 @@ export default function ToneMode({ initial, onComplete }: ToneModeProps) {
       animate={{ opacity: 1, y: 0 }}
       className="max-w-[92%] mx-auto my-4 space-y-2"
     >
-      {/* Luna 오프닝 */}
-      <motion.div
-        initial={{ opacity: 0, x: -10 }}
-        animate={{ opacity: 1, x: 0 }}
-        className="flex items-end gap-2"
-      >
-        <div className="w-8 h-8 rounded-full bg-[#F4EFE6] border border-[#EACbb3] overflow-hidden shrink-0">
-          <img src="/luna_fox_transparent.png" alt="루나" className="w-full h-full object-cover" />
-        </div>
-        <div>
-          <div className="text-[10px] font-bold text-[#5D4037] ml-1 mb-0.5">루나</div>
-          <div className="px-3 py-2 rounded-2xl rounded-tl-sm bg-[#F4EFE6] border border-[#D5C2A5] text-[13px] text-[#4E342E]">
-            같은 말 톤별로 3개 써봤어 🎨|||어떤 느낌이 맘에 와?
-          </div>
-        </div>
-      </motion.div>
+      {/* Luna 오프닝 — ||| 로 분리돼서 연속 카톡 느낌 */}
+      <LunaChainBubble text="같은 말 톤별로 3개 써봤어 🎨|||어떤 느낌이 맘에 와?" />
 
       {/* 3개 톤 버블 */}
       {initial.options.map((opt, idx) => {
@@ -67,7 +54,7 @@ export default function ToneMode({ initial, onComplete }: ToneModeProps) {
               y: 0,
               scale: isSelected ? 1.02 : 1,
             }}
-            transition={{ delay: 0.25 + idx * 0.2, type: 'spring', stiffness: 300, damping: 26 }}
+            transition={{ delay: 0.9 + idx * 0.45, type: 'spring', stiffness: 300, damping: 26 }}
             className="flex items-start gap-2 ml-10"
           >
             <div className="flex-1">
