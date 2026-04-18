@@ -11,8 +11,8 @@ import CinematicTransition from './CinematicTransition';
 
 // 🆕 v79: 루나극장 진입 시 시네마틱 전환 (필름릴 → 폭발 확장) 사용
 //   `true`  → CinematicTransition (CSS+Framer Motion, 번들 추가 0)
-//   `false` → TheaterOpening (mp4 비디오 — 레거시)
-const USE_CINEMATIC_TRANSITION = true;
+//   `false` → TheaterOpening (mp4 비디오 — `/루나극장_오프닝.mp4`)
+const USE_CINEMATIC_TRANSITION = false;
 
 /**
  * v49: 루나의 1인/2인 연극 — Visual Novel 스타일
@@ -219,12 +219,13 @@ export default function EmotionMirror({ event, onSelect, disabled }: EmotionMirr
   function handleSelect(value: string) {
     if (disabled || submitted) return;
     setSubmitted(true);
+    // 🆕 v80: 답변 톤도 "오 맞네 / 음 좀 다른데?" 자연스럽게
     const text = value === 'confirm'
-      ? `어... 맞아, ${(data.reveal || data.deepEmotion).slice(0, 20)}... 그런 느낌이야`
-      : '아니 조금 다른 느낌인데, 내가 설명해줄게';
+      ? `어... 맞아, 그런 것 같아`
+      : '음 좀 다른 느낌인데, 내가 얘기해볼게';
     onSelect(text, {
       source: 'emotion_mirror',
-      context: { confirmed: value === 'confirm', surfaceEmotion: data.surfaceEmotion, deepEmotion: data.deepEmotion },
+      context: { confirmed: value === 'confirm', reveal: data.reveal, lunaHunch: data.lunaHunch },
     });
   }
 
@@ -383,7 +384,15 @@ function VNScene({
         <p className="text-[12px] text-purple-900/80 leading-snug mb-1">
           {data.deepEmoji} &ldquo;{data.reveal}&rdquo;
         </p>
-        <p className="text-[10px] text-purple-400">{submitted ? '✓ 루나가 기억해둘게!' : data.lunaMessage}</p>
+        {/* 🆕 v80: 언니 감 보조 멘트 (선택) */}
+        {data.lunaHunch && (
+          <p className="text-[11px] text-purple-700/70 leading-snug italic mb-1">
+            {data.lunaHunch}
+          </p>
+        )}
+        <p className="text-[10px] text-purple-400">
+          {submitted ? '✓ 루나가 기억해둘게!' : (data.imperfectionDisclaimer ?? data.lunaMessage)}
+        </p>
       </motion.div>
     );
   }
@@ -656,11 +665,11 @@ function VNScene({
                     className="flex items-center justify-center gap-2 mb-3"
                   >
                     <div className="flex-1 h-[1px]" style={{ background: 'linear-gradient(90deg, transparent, rgba(168,85,247,0.4))' }} />
-                    <span className="text-[9px] tracking-[0.3em] uppercase text-purple-300/70 font-medium">루나의 직감</span>
+                    <span className="text-[9px] tracking-[0.3em] uppercase text-purple-300/70 font-medium">루나 감으로는</span>
                     <div className="flex-1 h-[1px]" style={{ background: 'linear-gradient(270deg, transparent, rgba(168,85,247,0.4))' }} />
                   </motion.div>
 
-                  {/* Reveal 텍스트 */}
+                  {/* Reveal 텍스트 — 질문/추측 톤 */}
                   <motion.p
                     initial={{ opacity: 0, y: 10, filter: 'blur(6px)' }}
                     animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
@@ -670,6 +679,30 @@ function VNScene({
                   >
                     &ldquo;{data.reveal}&rdquo;
                   </motion.p>
+
+                  {/* 🆕 v80: lunaHunch (선택) — "그냥 감인데..." 보조 한마디 */}
+                  {data.lunaHunch && (
+                    <motion.p
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 0.75, y: 0 }}
+                      transition={{ delay: 0.9, duration: 0.5 }}
+                      className="text-[12px] text-purple-200/80 text-center leading-relaxed mt-3 italic"
+                    >
+                      {data.lunaHunch}
+                    </motion.p>
+                  )}
+
+                  {/* 🆕 v80: imperfectionDisclaimer — 인간미 한마디 */}
+                  {data.imperfectionDisclaimer && (
+                    <motion.p
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 0.55 }}
+                      transition={{ delay: 1.1, duration: 0.4 }}
+                      className="text-[10px] text-purple-300/60 text-center mt-2"
+                    >
+                      — {data.imperfectionDisclaimer}
+                    </motion.p>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -821,43 +854,35 @@ function LegacyMirror({
         </div>
       </div>
 
+      {/* 🆕 v80: 이분법(겉/속) 제거 → 언니 감으로 짐작한 고민 한 카드 + (선택)hunch */}
       <div className="space-y-3 mb-5 relative z-10">
         <motion.div
           initial={{ opacity: 0, x: -10 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.2, type: 'spring' }}
-          className="flex items-start gap-3 p-3 bg-rose-50/60 border-2 border-slate-700/15"
-          style={{ borderRadius: '15px 225px 15px 255px/255px 15px 225px 15px', transform: 'rotate(0.3deg)' }}
-        >
-          <span className="text-2xl flex-shrink-0 mt-0.5">{data.surfaceEmoji}</span>
-          <div>
-            <p className="text-[11px] font-bold text-rose-400 mb-0.5">겉으로는</p>
-            <p className="text-[13px] font-bold text-slate-800 leading-snug">&ldquo;{data.surfaceEmotion}&rdquo;</p>
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, scale: 0.5 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.4, type: 'spring' }}
-          className="flex justify-center"
-        >
-          <span className="text-slate-400 text-lg">↓</span>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, x: -10 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.5, type: 'spring' }}
           className="flex items-start gap-3 p-3 bg-purple-50/60 border-2 border-slate-700/15"
           style={{ borderRadius: '255px 15px 225px 15px/15px 225px 15px 255px', transform: 'rotate(-0.3deg)' }}
         >
-          <span className="text-2xl flex-shrink-0 mt-0.5">{data.deepEmoji}</span>
+          <span className="text-2xl flex-shrink-0 mt-0.5">{data.deepEmoji || '💭'}</span>
           <div>
-            <p className="text-[11px] font-bold text-purple-400 mb-0.5">속마음은</p>
-            <p className="text-[13px] font-bold text-slate-800 leading-snug">&ldquo;{data.deepEmotion}&rdquo;</p>
+            <p className="text-[11px] font-bold text-purple-400 mb-0.5">혹시 이런 고민 아니야?</p>
+            <p className="text-[13px] font-bold text-slate-800 leading-snug">
+              &ldquo;{data.reveal || data.deepEmotion}&rdquo;
+            </p>
           </div>
         </motion.div>
+
+        {/* 선택적 보조 멘트 */}
+        {data.lunaHunch && (
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.85 }}
+            transition={{ delay: 0.5 }}
+            className="text-[12px] text-slate-600 leading-relaxed px-2 italic"
+          >
+            {data.lunaHunch}
+          </motion.p>
+        )}
       </div>
 
       <motion.p
@@ -867,7 +892,7 @@ function LegacyMirror({
         className="text-[12px] font-bold text-slate-500 text-center mb-4 relative z-10"
         style={{ transform: 'rotate(-0.5deg)' }}
       >
-        {data.lunaMessage}
+        {data.imperfectionDisclaimer ?? data.lunaMessage}
       </motion.p>
 
       <div className="flex gap-2.5 relative z-10">

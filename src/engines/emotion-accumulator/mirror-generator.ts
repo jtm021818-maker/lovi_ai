@@ -87,9 +87,58 @@ export async function generateDynamicMirror(
 
 라벨 = 성별 한글. userGender=${userGender ?? '미확인'} 기준으로 [${userGenderLabel}]/[${partnerGenderLabel}] 사용. 등장인물이 유저 혼자면 solo.
 
-## reveal (핵심)
-씬 뒤에 루나가 "아 이게 진짜 속마음이다" 하고 짚는 한 줄 (20~40자).
-표면 감정(짜증/귀찮음) 뒤의 1차 감정(서운함/두려움/외로움). 추측형 — "~거잖아", "~인 거 같아".
+## reveal (핵심) — 🆕 v80: 누나/언니 톤 "추리"
+씬 뒤에 루나가 "야 혹시 이런 거 아니야?" 하고 **추리**해서 찍는 한 줄 (20~40자).
+탐정이 단서 보고 "이거 아닐까?" 하듯 — **유저가 직접 말한 단서** 에서 한 걸음 더 들어간 추론.
+심리학 용어/분석체 절대 금지. 친한 언니가 옆에서 "이거지?" 찍는 톤.
+
+### 🔒 핵심 규칙 — 재료 기반 추리만
+- **유저가 말한 인물/사건/상황 안에서**만 추리. 유저가 꺼낸 적 없는 주제로 절대 점프 X.
+  예: "여친이 취업 얘기 자주 해" → OK: "여친 눈 맞춰 보기 부담스러워진 거 아냐?"
+     → NX: "다른 데서도 지쳐있는 거 아니야?" (유저가 말한 적 없는 '다른 데' 는 추측 금지)
+- **한 걸음** 만 더 깊이 들어가. "취업 얘기 짜증" → "사실 실패 인정하기 싫은 거" (1단계 추리 OK)
+  → "어릴 때 상처가..." (너무 멀리 점프 NO)
+- 질문형/추측형 끝맺음 필수: "~거 아냐?", "~인 거 같은데?", "~한 거지?", "혹시..."
+- **틀려도 OK 뉘앙스**. 단정 금지.
+
+### 좋은 예 (단서 → 한 걸음)
+- 단서: "여친이 취업 얘기만 하면 짜증"
+  → "혹시 '쟤가 나 한심하게 보나' 싶어서 짜증나는 거 아냐?"
+- 단서: "답장 안 와서 기분 나빠"
+  → "답장 문제 같지만, 사실 '나 별거 아닌가' 싶은 거 같은데?"
+- 단서: "걔가 장난으로 멍청하다고 함"
+  → "장난이 아니라 진짜로 그렇게 본 거 아닐까 싶어서 서운한 거지?"
+
+### 나쁜 예 (점프하는 경우)
+- 단서 "취업 얘기 짜증" → NG "다른 데서도 지쳐있지?" (유저가 '다른 데' 안 꺼냄)
+- 단서 "답장 안 옴" → NG "어릴 때 버림받은 기억 있어?" (과거 언급 없음)
+- 단서 "걔가 무례함" → NG "너 자존감 낮은 편이지?" (너무 판단적 + 단서 부족)
+
+## lunaHunch (선택) — 🆕 v80
+reveal 의 **보조/확장** — 같은 추리의 다른 각도 한 줄 (20~40자).
+**여전히 유저가 말한 단서 안에서**만. 없으면 null.
+
+### 좋은 예
+- reveal: "여친이 널 한심하게 보나 싶어서 짜증난 거지?"
+  → hunch: "그리고 너 스스로도 좀 찔려서 더 예민해지는 거 아니야?" (동일 상황에서 다른 각도)
+- reveal: "답장 문제가 아니라 '별거 아닌가' 싶은 거잖아"
+  → hunch: "근데 너 걔한테 꽤 기대하고 있었잖아 — 그게 무너지는 게 더 힘든 듯" (기존 단서 내에서)
+
+### 나쁜 예
+- NG "너 직장 스트레스 때문에 그런 거 아냐?" (유저가 직장 언급 없음)
+- NG "예전 연애 패턴이 반복되는 거 아냐?" (과거 관계 언급 없음)
+
+**원칙: reveal 의 단서에 없는 새 영역 금지. 같은 물통에서 다른 각도로 떠먹는 느낌.**
+
+## imperfectionDisclaimer (선택) — 🆕 v80
+"틀리면 말해줘" 류 인간미 한마디 (10~25자, 선택).
+없으면 null.
+
+예시:
+- "틀리면 말해줘ㅎㅎ"
+- "완전 다르면 네가 설명해줘"
+- "그냥 내 감이라 미안 틀릴 수도"
+- "이거 아니면 바로 수정!"
 
 ## sceneFrames (표정)
 각 대사마다 표정 0~7 (배열로). revealFrame 도 하나.
@@ -101,7 +150,7 @@ export async function generateDynamicMirror(
 
 ## 출력 (순수 JSON)
 ready=true:
-{"ready":true,"facts":{"who_user":"...","who_partner":"...|null","what_happened":"...","when":"...|null","where":"...|null","partner_last_words":"...|null","user_last_words_or_action":"...|null","emotional_subtext":"..."},"characterSetup":{"mode":"duo|solo","userGender":"male|female","partnerGender":"male|female|null","userLabel":"남자|여자","partnerLabel":"남자|여자|null"},"sceneTitle":"...(8~15자)","sceneLines":["[라벨] (지문) 대사", ...],"sceneFrames":[2,2,4,1,3,3],"reveal":"...","revealFrame":3,"surfaceEmotion":"...","surfaceEmoji":"...","deepEmotion":"...","deepEmoji":"..."}
+{"ready":true,"facts":{"who_user":"...","who_partner":"...|null","what_happened":"...","when":"...|null","where":"...|null","partner_last_words":"...|null","user_last_words_or_action":"...|null","emotional_subtext":"..."},"characterSetup":{"mode":"duo|solo","userGender":"male|female","partnerGender":"male|female|null","userLabel":"남자|여자","partnerLabel":"남자|여자|null"},"sceneTitle":"...(8~15자)","sceneLines":["[라벨] (지문) 대사", ...],"sceneFrames":[2,2,4,1,3,3],"reveal":"...(질문/추측형)","revealFrame":3,"lunaHunch":"...|null","imperfectionDisclaimer":"...|null","surfaceEmotion":"...","surfaceEmoji":"...","deepEmotion":"...","deepEmoji":"..."}
 
 ready=false:
 {"ready":false,"reason":"..."}
@@ -210,6 +259,9 @@ ${JSON.stringify(signalSummary, null, 2)}
       sceneFrames: Array.isArray(parsed.sceneFrames) ? parsed.sceneFrames.map((f: any) => Math.min(7, Math.max(0, Number(f) || 0))) : undefined,
       reveal: parsed.reveal,
       revealFrame: typeof parsed.revealFrame === 'number' ? Math.min(7, Math.max(0, parsed.revealFrame)) : 3,
+      // 🆕 v80: 언니 톤 짐작/인간미 필드
+      lunaHunch: typeof parsed.lunaHunch === 'string' && parsed.lunaHunch.trim().length > 0 ? parsed.lunaHunch.trim() : null,
+      imperfectionDisclaimer: typeof parsed.imperfectionDisclaimer === 'string' && parsed.imperfectionDisclaimer.trim().length > 0 ? parsed.imperfectionDisclaimer.trim() : null,
       backgroundImageBase64,
       characterSetup: {
         mode: llmMode,

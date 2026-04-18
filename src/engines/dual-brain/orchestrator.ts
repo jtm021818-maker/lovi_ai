@@ -588,7 +588,8 @@ export async function* executeDualBrain(
           leftBrain: brainResult.leftBrainAnalysis!,
           handoff,
           intimacyLevel: extractIntimacy(input.contextBlock),
-          phase: extractPhase(input.contextBlock),
+          // 🆕 v80 fix: input.currentPhase 우선 — contextBlock regex 실패 시 잘못된 기본값(HOOK) 방지
+          phase: (input.currentPhase as string) || extractPhase(input.contextBlock),
           model: 'gemini',    // 🆕 Gemini 모드로 ACE v5 (저비용)
           memoryBundle,       // 🆕 v76
           chatHistory: input.chatHistory,   // 🆕 v78: 치매 방지 — 우뇌가 맥락 직접 봄
@@ -673,7 +674,8 @@ export async function* executeDualBrain(
           leftBrain: brainResult.leftBrainAnalysis!,
           handoff,
           intimacyLevel: extractIntimacy(input.contextBlock),
-          phase: extractPhase(input.contextBlock),
+          // 🆕 v80 fix: input.currentPhase 우선 — contextBlock regex 실패 시 잘못된 기본값(HOOK) 방지
+          phase: (input.currentPhase as string) || extractPhase(input.contextBlock),
           model: 'claude',   // 🆕 v56: claude_rephrase 경로는 Claude 모델 명시
           memoryBundle,      // 🆕 v76
           chatHistory: input.chatHistory,   // 🆕 v78: 치매 방지 — 우뇌가 맥락 직접 봄

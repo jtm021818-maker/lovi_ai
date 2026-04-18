@@ -209,8 +209,13 @@ export interface EmotionMirrorData {
   sceneTitle?: string;        // 장면 제목 (예: "읽씹 당하는 그 순간")
   sceneLines?: string[];      // 연극 대사 5~6줄 ("[speaker] (지문) 대사" 형식)
   sceneFrames?: number[];     // 대사별 캐릭터 표정 프레임 (0-7), LLM이 연출 판단
-  reveal?: string;            // 속마음 reveal 대사
+  reveal?: string;            // 루나 추측 — "혹시 이런 고민 아냐?" 형식 (v80)
   revealFrame?: number;       // reveal 시 표정 프레임
+  // 🆕 v80: 루나 언니 톤 필드 — 심리학 분석 X, 친한 누나 짐작
+  /** 루나가 "그냥 감인데..." 식으로 얹는 보조 한마디 */
+  lunaHunch?: string | null;
+  /** "틀리면 말해줘ㅎㅎ" 류 인간미 한마디 */
+  imperfectionDisclaimer?: string | null;
 
   // 🆕 v49: VN 비주얼 노벨 모드
   backgroundImageBase64?: string;   // 배경 이미지 base64 JPEG

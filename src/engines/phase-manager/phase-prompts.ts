@@ -817,7 +817,7 @@ export function getTransitionPrompt(
 ): string {
   const transitions: Record<string, string> = {
     'HOOK→MIRROR': '사용자의 감정을 충분히 반영했습니다. 이제 상황을 정리하고 패턴을 파악해주세요.',
-    'MIRROR→BRIDGE': '상황 파악이 되었습니다. 이제 심리학적 인사이트를 제시하고 해결 방향을 함께 탐색해주세요.',
+    'MIRROR→BRIDGE': '이제 네 마음은 다 알았어! 이제 우리, 어떻게 하면 좋을지 "루나의 전략"을 한번 짜볼까?',
     'BRIDGE→SOLVE': '사용자가 준비되었습니다. 구체적인 해결책을 제시해주세요. 공감→인사이트→행동 3줄 공식을 사용하세요.',
     'SOLVE→EMPOWER': '해결책을 전달했습니다. 이제 사용자의 성장을 인정하고 실행 계획을 확인해주세요.',
   };

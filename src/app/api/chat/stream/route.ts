@@ -483,6 +483,9 @@ export async function POST(req: NextRequest) {
               chunk = chunk.replace(/\[LUNA_THOUGHT:[^\]]*\]/g, '');
               chunk = chunk.replace(/\[PHASE_SIGNAL:[^\]]*\]/g, '');
               chunk = chunk.replace(/\[SITUATION_CLEAR:[^\]]*\]/g, '');
+              // 🆕 v79: FX 태그 누락 방어 — 파이프라인 파서가 놓친 경우 route 레벨 추가 차단
+              chunk = chunk.replace(/\[FX:[a-z_]+\.[a-z_]+\]/gi, '');
+              chunk = chunk.replace(/\[\/FX\]/gi, '');
               // 🆕 v42: 빈 대괄호 [] 제거 (선택지 제거 후 남은 잔해)
               chunk = chunk.replace(/\[\s*\]/g, '');
               if (!chunk.trim()) break; // 제거 후 빈 문자열이면 스킵

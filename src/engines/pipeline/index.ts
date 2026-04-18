@@ -1725,13 +1725,17 @@ ${researchResult.insight}
                 .trim();
 
               // fullText 에는 메타 태그 포함해서 누적 (hlre.postProcess 파싱용)
-              // — DELAY/TYPING 은 유지 불필요, 제거
+              // — DELAY/TYPING/FX 는 유지 불필요, 제거 (하위 HLRE/UI 에 노출되면 안 됨)
               const bufferSnippet = burstOriginalForBuffer
                 .replace(/\[DELAY(?::[^\]]*)?\]/gi, '')
                 .replace(/\[DELAY[^\]\n]*/gi, '')
                 .replace(/\[TYPING\]/gi, '')
                 .replace(/\[STICKER:[a-z_]+\]/gi, '')
-                .replace(/\[SILENCE\]/gi, '');
+                .replace(/\[SILENCE\]/gi, '')
+                // 🆕 v79 fix: FX 태그 제거 (범위형 + 단일형) — UI 노출 방지
+                .replace(/\[FX:[a-z_]+\.[a-z_]+\][\s\S]*?\[\/FX\]/gi, (_m, ) => _m.replace(/\[\/?FX[^\]]*\]/gi, ''))
+                .replace(/\[FX:[a-z_]+\.[a-z_]+\]/gi, '')
+                .replace(/\[\/FX\]/gi, '');
 
               if (!burstText && !sticker && !bufferSnippet.trim()) continue;
 
