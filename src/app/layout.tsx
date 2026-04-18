@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Geist } from 'next/font/google';
 import './globals.css';
+import FxRoot from '@/components/fx/FxRoot';
 
 const geist = Geist({
   variable: '--font-geist',
@@ -34,6 +35,8 @@ export default function RootLayout({
   return (
     <html lang="ko" className={`${geist.variable} h-full`}>
       <body className="h-full bg-[#0B0A1D] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-mystic-700/60 via-mystic-900 to-[#05040B] font-[family-name:var(--font-geist)] antialiased text-white overflow-hidden">
+        {/* 🆕 v79: 전역 FX 레이어 (ScreenShake/Particle 등) */}
+        <FxRoot />
         {children}
         {/* 서비스 워커 등록 - TWA (APK) 필수 요건 */}
         <script

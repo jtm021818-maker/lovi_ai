@@ -242,6 +242,8 @@ export class CounselingPipeline {
     | { type: 'phase_change'; data: { phase: ConversationPhaseV2; progress: number; lunaThinking?: string; understandingLevel?: number } }
     // 🆕 v40: 루나가 "진짜 생각하는 중" UI 이벤트 (Gemini Grounding DeepResearch)
     | { type: 'luna_thinking_deep'; data: { status: 'started' | 'done'; keyword?: string; phrases?: string[]; durationMs?: number; hasInsight?: boolean } }
+    // 🆕 v79: 루나 감정 기반 미세 연출 (shake/flash/particle/bubble 효과)
+    | { type: 'fx'; data: { id: string; target: 'screen' | 'bubble' | 'text' | 'avatar' | 'particle' | 'bg'; duration?: number; params?: Record<string, any>; messageId?: string } }
     // 🆕 v48: 캐스케이드 재시도 상태 — UI에서 예쁜 재시도 표시용
     | { type: 'retry_status'; data: RetryStatusEvent }
     | { type: 'done'; data: { stateResult: StateResult; strategyResult: StrategyResult; suggestionShown: boolean; responseMode?: ResponseMode; updatedAxes?: Partial<ReadIgnoredAxes>; phaseV2?: ConversationPhaseV2; completedEvents?: PhaseEventType[]; lastEventTurn?: number; confirmedEmotionScore?: number; emotionHistory?: number[]; promptStyle?: string; emotionAccumulatorState?: EmotionAccumulatorState; phaseStartTurn?: number; lunaEmotionState?: string; sessionStoryState?: string; strategyMode?: StrategyMode | null; intimacyState?: import('@/engines/intimacy').IntimacyState | null; intimacyPersonaKey?: 'luna' | 'tarot'; intimacyAll?: { luna: import('@/engines/intimacy').IntimacyState; tarot: import('@/engines/intimacy').IntimacyState } | null; intimacyLevelUp?: { oldLevel: number; newLevel: number; newLevelName: string } | null; _contextLog?: any } }
@@ -1696,6 +1698,21 @@ ${researchResult.insight}
               const sticker = stickerMatch ? stickerMatch[1].toLowerCase() : null;
               if (stickerMatch) burstText = burstText.replace(stickerMatch[0], '');
 
+              // 🆕 v79: [FX:id] / [FX:id]...[/FX] FX 태그 파싱
+              //   단일 발동: [FX:bubble.wobble], [FX:particle.hearts] 등
+              //   범위 발동: [FX:text.wave]ㅎㅎㅎ[/FX] (현재는 단일 발동으로 취급 — 버스트 전체 대상)
+              const fxIds: string[] = [];
+              // 범위형 — 내부 텍스트는 보존, 태그만 제거 + id 기록
+              burstText = burstText.replace(/\[FX:([a-z_]+\.[a-z_]+)\]([\s\S]*?)\[\/FX\]/gi, (_f, id: string, inner: string) => {
+                fxIds.push(id.toLowerCase());
+                return inner;
+              });
+              // 단일형
+              burstText = burstText.replace(/\[FX:([a-z_]+\.[a-z_]+)\]/gi, (_f, id: string) => {
+                fxIds.push(id.toLowerCase());
+                return '';
+              });
+
               // 메타 태그 제거 (표시용)
               burstText = burstText.replace(METADATA_TAG_RE, '');
 
@@ -1725,6 +1742,28 @@ ${researchResult.insight}
               if (i > 0 && fullText.length > 0) {
                 fullText += '|||';
                 yield { type: 'text', data: '|||' };
+              }
+
+              // 🆕 v79: FX 이벤트 발동 — 텍스트 yield 직전에 screen 효과 먼저 터지게
+              //   (쉬는 타이밍 → 화면 flash/shake → 말풍선 등장 순서)
+              const FX_TARGETS: Record<string, 'screen' | 'bubble' | 'text' | 'avatar' | 'particle' | 'bg'> = {
+                'shake.soft': 'screen', 'shake.hard': 'screen',
+                'flash.white': 'screen', 'flash.pink': 'screen',
+                'tint.sepia': 'screen', 'tint.cool': 'screen',
+                'rain.sakura': 'bg', 'rain.tears': 'particle',
+                'bubble.wobble': 'bubble', 'bubble.bounce': 'bubble', 'bubble.deflate': 'bubble',
+                'bubble.glow': 'bubble', 'bubble.popIn': 'bubble', 'bubble.shimmer': 'bubble', 'bubble.burst': 'bubble',
+                'text.wave': 'text', 'text.shake': 'text', 'text.pulse': 'text',
+                'text.rainbow': 'text', 'text.scramble': 'text',
+                'avatar.bounce': 'avatar', 'avatar.shake': 'avatar', 'avatar.heartBeat': 'avatar',
+                'particle.hearts': 'particle', 'particle.sparkles': 'particle',
+                'particle.tears': 'particle', 'particle.fire': 'particle',
+                'particle.confetti': 'particle', 'particle.stars': 'particle',
+              };
+              for (const fxId of fxIds) {
+                const target = FX_TARGETS[fxId];
+                if (!target) continue;
+                yield { type: 'fx', data: { id: fxId, target } };
               }
 
               // 표시용 yield

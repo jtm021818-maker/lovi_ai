@@ -108,6 +108,13 @@ const SCENARIO_LABELS: Record<RelationshipScenario, { icon: string; label: strin
 
 export default function ChatContainer({ sessionId }: ChatContainerProps) {
   const { messages, isLoading, nudges, stateResult, suggestions, panelData, axesProgress, phaseEvents, currentPhase, phaseProgress, sessionStatus, sessionSummary, sendMessage, pendingEventLock, lunaThinking, understandingLevel, thinkingDeep, retryStatus, intimacyLevelUp, dismissIntimacyLevelUp } = useChat(sessionId);
+  // 🆕 v79: 마지막 AI 메시지 ID (bubble FX 매칭용)
+  const lastAiMsgId = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].senderType === 'ai' && messages[i].content) return messages[i].id;
+    }
+    return null;
+  })();
   const { toggle: toggleSpeak, isSpeaking, speak, isSupported: ttsSupported, settings: voiceSettings, updateSettings: updateVoiceSettings } = useLunaVoice();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activePersona, setActivePersona] = useState<PersonaMode>('luna');
@@ -539,6 +546,8 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
                   isSpeaking={isSpeaking}
                   isPremium={isPremium}
                   persona={activePersona}
+                  // 🆕 v79: 마지막 AI 메시지 식별 → bubble FX 매칭
+                  isLastAi={msg.senderType === 'ai' && msg.id === lastAiMsgId}
                 />
               ))}
             </div>

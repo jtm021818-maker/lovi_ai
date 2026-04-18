@@ -6,6 +6,7 @@ import type { ChatMessage } from '@/types/chat.types';
 import type { PersonaMode } from '@/types/persona.types';
 import LunaSticker, { isValidSticker } from './LunaSticker';
 import PremiumBadge from '@/components/common/PremiumBadge';
+import { useBubbleFx } from '@/lib/fx/use-bubble-fx';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -17,6 +18,8 @@ interface MessageBubbleProps {
   isPremium?: boolean;
   /** 현재 페르소나 모드 */
   persona?: PersonaMode;
+  /** 🆕 v79: 마지막 AI 메시지 여부 (bubble FX 매칭용) */
+  isLastAi?: boolean;
 }
 
 const REACTIONS = ['❤️', '🥺', '😢', '😮', '👍', '💪'];
@@ -33,11 +36,15 @@ function renderFormattedText(text: string) {
   });
 }
 
-export default function MessageBubble({ message, isTyping, onSpeak, isSpeaking, isPremium = true, persona = 'luna' }: MessageBubbleProps) {
+export default function MessageBubble({ message, isTyping, onSpeak, isSpeaking, isPremium = true, persona = 'luna', isLastAi = false }: MessageBubbleProps) {
   const isUser = message.senderType === 'user';
   const [showReactions, setShowReactions] = useState(false);
   const [chosenReaction, setChosenReaction] = useState<string | null>(null);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 🆕 v79: bubble FX 구독 (AI 메시지만)
+  const bubbleFx = useBubbleFx(message.id, !isUser && isLastAi);
+  const bubbleFxClass = !isUser ? bubbleFx.classes.join(' ') : '';
 
   function handlePressStart() {
     pressTimer.current = setTimeout(() => setShowReactions(true), 500);
@@ -113,7 +120,9 @@ export default function MessageBubble({ message, isTyping, onSpeak, isSpeaking, 
           onMouseLeave={handlePressEnd}
           onTouchStart={handlePressStart}
           onTouchEnd={handlePressEnd}
-          className={`px-4 py-2.5 shadow-sm select-none ${
+          // 🆕 v79: 루나 메시지 버블에 data-attr — CinematicTransition 이 마지막 버블 위치 감지
+          data-luna-bubble={!isUser ? 'true' : undefined}
+          className={`px-4 py-2.5 shadow-sm select-none ${bubbleFxClass} ${
             isUser
               ? 'bg-[#EAE1D0] text-[#4E342E] rounded-[20px] rounded-tr-[4px] border border-[#D5C2A5]'
               : 'bg-[#F4EFE6] text-[#4E342E] rounded-[20px] rounded-tl-[4px] border border-[#D5C2A5]'

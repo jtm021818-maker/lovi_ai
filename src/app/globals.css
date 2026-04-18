@@ -110,3 +110,195 @@ input, textarea, select {
   from { transform: translateY(0); }
   to { transform: translateY(-50%); }
 }
+
+/* ═════════════════════════════════════════════════════════════════
+   🎬 v79 FX Keyframes — Luna Micro-Effects System
+   ═════════════════════════════════════════════════════════════════ */
+
+/* Screen shake (body에 클래스 부여) */
+@keyframes fx-shake-soft {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  10% { transform: translate3d(-2px, 1px, 0); }
+  20% { transform: translate3d(2px, -1px, 0); }
+  30% { transform: translate3d(-1px, 2px, 0); }
+  40% { transform: translate3d(1px, -2px, 0); }
+  50% { transform: translate3d(-2px, 0, 0); }
+  60% { transform: translate3d(2px, 1px, 0); }
+  70% { transform: translate3d(-1px, -1px, 0); }
+  80% { transform: translate3d(1px, 2px, 0); }
+  90% { transform: translate3d(-1px, 0, 0); }
+}
+@keyframes fx-shake-hard {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  10% { transform: translate3d(-5px, 3px, 0) rotate(-0.3deg); }
+  20% { transform: translate3d(5px, -3px, 0) rotate(0.3deg); }
+  30% { transform: translate3d(-4px, 4px, 0) rotate(-0.2deg); }
+  40% { transform: translate3d(4px, -4px, 0) rotate(0.2deg); }
+  50% { transform: translate3d(-5px, 1px, 0) rotate(-0.3deg); }
+  60% { transform: translate3d(5px, 2px, 0) rotate(0.3deg); }
+  70% { transform: translate3d(-3px, -3px, 0) rotate(-0.2deg); }
+  80% { transform: translate3d(3px, 4px, 0) rotate(0.2deg); }
+  90% { transform: translate3d(-2px, 1px, 0); }
+}
+.fx-shake-soft { animation: fx-shake-soft 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+.fx-shake-hard { animation: fx-shake-hard 0.7s cubic-bezier(.36,.07,.19,.97) both; }
+
+/* Flash 오버레이 */
+@keyframes fx-flash-out {
+  0% { opacity: 0; }
+  30% { opacity: 0.75; }
+  100% { opacity: 0; }
+}
+@keyframes fx-tint-cycle {
+  0% { opacity: 0; }
+  20% { opacity: 0.55; }
+  80% { opacity: 0.45; }
+  100% { opacity: 0; }
+}
+
+/* Bubble 효과 */
+@keyframes fx-bubble-wobble {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  15% { transform: rotate(-3deg) scale(1.02); }
+  30% { transform: rotate(3deg) scale(1.02); }
+  45% { transform: rotate(-2deg); }
+  60% { transform: rotate(2deg); }
+  75% { transform: rotate(-1deg); }
+}
+.fx-bubble-wobble { animation: fx-bubble-wobble 0.5s ease-in-out; }
+
+@keyframes fx-bubble-bounce {
+  0%, 100% { transform: scale(1) translateY(0); }
+  25% { transform: scale(1.08) translateY(-6px); }
+  50% { transform: scale(0.95) translateY(2px); }
+  75% { transform: scale(1.03) translateY(-2px); }
+}
+.fx-bubble-bounce { animation: fx-bubble-bounce 0.55s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+@keyframes fx-bubble-deflate {
+  0% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(3px) scale(0.98); filter: saturate(0.8); }
+  100% { transform: translateY(2px) scale(0.97); filter: saturate(0.85); }
+}
+.fx-bubble-deflate { animation: fx-bubble-deflate 0.7s ease-out forwards; }
+
+@keyframes fx-bubble-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,192,203,0); }
+  50% { box-shadow: 0 0 20px 4px rgba(255,192,203,0.55), 0 0 30px 8px rgba(255,192,203,0.3); }
+}
+.fx-bubble-glow { animation: fx-bubble-glow 2s ease-in-out; }
+
+@keyframes fx-bubble-popIn {
+  0% { transform: scale(0.3); opacity: 0; }
+  50% { transform: scale(1.15); opacity: 1; }
+  80% { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+.fx-bubble-popIn { animation: fx-bubble-popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+@keyframes fx-bubble-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.fx-bubble-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.fx-bubble-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 25%, rgba(255,255,255,0.6) 50%, transparent 75%);
+  background-size: 200% 100%;
+  animation: fx-bubble-shimmer 1.2s ease-out;
+}
+
+@keyframes fx-bubble-burst {
+  0% { transform: scale(0.5); opacity: 0; }
+  40% { transform: scale(1.2) rotate(-2deg); opacity: 1; }
+  60% { transform: scale(0.95) rotate(1deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+.fx-bubble-burst { animation: fx-bubble-burst 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+/* Text 효과 (per-letter — FxText 컴포넌트가 span 에 index 부여) */
+@keyframes fx-text-wave {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.fx-text-wave > span {
+  display: inline-block;
+  animation: fx-text-wave 0.6s ease-in-out infinite;
+}
+
+@keyframes fx-text-shake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  25% { transform: translate3d(-1px, 1px, 0); }
+  50% { transform: translate3d(1px, -1px, 0); }
+  75% { transform: translate3d(-1px, -1px, 0); }
+}
+.fx-text-shake > span {
+  display: inline-block;
+  animation: fx-text-shake 0.25s linear 2;
+}
+
+@keyframes fx-text-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.25); }
+}
+.fx-text-pulse > span {
+  display: inline-block;
+  animation: fx-text-pulse 0.5s ease-in-out 2;
+}
+
+@keyframes fx-text-rainbow {
+  0% { color: #ff6b9d; }
+  16% { color: #ff9f43; }
+  33% { color: #feca57; }
+  50% { color: #48dbfb; }
+  66% { color: #1dd1a1; }
+  83% { color: #5f27cd; }
+  100% { color: #ff6b9d; }
+}
+.fx-text-rainbow > span {
+  display: inline-block;
+  animation: fx-text-rainbow 1.5s linear infinite;
+}
+
+/* Avatar 효과 */
+@keyframes fx-avatar-bounce {
+  0%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-8px); }
+  50% { transform: translateY(2px); }
+  70% { transform: translateY(-3px); }
+}
+.fx-avatar-bounce { animation: fx-avatar-bounce 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+@keyframes fx-avatar-shake {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-8deg); }
+  50% { transform: rotate(8deg); }
+  75% { transform: rotate(-4deg); }
+}
+.fx-avatar-shake { animation: fx-avatar-shake 0.5s ease-in-out; }
+
+@keyframes fx-avatar-heartBeat {
+  0%, 100% { transform: scale(1); }
+  14% { transform: scale(1.12); }
+  28% { transform: scale(1); }
+  42% { transform: scale(1.12); }
+  70% { transform: scale(1); }
+}
+.fx-avatar-heartBeat { animation: fx-avatar-heartBeat 1.4s ease-in-out; }
+
+/* reduce-motion 존중 */
+@media (prefers-reduced-motion: reduce) {
+  .fx-shake-soft, .fx-shake-hard,
+  .fx-bubble-wobble, .fx-bubble-bounce, .fx-bubble-deflate,
+  .fx-bubble-glow, .fx-bubble-popIn, .fx-bubble-shimmer, .fx-bubble-burst,
+  .fx-text-wave > span, .fx-text-shake > span, .fx-text-pulse > span, .fx-text-rainbow > span,
+  .fx-avatar-bounce, .fx-avatar-shake, .fx-avatar-heartBeat {
+    animation: none !important;
+  }
+}

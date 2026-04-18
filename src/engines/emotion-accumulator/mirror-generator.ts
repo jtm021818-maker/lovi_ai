@@ -204,7 +204,7 @@ ${JSON.stringify(signalSummary, null, 2)}
       surfaceEmoji: parsed.surfaceEmoji || surfaceEmotion?.emoji || '💭',
       deepEmotion: parsed.deepEmotion || deepEmotionHypothesis.primaryEmotion,
       deepEmoji: parsed.deepEmoji || '💜',
-      lunaMessage: '이런 느낌이지? 🦊',
+      lunaMessage: '혹시... 진짜 마음은 이거 아니야? 🦊',
       sceneTitle: parsed.sceneTitle || '너의 그 순간',
       sceneLines,
       sceneFrames: Array.isArray(parsed.sceneFrames) ? parsed.sceneFrames.map((f: any) => Math.min(7, Math.max(0, Number(f) || 0))) : undefined,
@@ -219,8 +219,8 @@ ${JSON.stringify(signalSummary, null, 2)}
         partnerLabel: llmPartnerLabel,
       },
       choices: [
-        { label: '엇 맞아...', value: 'confirm' },
-        { label: '아 좀 다른데ㅋㅋ', value: 'different' },
+        { label: '어... 어떻게 알았어?', value: 'confirm' },
+        { label: '음 조금 다른데?', value: 'different' },
       ],
     };
   } catch (err) {

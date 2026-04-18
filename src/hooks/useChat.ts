@@ -489,6 +489,22 @@ export function useChat(sessionId: string): UseChatReturn {
                 break;
               }
 
+              // 🆕 v79: 루나 감정 기반 미세 연출 (shake/flash/particle/bubble 효과)
+              case 'fx': {
+                const fxData = event.data as any;
+                // effectBus 에 dispatch → 구독 중인 컴포넌트(ScreenShake/ParticleLayer/MessageBubble) 가 반응
+                import('@/lib/fx/effect-bus').then(({ effectBus }) => {
+                  effectBus.fire({
+                    id: fxData.id,
+                    target: fxData.target,
+                    duration: fxData.duration,
+                    params: fxData.params,
+                    messageId: fxData.messageId,
+                  });
+                });
+                break;
+              }
+
               // 🆕 v48: 캐스케이드 재시도 상태 — 예쁜 재시도 UI
               case 'retry_status': {
                 const retryData = event.data as any;

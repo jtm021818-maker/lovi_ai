@@ -220,8 +220,8 @@ export default function EmotionMirror({ event, onSelect, disabled }: EmotionMirr
     if (disabled || submitted) return;
     setSubmitted(true);
     const text = value === 'confirm'
-      ? `맞아, ${(data.reveal || data.deepEmotion).slice(0, 20)}... 그런 느낌이야`
-      : '음 좀 다른 느낌인데, 내가 말해볼게';
+      ? `어... 맞아, ${(data.reveal || data.deepEmotion).slice(0, 20)}... 그런 느낌이야`
+      : '아니 조금 다른 느낌인데, 내가 설명해줄게';
     onSelect(text, {
       source: 'emotion_mirror',
       context: { confirmed: value === 'confirm', surfaceEmotion: data.surfaceEmotion, deepEmotion: data.deepEmotion },
@@ -656,7 +656,7 @@ function VNScene({
                     className="flex items-center justify-center gap-2 mb-3"
                   >
                     <div className="flex-1 h-[1px]" style={{ background: 'linear-gradient(90deg, transparent, rgba(168,85,247,0.4))' }} />
-                    <span className="text-[9px] tracking-[0.3em] uppercase text-purple-300/70 font-medium">insight</span>
+                    <span className="text-[9px] tracking-[0.3em] uppercase text-purple-300/70 font-medium">루나의 직감</span>
                     <div className="flex-1 h-[1px]" style={{ background: 'linear-gradient(270deg, transparent, rgba(168,85,247,0.4))' }} />
                   </motion.div>
 
@@ -700,7 +700,7 @@ function VNScene({
                 >
                   <div className="flex items-center justify-center gap-2 mb-3">
                     <div className="w-4 h-[1px] bg-amber-400/40" />
-                    <span className="text-[8px] tracking-[0.3em] uppercase text-amber-300/50 font-medium">luna says</span>
+                    <span className="text-[8px] tracking-[0.3em] uppercase text-amber-300/50 font-medium">혹시...</span>
                     <div className="w-4 h-[1px] bg-amber-400/40" />
                   </div>
                   <p className="text-[15px] font-bold text-white text-center leading-relaxed"
