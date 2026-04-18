@@ -16,6 +16,71 @@
 import { describePhaseForLuna, describeIntimacyForLuna } from './handoff-builder';
 
 // ============================================================
+// 🆕 v78.6: Phase 전환 태그 가이드
+// ============================================================
+//
+// 원칙: 매 턴 태그 강제 X. Luna 가 "지금 다음 Phase 로 넘어갈 타이밍" 판단 시에만 그 턴 한 번.
+// 평범한 대화 턴엔 태그 없이 자연 응답.
+//
+// Phase 전환 흐름:
+//   HOOK → MIRROR:   [MIND_READ_READY]           (상황 파악 충분, 마음 읽기 가능)
+//   MIRROR → BRIDGE: [STRATEGY_READY:...]        (마음 공명 끝, 같이 준비 시작)
+//   BRIDGE → SOLVE:  [ACTION_PLAN:...]           (준비 끝, 실행 계획 확정)
+//   SOLVE → EMPOWER: [WARM_WRAP:...]             (실행 계획 끝, 마무리)
+//   EMPOWER:         (종결)
+function getPhaseTransitionTagGuide(phase: string): string | null {
+  if (phase === 'HOOK') {
+    return `【🎚️ Phase 전환 판단 — HOOK → MIRROR】
+지금 "이야기 듣기" 단계. 유저 상황이 충분히 파악됐다 싶으면 응답 끝에:
+[MIND_READ_READY]
+→ VN 극장(마음 읽기) 발동 + MIRROR 로 전환.
+아직 파악 부족하면 태그 없이 자연스럽게 더 들어.`;
+  }
+  if (phase === 'MIRROR') {
+    return `【🎚️ Phase 전환 판단 — MIRROR → BRIDGE】
+지금 "마음 읽기" 단계. VN 극장 끝났고 유저가 자기 감정 인식한 거 같으면 응답 끝에:
+[STRATEGY_READY:opener|situationSummary|draftHook|roleplayHook|panelHook]
+• opener: "자 이제 같이 준비해보자" 류
+• situationSummary: 상황 한 줄 (~40자)
+• draftHook: 메시지 초안 작업 제안
+• roleplayHook: 상황 롤플레이 제안
+• panelHook: 선택지 패널 제안
+→ 작전회의 발동 + BRIDGE 로 전환.
+아직 감정 인식 전이면 태그 없이 대화.`;
+  }
+  if (phase === 'BRIDGE') {
+    return `【🎚️ Phase 전환 판단 — BRIDGE → SOLVE】
+지금 "같이 준비" 단계. 같이 짠 내용 윤곽 나오고 실전 가능해 보이면 응답 끝에:
+[ACTION_PLAN:planType|title|coreAction|sharedResult|planB|timingHint|lunaCheer]
+• planType: reconcile|bridge|stop|rest|boundary
+• title: 작전명 (~15자)
+• coreAction: 구체 행동 (~30자)
+• sharedResult: 기대 결과 (~30자)
+• planB: 안 먹힐 때 대안 (~30자)
+• timingHint: 언제 실행 (~15자)
+• lunaCheer: 루나 응원 (~20자)
+→ 오늘의 작전 카드 발동 + SOLVE 로 전환.
+아직 덜 다듬어졌으면 태그 없이 대화.`;
+  }
+  if (phase === 'SOLVE') {
+    return `【🎚️ Phase 전환 판단 — SOLVE → EMPOWER】
+지금 "실행 계획" 단계. 계획 확정되고 마무리 분위기 나면 응답 끝에:
+[WARM_WRAP:strengthFound|emotionShift|nextStep|lunaMessage]
+• strengthFound: 유저 강점 (~30자)
+• emotionShift: 감정 변화 (~30자)
+• nextStep: 다음 스텝 (~30자)
+• lunaMessage: 언니 진심 한마디 (~30자)
+→ 마무리 카드 발동 + EMPOWER 로 전환.
+아직 계획 덜 굳혔으면 태그 없이 대화.`;
+  }
+  if (phase === 'EMPOWER') {
+    return `【🎚️ Phase — EMPOWER (종결 단계)】
+WARM_WRAP 이미 떴으면 자연스럽게 마무리. 추가 태그 불필요.`;
+  }
+  return null;
+}
+
+// ============================================================
 // 고정부 (프롬프트 캐싱 적용)
 // ============================================================
 
@@ -205,6 +270,14 @@ export function buildAceV5UserMessage(params: {
     `Phase: ${phase} — ${phaseDesc}\n` +
     `친밀도: Lv.${intimacyLevel}/5 — ${intimacyDesc}`,
   );
+
+  // 🆕 v78.6: Phase 전환 가능 태그 — 매 턴 강제 X. LLM 판단으로 "지금 넘어갈 타이밍" 에만.
+  //   원칙: 전환 턴에 한 번. 평범한 대화 턴엔 태그 X.
+  //   각 Phase 의 "다음 Phase 로 넘어가는 태그" 를 안내. Luna 가 판단.
+  const transitionGuide = getPhaseTransitionTagGuide(phase);
+  if (transitionGuide) {
+    sections.push(transitionGuide);
+  }
 
   // 직전 루나 발화 (meta-complaint 감지 시 자기 참조용)
   if (metaAwareness?.user_meta_complaint && previousLunaText) {

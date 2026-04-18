@@ -1749,6 +1749,23 @@ ${researchResult.insight}
         try {
           const userMsgs = chatHistory.filter(m => m.role === 'user').map(m => m.content);
           userMsgs.push(userMessage);
+
+          // 🆕 v78.2: KBE 가 태그를 벗긴 뒤 재생성하면 fullText 에 태그 없음
+          //   → UI의 situationRead / lunaThought 가 영원히 플레이스홀더("상황 듣는 중...")
+          //   좌뇌 analysis 에 이미 태그 있으니 fullText 에 주입해서 파서가 읽게 함.
+          const lbTags = capturedLeftBrainAnalysis?.tags;
+          if (lbTags && !/\[SITUATION_READ:/i.test(fullText)) {
+            const injectedTags: string[] = [];
+            if (lbTags.SITUATION_READ) injectedTags.push(`[SITUATION_READ:${lbTags.SITUATION_READ}]`);
+            if (lbTags.LUNA_THOUGHT) injectedTags.push(`[LUNA_THOUGHT:${lbTags.LUNA_THOUGHT}]`);
+            if (lbTags.PHASE_SIGNAL) injectedTags.push(`[PHASE_SIGNAL:${lbTags.PHASE_SIGNAL}]`);
+            if (lbTags.SITUATION_CLEAR) injectedTags.push(`[SITUATION_CLEAR:${lbTags.SITUATION_CLEAR}]`);
+            if (injectedTags.length > 0) {
+              fullText = fullText + injectedTags.join('');
+              console.log(`[Pipeline] 🏷️ 좌뇌 태그 주입 (KBE 제거 보상): ${injectedTags.length}개`);
+            }
+          }
+
           const hlrePost = await hlre.postProcess(fullText, userMsgs);
           // 시그널 태그 제거된 클린 응답으로 교체
           if (hlrePost.finalResponse !== fullText) {
@@ -1770,21 +1787,25 @@ ${researchResult.insight}
           // 제거된 코드 규칙:
           //   ❌ 온도계 완료 선행 조건, turnInPhase >= 2 하드코딩,
           //      isFormulationReady() 휴리스틱, isReadyForMirror 게이트
-          const lbEventRec = capturedLeftBrainAnalysis?.event_recommendation;
           const lbPacingState = capturedLeftBrainAnalysis?.pacing_meta?.pacing_state;
           const lbTransition = capturedLeftBrainAnalysis?.pacing_meta?.phase_transition_recommendation;
 
-          const lbRecommendsVN = lbEventRec?.suggested === 'VN_THEATER' || lbEventRec?.suggested === 'EMOTION_MIRROR';
-          const lbPacingReady = lbPacingState === 'READY' || lbTransition === 'JUMP';
-          const aiTaggedReady = hlrePost.mindReadReady === true;
           const vnAlreadyFired = updatedCompletedEvents.includes('EMOTION_MIRROR') || eventsToFire.some((e) => e.type === 'EMOTION_MIRROR');
 
-          if ((lbRecommendsVN || lbPacingReady || aiTaggedReady) && !vnAlreadyFired && canFireEvent()) {
-            const trigger = aiTaggedReady
-              ? 'AI_TAG(MIND_READ_READY)'
-              : lbRecommendsVN
-                ? `LEFTBRAIN_REC(VN_THEATER, confidence=${lbEventRec?.confidence ?? '?'})`
-                : `LEFTBRAIN_PACING(${lbPacingState}/${lbTransition})`;
+          // 🆕 v78.4: Phase ↔ 이벤트 1:1 고정 (LLM 판단 X, Phase 진입 = 무조건 발동)
+          //   MIRROR (마음 읽기) → EMOTION_MIRROR (VN 극장) 무조건
+          //   BRIDGE (같이 준비) → LUNA_STRATEGY  (아래 블록에서 처리)
+          //   SOLVE  (실행 계획) → ACTION_PLAN   (AI 태그로 발동)
+          //   EMPOWER(변화 응원) → WARM_WRAP    (AI 태그로 발동)
+          //
+          //   이전 버그: pacing=READY 만으로도 VN 시도 → MIRROR 아닌 Phase 에서 엉뚱한 극장 발동
+          //              + 좌뇌가 ACTION_PLAN 추천해도 VN 강행.
+          //   유저 의도: "같이 준비 / 마음읽기 등 Phase 에 맞는 이벤트는 코드로 고정. 내용만 LLM."
+          const isMirrorPhase = newPhaseV2 === 'MIRROR';
+          const vnGate = isMirrorPhase;
+
+          if (vnGate && !vnAlreadyFired && canFireEvent()) {
+            const trigger = `PHASE=MIRROR (무조건 발동, lbPacing=${lbPacingState}/${lbTransition}, aiTag=${hlrePost.mindReadReady ?? false})`;
             console.log(`[Pipeline] 🎭 VN 극장 발동 시도 — 트리거: ${trigger}`);
 
             updatedLastEventTurn = turnCount;
@@ -1845,7 +1866,8 @@ ${researchResult.insight}
 
           // 🆕 ACE v4: AI가 [STRATEGY_READY:...] 태그를 출력했으면 → 루나의 작전회의 이벤트 발동
           // 🆕 v43: canFireEventType으로 이중 체크
-          if (hlrePost.strategyData && canFireEventType('LUNA_STRATEGY')) {
+          // 🆕 v78.4: BRIDGE(같이 준비) Phase 에서만 발동. 다른 Phase 에서 AI 가 태그 출력해도 무시.
+          if (hlrePost.strategyData && newPhaseV2 === 'BRIDGE' && canFireEventType('LUNA_STRATEGY')) {
             const { opener: stratOpener, situationSummary, draftHook, roleplayHook, panelHook } = hlrePost.strategyData;
             eventsToFire.push(createLunaStrategy(stratOpener, situationSummary, draftHook, roleplayHook, panelHook));
             updatedCompletedEvents.push('LUNA_STRATEGY');
@@ -1901,7 +1923,8 @@ ${researchResult.insight}
 
           // 🆕 v39: 🎯 SOLVE 마무리 — [ACTION_PLAN:...] → ACTION_PLAN 이벤트
           // SOLVE S3 시뮬레이션 후 "오늘의 작전" 카드 발동 → SOLVE→EMPOWER 전환 게이트
-          if (hlrePost.actionPlan && canFireEvent() && !updatedCompletedEvents.includes('ACTION_PLAN')) {
+          // 🆕 v78.4: SOLVE(실행 계획) Phase 에서만 발동. MIRROR 에서 AI 가 섣불리 태그 달아도 무시.
+          if (hlrePost.actionPlan && newPhaseV2 === 'SOLVE' && canFireEvent() && !updatedCompletedEvents.includes('ACTION_PLAN')) {
             const { planType, title, coreAction, sharedResult, planB, timingHint, lunaCheer } = hlrePost.actionPlan;
             eventsToFire.push(createActionPlan(
               planType as any,
@@ -1919,7 +1942,8 @@ ${researchResult.insight}
 
           // 🆕 v39: 💜 EMPOWER 마무리 — [WARM_WRAP:...] → WARM_WRAP 이벤트
           // 학술 요약 대신 "언니의 다독임 + 재방문 약속" 카드
-          if (hlrePost.warmWrap && canFireEvent() && !updatedCompletedEvents.includes('WARM_WRAP')) {
+          // 🆕 v78.4: EMPOWER(변화 응원) Phase 에서만 발동.
+          if (hlrePost.warmWrap && newPhaseV2 === 'EMPOWER' && canFireEvent() && !updatedCompletedEvents.includes('WARM_WRAP')) {
             const { strengthFound, emotionShift, nextStep, lunaMessage } = hlrePost.warmWrap;
             eventsToFire.push(createWarmWrap(strengthFound, emotionShift, nextStep, lunaMessage));
             updatedCompletedEvents.push('WARM_WRAP');

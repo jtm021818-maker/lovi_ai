@@ -141,9 +141,15 @@ ${JSON.stringify(signalSummary, null, 2)}
       cascade,
       systemPrompt,
       [{ role: 'user', content: userPrompt }],
-      550,
+      // 🆕 v78.3: 550 → 1500. 씬 6줄 + facts + characterSetup + reveal + emotions
+      //   한국어 JSON 으로 550 은 자주 잘림 → "파싱/필드 실패: []" 빈번
+      1500,
     );
     const parsed = safeParseLLMJson(result.text, null as any);
+    // 🆕 v78.3: 파싱 실패 시 원본 일부 로깅 (디버그용)
+    if (!parsed) {
+      console.warn('[MirrorGenerator] safeParseLLMJson null — raw head:', (result.text ?? '').slice(0, 400));
+    }
 
     // LLM 자체 ready=false → 미루기
     if (parsed && parsed.ready === false) {
