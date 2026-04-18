@@ -252,6 +252,10 @@ export function useChat(sessionId: string): UseChatReturn {
     try {
       abortRef.current = new AbortController();
 
+      // 🆕 v81: BRIDGE 몰입 모드 활성 여부 — Phase Manager bypass 용
+      const { useModeStore } = await import('@/engines/bridge-modes/mode-store');
+      const activeMode = useModeStore.getState().activeMode;
+
       const fetchPromise = fetch('/api/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -260,6 +264,7 @@ export function useChat(sessionId: string): UseChatReturn {
           message: content,
           suggestionMeta: meta || { source: 'typed' },
           ...(depthOverride && { depthOverride }),
+          ...(activeMode && { activeMode }),
         }),
         signal: abortRef.current.signal,
       });
@@ -501,6 +506,19 @@ export function useChat(sessionId: string): UseChatReturn {
                     params: fxData.params,
                     messageId: fxData.messageId,
                   });
+                });
+                break;
+              }
+
+              // 🆕 v81: BRIDGE 몰입 모드 완료 — Luna 가 [OPERATION_COMPLETE] 태그 출력
+              case 'mode_complete': {
+                const completeData = event.data as { mode: string; summary: string; nextStep?: string };
+                console.log(`[useChat] 🎬 모드 완료 수신:`, completeData);
+                import('@/engines/bridge-modes/mode-store').then(({ useModeStore }) => {
+                  const store = useModeStore.getState();
+                  if (store.activeMode) {
+                    store.exit(completeData.summary, completeData.nextStep);
+                  }
                 });
                 break;
               }

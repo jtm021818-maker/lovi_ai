@@ -23,6 +23,17 @@ import InsightCard from './events/InsightCard';
 import EmotionMirror from './events/EmotionMirror';
 import LunaStory from './events/LunaStory';
 import LunaStrategy from './events/LunaStrategy';
+// 🆕 v81: BRIDGE 몰입 모드
+import ModeSelector from '@/components/modes/ModeSelector';
+import ToneMode from '@/components/modes/tone/ToneMode';
+import IdeaMode from '@/components/modes/idea/IdeaMode';
+import DraftMode from '@/components/modes/draft/DraftMode';
+import PanelMode from '@/components/modes/panel/PanelMode';
+import RoleplayMode from '@/components/modes/roleplay/RoleplayMode';
+import FxBgmSettings from '@/components/settings/FxBgmSettings';
+import DraftsVault from '@/components/drafts/DraftsVault';
+import { useModeStore } from '@/engines/bridge-modes/mode-store';
+import type { ModeId, ToneOption, DraftOption, PanelPersona, RoleplayState } from '@/engines/bridge-modes/types';
 import LunaThoughtHistory from './LunaThoughtHistory';
 import SituationTimeline from './SituationTimeline';
 // 🆕 v40: 루나 딥리서치 "진짜 고민 중" 로딩 UI
@@ -255,6 +266,124 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
     }).catch(err => console.error('[Scenario] DB 업데이트 실패:', err));
   }
 
+  // 🆕 v81: 몰입 모드 진입 — ModeSelector 에서 호출
+  const modeStoreEnter = useModeStore((s) => s.enter);
+  const activeMode = useModeStore((s) => s.activeMode);
+  const modeState = useModeStore((s) => s.modeState);
+  const modeStoreExit = useModeStore((s) => s.exit);
+  // 🆕 v81: 설정 / 초안함 토글
+  const [showSettings, setShowSettings] = useState(false);
+  const [showDraftsVault, setShowDraftsVault] = useState(false);
+
+  async function handleModeEnter(mode: ModeId, strategyData: { opener?: string; situationSummary?: string }) {
+    const context = strategyData.situationSummary ?? '';
+    if (mode === 'tone') {
+      // 🆕 v81: LLM 으로 3톤 실시간 생성
+      try {
+        const res = await fetch('/api/mode/tone/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ context }),
+        });
+        const data = await res.json();
+        const options: ToneOption[] = data.options ?? [];
+        if (options.length < 3) throw new Error('톤 생성 실패');
+        modeStoreEnter('tone', {
+          modeId: 'tone',
+          context,
+          options,
+          selectedId: null,
+        });
+      } catch (err) {
+        console.error('[Mode:tone] 생성 실패, 폴백:', err);
+        modeStoreEnter('tone', {
+          modeId: 'tone',
+          context,
+          options: [
+            { id: 'soft',   label: '부드럽게', emoji: '💐', content: '부드럽게 얘기해볼게', intensity: 28 },
+            { id: 'honest', label: '솔직하게', emoji: '🔍', content: '솔직히 얘기해볼게', intensity: 55 },
+            { id: 'firm',   label: '단호하게', emoji: '🔥', content: '확실히 말해볼게', intensity: 82 },
+          ],
+          selectedId: null,
+        });
+      }
+    } else if (mode === 'idea') {
+      // 🆕 v81: Idea Refine — 빈 입력창으로 바로 진입
+      modeStoreEnter('idea', {
+        modeId: 'idea',
+        original: '',
+        refined: null,
+        reasons: [],
+      });
+    } else if (mode === 'draft') {
+      // 🆕 v81: Draft Workshop — LLM 으로 3초안 생성
+      try {
+        const res = await fetch('/api/mode/draft/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ context, intent: '' }),
+        });
+        const data = await res.json();
+        const drafts: DraftOption[] = data.drafts ?? [];
+        if (drafts.length < 3) throw new Error('초안 생성 실패');
+        modeStoreEnter('draft', {
+          modeId: 'draft',
+          context,
+          intent: '',
+          drafts,
+          selectedId: null,
+          edits: [],
+        });
+      } catch (err) {
+        console.error('[Mode:draft] 생성 실패:', err);
+        alert('초안 생성 실패 — 잠시 후 다시 시도해줘');
+      }
+    } else if (mode === 'panel') {
+      // 🆕 v81: Panel Report — 3 페르소나 관점 생성
+      try {
+        const res = await fetch('/api/mode/panel/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ context }),
+        });
+        const data = await res.json();
+        const personas: PanelPersona[] = data.personas ?? [];
+        if (personas.length < 3) throw new Error('패널 생성 실패');
+        modeStoreEnter('panel', {
+          modeId: 'panel',
+          context,
+          personas,
+          chosenPersonaId: null,
+          deepenTurns: [],
+        });
+      } catch (err) {
+        console.error('[Mode:panel] 생성 실패:', err);
+        alert('패널 생성 실패 — 잠시 후 다시 시도해줘');
+      }
+    } else if (mode === 'roleplay') {
+      // 🆕 v81: Roleplay — 시나리오 시작
+      try {
+        const res = await fetch('/api/mode/roleplay/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ context }),
+        });
+        const data = await res.json();
+        if (!data.scenario) throw new Error('시나리오 생성 실패');
+        const stateInit: RoleplayState & { modeId: 'roleplay' } = {
+          modeId: 'roleplay',
+          context,
+          scenario: data.scenario,
+          history: [],
+        };
+        modeStoreEnter('roleplay', stateInit);
+      } catch (err) {
+        console.error('[Mode:roleplay] 생성 실패:', err);
+        alert('롤플레이 시나리오 생성 실패 — 잠시 후 다시 시도해줘');
+      }
+    }
+  }
+
   /** 선택지 클릭 */
   function handleSuggestionSelect(text: string, meta?: SuggestionMeta) {
     // 타로 이벤트 선택은 유저 메시지로 안 보임
@@ -277,7 +406,18 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
       case 'INSIGHT_CARD': return <InsightCard key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
       case 'EMOTION_MIRROR': return <EmotionMirror key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
       case 'LUNA_STORY': return <LunaStory key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
-      case 'LUNA_STRATEGY': return <LunaStrategy key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
+      // 🆕 v81: LUNA_STRATEGY → ModeSelector 로 업그레이드 (몰입 모드 진입 카드)
+      case 'LUNA_STRATEGY': {
+        const strategyData = event.data as { opener?: string; situationSummary?: string };
+        return (
+          <ModeSelector
+            key={`event-${idx}`}
+            opener={strategyData.opener}
+            situationSummary={strategyData.situationSummary}
+            onSelect={(mode) => handleModeEnter(mode, strategyData)}
+          />
+        );
+      }
       // 🆕 v35: 모드별 SOLVE 이벤트 렌더링
       case 'TONE_SELECT': return <ToneSelector key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
       case 'DRAFT_WORKSHOP': return <DraftWorkshop key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
@@ -676,6 +816,127 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
             </div>
           )}
         </div>
+
+        {/* 🆕 v81: BRIDGE 몰입 모드 오버레이 — activeMode 따라 조건 렌더 */}
+        {activeMode === 'tone' && modeState?.modeId === 'tone' && (
+          <ToneMode
+            initial={modeState}
+            onExit={() => modeStoreExit('유저가 모드 나감')}
+            onComplete={(chosen) => {
+              modeStoreExit(`톤 '${chosen.label}' 선택됨 — "${chosen.content.slice(0, 30)}..."`);
+              handleSuggestionSelect(
+                `톤은 '${chosen.label}' 으로 갈게. 예시: "${chosen.content}"`,
+                { source: 'tone_mode' as any, context: { tone: chosen.id, content: chosen.content } as any }
+              );
+            }}
+          />
+        )}
+
+        {activeMode === 'idea' && modeState?.modeId === 'idea' && (
+          <IdeaMode
+            initial={modeState}
+            onExit={() => modeStoreExit('아이디어 모드 나감')}
+            onRefine={async (original) => {
+              const res = await fetch('/api/mode/idea/refine', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ original, context: modeState.original ?? '' }),
+              });
+              return await res.json();
+            }}
+            onComplete={({ final, source }) => {
+              modeStoreExit(`아이디어 확정 (${source}): "${final.slice(0, 40)}"`);
+              handleSuggestionSelect(
+                `이 아이디어로 갈게: "${final}"`,
+                { source: 'idea_mode' as any, context: { final, source } as any }
+              );
+            }}
+          />
+        )}
+
+        {activeMode === 'draft' && modeState?.modeId === 'draft' && (
+          <DraftMode
+            initial={modeState}
+            onExit={() => modeStoreExit('초안 모드 나감')}
+            onComplete={({ draft, finalContent }) => {
+              // 🆕 v81: 확정 초안 자동 저장 (fire-and-forget, 실패해도 UX 안 막음)
+              fetch('/api/mode/draft/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  tone: draft.tone,
+                  content: finalContent,
+                  context: modeState.context,
+                  sessionId,
+                }),
+              }).catch((e) => console.warn('[Draft] 저장 실패 (무시):', e));
+
+              modeStoreExit(`초안 '${draft.label}' 확정: "${finalContent.slice(0, 40)}..."`);
+              handleSuggestionSelect(
+                `초안 확정했어 (${draft.label}): "${finalContent}" (초안함에 저장해뒀어)`,
+                { source: 'draft_mode' as any, context: { draftId: draft.id, tone: draft.tone, content: finalContent } as any }
+              );
+            }}
+          />
+        )}
+
+        {activeMode === 'panel' && modeState?.modeId === 'panel' && (
+          <PanelMode
+            initial={modeState}
+            onExit={() => modeStoreExit('패널 모드 나감')}
+            onComplete={(persona) => {
+              modeStoreExit(`'${persona.name}' 관점 선택: "${persona.opinion.slice(0, 40)}..."`);
+              handleSuggestionSelect(
+                `${persona.emoji} ${persona.name} 관점이 제일 와닿았어: "${persona.opinion}"`,
+                { source: 'panel_mode' as any, context: { personaId: persona.id, opinion: persona.opinion } as any }
+              );
+            }}
+          />
+        )}
+
+        {/* 🆕 v81: 우상단 플로팅 — 설정 & 초안함 */}
+        <div className="fixed top-3 right-3 z-[8000] flex flex-col gap-1.5 pointer-events-none">
+          <button
+            onClick={() => setShowDraftsVault(true)}
+            className="pointer-events-auto w-9 h-9 rounded-full bg-white/80 backdrop-blur-md border border-[#D5C2A5]/60 shadow-sm flex items-center justify-center active:scale-95 transition-transform"
+            title="내 초안함"
+          >
+            <span className="text-base">📂</span>
+          </button>
+          <button
+            onClick={() => setShowSettings(true)}
+            className="pointer-events-auto w-9 h-9 rounded-full bg-white/80 backdrop-blur-md border border-[#D5C2A5]/60 shadow-sm flex items-center justify-center active:scale-95 transition-transform"
+            title="효과 설정"
+          >
+            <span className="text-base">⚙️</span>
+          </button>
+        </div>
+
+        <FxBgmSettings open={showSettings} onClose={() => setShowSettings(false)} />
+        <DraftsVault open={showDraftsVault} onClose={() => setShowDraftsVault(false)} />
+
+        {activeMode === 'roleplay' && modeState?.modeId === 'roleplay' && (
+          <RoleplayMode
+            initial={modeState}
+            onExit={() => modeStoreExit('롤플레이 모드 나감')}
+            onTurn={async (userChoice, history) => {
+              const res = await fetch('/api/mode/roleplay/turn', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ scenario: modeState.scenario, history, userChoice }),
+              });
+              return await res.json();
+            }}
+            onComplete={(summary, history) => {
+              modeStoreExit(`롤플레이 완료 — ${summary}`);
+              const userLines = history.filter((h) => h.role === 'user').map((h) => h.content).slice(-3);
+              handleSuggestionSelect(
+                `롤플레이 연습 끝. 핵심은: ${summary}. 내가 시도해본 대사: ${userLines.join(' / ')}`,
+                { source: 'roleplay_mode' as any, context: { summary, turns: history.length } as any }
+              );
+            }}
+          />
+        )}
     </div>
   );
 }

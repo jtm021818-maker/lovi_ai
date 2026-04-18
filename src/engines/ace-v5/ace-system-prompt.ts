@@ -84,7 +84,21 @@ function getPhaseTransitionTagGuide(phase: string): string | null {
   }
   if (phase === 'BRIDGE') {
     return `【🎚️ Phase 전환 판단 — BRIDGE → SOLVE】
-지금 "같이 준비" 단계. 같이 짠 내용 윤곽 나오고 실전 가능해 보이면 응답 끝에:
+지금 "같이 준비" 단계. 유저는 몰입 모드 (롤플레이/초안/패널/톤/아이디어) 중 하나를 골라 진행 중.
+
+### 🆕 v81 모드 완료 신호
+유저가 모드에서 하고자 한 걸 충분히 마쳤다 싶으면 (예: 톤 골랐음, 초안 확정, 롤플레이 시나리오 3개 연습 등):
+[OPERATION_COMPLETE:모드명|한 줄 요약|다음 단계 힌트]
+
+예시:
+- [OPERATION_COMPLETE:tone|"솔직하게 톤으로 결정. 핵심 메시지 확정"|이 톤으로 초안 짜기]
+- [OPERATION_COMPLETE:draft|"B안 초안 저장됨. 여친한테 오늘 밤 보낼 준비"|SOLVE: 실제 보내기]
+- [OPERATION_COMPLETE:roleplay|"3번 연습 끝. 자연스러운 사과 톤 찾음"|SOLVE: 진짜 대화 계획]
+
+→ 파이프라인이 이 태그 감지하면 모드 종료 + SOLVE 로 전환.
+
+### 같이 준비 종료 후 SOLVE 로
+모드 완료되고 실전 가능해 보이면 응답 끝에:
 [ACTION_PLAN:planType|title|coreAction|sharedResult|planB|timingHint|lunaCheer]
 • planType: reconcile|bridge|stop|rest|boundary
 • title: 작전명 (~15자)
@@ -94,7 +108,11 @@ function getPhaseTransitionTagGuide(phase: string): string | null {
 • timingHint: 언제 실행 (~15자)
 • lunaCheer: 루나 응원 (~20자)
 → 오늘의 작전 카드 발동 + SOLVE 로 전환.
-아직 덜 다듬어졌으면 태그 없이 대화.`;
+
+### 규칙
+- 모드 활성 중엔 턴 제한 X. 유저가 몰입할 만큼 끌어.
+- [OPERATION_COMPLETE] 는 "정말 이거 끝났다" 싶을 때만.
+- [OPERATION_COMPLETE] 와 [ACTION_PLAN] 을 같은 턴에 둘 다 내도 OK (종료 → 바로 작전 확정).`;
   }
   if (phase === 'SOLVE') {
     return `【🎚️ Phase 전환 판단 — SOLVE → EMPOWER】

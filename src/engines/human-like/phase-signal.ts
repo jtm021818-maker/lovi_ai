@@ -55,6 +55,18 @@ const SITUATION_READ_REGEX = /\[SITUATION_READ:([^\]]+)\]\s*/;
 // 🆕 v36: 루나의 속마음 — [LUNA_THOUGHT:한 줄 속마음]
 const LUNA_THOUGHT_REGEX = /\[LUNA_THOUGHT:([^\]]+)\]\s*/;
 
+// 🆕 v81: BRIDGE 몰입 모드 완료 — [OPERATION_COMPLETE:mode|summary|next_step]
+//   mode: roleplay|draft|panel|tone|idea
+//   summary: Luna 가 내린 한 줄 요약
+//   next_step: (선택) 다음 단계 힌트
+const OPERATION_COMPLETE_REGEX = /\[OPERATION_COMPLETE:([a-z_]+)\|([^|\]]+)(?:\|([^\]]+))?\]\s*/i;
+
+export interface ParsedOperationComplete {
+  mode: string;
+  summary: string;
+  nextStep?: string;
+}
+
 /** 🆕 ACE v4: 루나 이야기 데이터 (AI 응답에서 파싱) */
 export interface ParsedStoryData {
   opener: string;
@@ -170,6 +182,8 @@ export function parsePhaseSignal(response: string): {
   // 🆕 v4: 상황 파악 카드 데이터
   situationSummary: string | null;
   coreProblem: string | null;
+  // 🆕 v81: BRIDGE 몰입 모드 완료 태그
+  operationComplete: ParsedOperationComplete | null;
 } {
   let cleaned = response;
 
@@ -349,6 +363,21 @@ export function parsePhaseSignal(response: string): {
     cleaned = cleaned.replace(LUNA_THOUGHT_REGEX, '').trim();
   }
 
+  // 🆕 v81: [OPERATION_COMPLETE:mode|summary|next_step] 몰입 모드 완료 태그
+  let operationComplete: ParsedOperationComplete | null = null;
+  const opCompleteMatch = cleaned.match(OPERATION_COMPLETE_REGEX);
+  if (opCompleteMatch) {
+    operationComplete = {
+      mode: opCompleteMatch[1].toLowerCase(),
+      summary: opCompleteMatch[2].trim(),
+      nextStep: opCompleteMatch[3]?.trim() || undefined,
+    };
+    cleaned = cleaned.replace(OPERATION_COMPLETE_REGEX, '').trim();
+    console.log(`[PhaseSignal] 🎬 작전 완료: ${operationComplete.mode} | "${operationComplete.summary}"`);
+  }
+  // 방어적 정리 — 잘린 태그 제거
+  cleaned = cleaned.replace(/\[OPERATION_COMPLETE[^\]]*\]/gi, '').trim();
+
   const match = cleaned.match(SIGNAL_REGEX);
   if (!match) return {
     cleanResponse: cleaned,
@@ -370,6 +399,7 @@ export function parsePhaseSignal(response: string): {
     lunaThought,
     situationSummary,
     coreProblem,
+    operationComplete,
   };
 
   return {
@@ -392,6 +422,7 @@ export function parsePhaseSignal(response: string): {
     lunaThought,
     situationSummary,
     coreProblem,
+    operationComplete,
   };
 }
 

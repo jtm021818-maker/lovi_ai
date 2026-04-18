@@ -301,13 +301,19 @@ export class HumanLikeEngine {
     // 🆕 v4: 상황 파악 카드 데이터
     situationSummary: string | null;
     coreProblem: string | null;
+    // 🆕 v81: 몰입 모드 완료 태그
+    operationComplete: import('./phase-signal').ParsedOperationComplete | null;
   }> {
     // Phase 시그널 파싱 (모든 태그 한 번에 추출 + 제거)
     const parsed = parsePhaseSignal(response);
     const { cleanResponse, signal, mindReadReady, storyData, strategyData,
       toneSelectData, draftCards, rpIn, rpOut, roleplayFeedback, panelReport, ideaRefine,
       actionPlan, warmWrap, thinkingDeepKeyword,
-      situationRead, lunaThought, situationSummary, coreProblem } = parsed;
+      situationRead, lunaThought, situationSummary, coreProblem,
+      operationComplete } = parsed;
+    if (operationComplete) {
+      console.log(`[ACE] 🎬 작전 완료: mode=${operationComplete.mode} | "${operationComplete.summary}"`);
+    }
     if (signal) {
       console.log(`[ACE] 🏷️ Phase시그널: ${signal}`);
     }
@@ -411,6 +417,7 @@ export class HumanLikeEngine {
       lunaThought,
       situationSummary,
       coreProblem,
+      operationComplete,
     };
   }
 

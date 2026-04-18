@@ -85,6 +85,8 @@ export default function MessageBubble({ message, isTyping, onSpeak, isSpeaking, 
     .replace(/\[FX:[a-z_]+\.[a-z_]+\]/gi, '')
     .replace(/\[\/FX\]/gi, '')
     .replace(/\[FX[^\]\n]*/gi, '')
+    // 🆕 v81: OPERATION_COMPLETE 태그 안전망
+    .replace(/\[OPERATION_COMPLETE[^\]]*\]/gi, '')
     // 🆕 v42: 빈 대괄호 [] 제거 (선택지 제거 후 남은 잔해)
     .replace(/\[\s*\]/g, '')
     .replace(/\n{3,}/g, '\n\n')

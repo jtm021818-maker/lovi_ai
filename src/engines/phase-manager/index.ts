@@ -235,6 +235,10 @@ export interface PhaseContext {
   // 🆕 v60: 연속 FRUSTRATED 턴 카운트 (5턴 도달 시 강제 전환)
   consecutiveFrustratedTurns?: number;
 
+  // 🆕 v81: BRIDGE 몰입 모드 활성 여부 — 있으면 Phase 전환 bypass
+  //   (유저가 roleplay/draft/panel 등 진행 중이면 Luna 가 완료 판단할 때까지 유지)
+  activeMode?: string | null;
+
   // 🆕 v60: 짧은 답 연속 카운트
   consecutiveShortReplies?: number;
 
@@ -268,7 +272,15 @@ export class PhaseManager {
    * ✅ 좌뇌 pacing_meta 가 모든 페이싱 판단 책임
    */
   static getCurrentPhase(ctx: PhaseContext): ConversationPhaseV2 {
-    const { turnCount, currentPhase, phaseStartTurn, completedEvents, persona, phaseSignal, pacingMeta, consecutiveFrustratedTurns, filledCards, consecutiveReadyTurns } = ctx;
+    const { turnCount, currentPhase, phaseStartTurn, completedEvents, persona, phaseSignal, pacingMeta, consecutiveFrustratedTurns, filledCards, consecutiveReadyTurns, activeMode } = ctx;
+
+    // 🆕 v81: BRIDGE 몰입 모드 활성 중이면 Phase 전환 완전 bypass
+    //   유저가 roleplay/draft/panel 등 진행 중 → Luna 가 [OPERATION_COMPLETE] 까지 모드 유지
+    //   Pipeline 이 activeMode 감지하면 전환 판단 자체를 skip 하게 해야 함.
+    if (activeMode && currentPhase === 'BRIDGE') {
+      console.log(`[PhaseManager] 🔒 BRIDGE 몰입 모드 '${activeMode}' 활성 → Phase 전환 bypass`);
+      return currentPhase;
+    }
 
     const currentIdx = PHASE_ORDER.indexOf(currentPhase);
     if (currentIdx < 0 || currentIdx >= PHASE_ORDER.length - 1) {

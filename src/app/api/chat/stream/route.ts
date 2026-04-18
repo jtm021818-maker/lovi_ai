@@ -87,10 +87,10 @@ export async function POST(req: NextRequest) {
       .select('is_premium, onboarding_situation, persona_mode, memory_profile, nickname')
       .eq('id', user.id)
       .single(),
-    req.json() as Promise<{ sessionId: string; message: string; suggestionMeta?: SuggestionMeta }>,
+    req.json() as Promise<{ sessionId: string; message: string; suggestionMeta?: SuggestionMeta; activeMode?: string | null }>,
   ]);
   const profile = profileResult.data;
-  const { sessionId, message, suggestionMeta } = body;
+  const { sessionId, message, suggestionMeta, activeMode } = body;
 
   const tier = (process.env.NODE_ENV === 'development' || profile?.is_premium) ? 'premium' as const : 'free' as const;
   // 🆕 v33: DB 기반 Rate Limit (Serverless 환경 호환)
@@ -400,7 +400,7 @@ export async function POST(req: NextRequest) {
           (profile?.onboarding_situation
             ? `\n[사용자 성별: ${profile.onboarding_situation === 'male' ? '남성' : profile.onboarding_situation === 'female' ? '여성' : '선택하지 않음'}] (참고만 하되 호칭이나 말투에 반영하지 마. 루나는 성별 관계없이 동일한 말투를 사용해.)`
             : '\n[사용자 성별: 선택하지 않음]') + previousSessionContext,
-          { supabase, userId: user.id, sessionId }, // 🆕 v70: sessionId 전달 (working memory 로드용)
+          { supabase, userId: user.id, sessionId, activeMode: activeMode ?? null }, // 🆕 v70: sessionId 전달 + v81: activeMode
           persona,
           turnCount,
           suggestionMeta,
@@ -581,6 +581,13 @@ export async function POST(req: NextRequest) {
             case 'fx':
               controller.enqueue(
                 encoder.encode(`data: ${JSON.stringify({ type: 'fx', data: event.data })}\n\n`)
+              );
+              break;
+
+            // 🆕 v81: BRIDGE 몰입 모드 완료 — 프론트 modeStore.exit()
+            case 'mode_complete':
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ type: 'mode_complete', data: event.data })}\n\n`)
               );
               break;
 

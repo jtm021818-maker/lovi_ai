@@ -178,7 +178,7 @@ export class CounselingPipeline {
     userMessage: string,
     chatHistory: { role: 'user' | 'ai'; content: string }[],
     context: string = '',
-    ragContext?: { supabase: any; userId: string; sessionId?: string },
+    ragContext?: { supabase: any; userId: string; sessionId?: string; activeMode?: string | null },
     /** 페르소나 모드 (상담사/친구/전문가 패널) */
     persona: PersonaMode = 'counselor',
     /** 현재 대화 턴 수 */
@@ -244,6 +244,8 @@ export class CounselingPipeline {
     | { type: 'luna_thinking_deep'; data: { status: 'started' | 'done'; keyword?: string; phrases?: string[]; durationMs?: number; hasInsight?: boolean } }
     // 🆕 v79: 루나 감정 기반 미세 연출 (shake/flash/particle/bubble 효과)
     | { type: 'fx'; data: { id: string; target: 'screen' | 'bubble' | 'text' | 'avatar' | 'particle' | 'bg'; duration?: number; params?: Record<string, any>; messageId?: string } }
+    // 🆕 v81: BRIDGE 몰입 모드 완료 — 프론트에서 modeStore.exit() 트리거
+    | { type: 'mode_complete'; data: { mode: string; summary: string; nextStep?: string } }
     // 🆕 v48: 캐스케이드 재시도 상태 — UI에서 예쁜 재시도 표시용
     | { type: 'retry_status'; data: RetryStatusEvent }
     | { type: 'done'; data: { stateResult: StateResult; strategyResult: StrategyResult; suggestionShown: boolean; responseMode?: ResponseMode; updatedAxes?: Partial<ReadIgnoredAxes>; phaseV2?: ConversationPhaseV2; completedEvents?: PhaseEventType[]; lastEventTurn?: number; confirmedEmotionScore?: number; emotionHistory?: number[]; promptStyle?: string; emotionAccumulatorState?: EmotionAccumulatorState; phaseStartTurn?: number; lunaEmotionState?: string; sessionStoryState?: string; strategyMode?: StrategyMode | null; intimacyState?: import('@/engines/intimacy').IntimacyState | null; intimacyPersonaKey?: 'luna' | 'tarot'; intimacyAll?: { luna: import('@/engines/intimacy').IntimacyState; tarot: import('@/engines/intimacy').IntimacyState } | null; intimacyLevelUp?: { oldLevel: number; newLevel: number; newLevelName: string } | null; _contextLog?: any } }
@@ -523,6 +525,8 @@ export class CounselingPipeline {
         ...chatHistory.filter(m => m.role === 'user').map(m => m.content),
         userMessage,
       ],
+      // 🆕 v81: BRIDGE 몰입 모드 활성 여부 — Phase 전환 bypass
+      activeMode: ragContext?.activeMode ?? null,
     };
     let newPhaseV2 = PhaseManager.getCurrentPhase(phaseCtx);
     const phaseChanged = newPhaseV2 !== prevPhaseV2;
@@ -1666,7 +1670,7 @@ ${researchResult.insight}
             //   — TAROT_READY/PATTERN_MIRROR_READY/THINKING_DEEP
             //   — TONE_SELECT/DRAFT_CARD/ROLEPLAY_FEEDBACK/PANEL_REPORT/IDEA_REFINE
             //   — REQUEST_REANALYSIS/LEFT_BRAIN_HINT/RP_IN/RP_OUT
-            const METADATA_TAG_RE = /\[(?:SITUATION_READ|LUNA_THOUGHT|PHASE_SIGNAL|SITUATION_CLEAR|MIND_READ_READY|STORY_READY|STRATEGY_READY|ACTION_PLAN|WARM_WRAP|TAROT_READY|PATTERN_MIRROR_READY|THINKING_DEEP|TONE_SELECT|DRAFT_CARD|ROLEPLAY_FEEDBACK|PANEL_REPORT|IDEA_REFINE|REQUEST_REANALYSIS|LEFT_BRAIN_HINT|RP_IN|RP_OUT)(?::[^\]]*)?\]/gi;
+            const METADATA_TAG_RE = /\[(?:SITUATION_READ|LUNA_THOUGHT|PHASE_SIGNAL|SITUATION_CLEAR|MIND_READ_READY|STORY_READY|STRATEGY_READY|ACTION_PLAN|WARM_WRAP|TAROT_READY|PATTERN_MIRROR_READY|THINKING_DEEP|TONE_SELECT|DRAFT_CARD|ROLEPLAY_FEEDBACK|PANEL_REPORT|IDEA_REFINE|REQUEST_REANALYSIS|LEFT_BRAIN_HINT|RP_IN|RP_OUT|OPERATION_COMPLETE)(?::[^\]]*)?\]/gi;
 
             const rawBursts = claudeBuffer.split('|||');
             const delayMap: Record<string, [number, number]> = {
@@ -2095,6 +2099,20 @@ ${researchResult.insight}
             stateResult.lunaThoughtHistory = [...savedLunaThoughtHistory];
           }
 
+          // 🆕 v81: [OPERATION_COMPLETE:...] — 몰입 모드 완료 이벤트 발행
+          //   프론트에서 useModeStore.exit() 트리거 → BRIDGE → SOLVE 자연 전환
+          if (hlrePost.operationComplete) {
+            yield {
+              type: 'mode_complete',
+              data: {
+                mode: hlrePost.operationComplete.mode,
+                summary: hlrePost.operationComplete.summary,
+                nextStep: hlrePost.operationComplete.nextStep,
+              },
+            };
+            console.log(`[Pipeline] 🎬 모드 완료 이벤트 발행: ${hlrePost.operationComplete.mode}`);
+          }
+
           // 🆕 v36: AI가 [SITUATION_READ:...] / [LUNA_THOUGHT:...] 태그를 출력했으면 → stateResult에 주입
           if (hlrePost.situationRead || hlrePost.lunaThought) {
             if (hlrePost.situationRead) {
@@ -2182,7 +2200,13 @@ ${researchResult.insight}
       }
 
       // 🆕 v15: 이벤트 전송 (AI 응답 완료 후)
+      // 🆕 v80: 주요 이벤트는 마지막 말풍선과 시간차 — 동시 등장하면 말풍선이 묻힘
+      //   2초 텀 주면 유저가 "루나 말 읽고 → 아 이벤트 떴네" 자연스러운 리듬
+      const MAJOR_EVENT_TYPES = new Set(['EMOTION_MIRROR', 'LUNA_STRATEGY', 'LUNA_STORY', 'ACTION_PLAN', 'WARM_WRAP']);
       for (const event of eventsToFire) {
+        if (MAJOR_EVENT_TYPES.has(event.type as string) && fullText.length > 0) {
+          await new Promise((r) => setTimeout(r, 2000));
+        }
         yield { type: 'phase_event', data: event };
         console.log(`[Pipeline] 🎮 이벤트 발생: ${event.type} (${newPhaseV2})`);
       }
