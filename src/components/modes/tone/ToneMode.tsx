@@ -1,164 +1,125 @@
 'use client';
 
 /**
- * 🎨 v81: TONE SELECT Mode — 톤 3가지 비교 + 선택
+ * 🎨 v82: TONE SELECT — 채팅 네이티브
  *
- * 유저 상황 → LLM 이 같은 메시지를 3톤으로 생성 → 유저가 고름.
- * - 부드럽게 (soft)
- * - 솔직하게 (honest)
- * - 단호하게 (firm)
- *
- * 특화: 온도계 시각화 + hover preview.
+ * Luna 가 같은 말 톤 3가지로 카톡 보낸 느낌.
  */
 
 import { useState } from 'react';
-import { motion } from 'framer-motion';
-import ModeFrame from '../ModeFrame';
-import type { ToneOption, ToneState } from '@/engines/bridge-modes/types';
+import { motion, AnimatePresence } from 'framer-motion';
+import confetti from 'canvas-confetti';
+import type { ToneState, ToneOption } from '@/engines/bridge-modes/types';
 
 interface ToneModeProps {
-  initial: ToneState;
+  initial: ToneState & { modeId: 'tone' };
   onComplete: (chosen: ToneOption) => void;
-  onExit: () => void;
 }
 
-export default function ToneMode({ initial, onComplete, onExit }: ToneModeProps) {
-  const [selectedId, setSelectedId] = useState<string | null>(initial.selectedId);
-  const [hoverId, setHoverId] = useState<string | null>(null);
+export default function ToneMode({ initial, onComplete }: ToneModeProps) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const handleSelect = (id: string) => {
-    setSelectedId(id);
-  };
-
-  const handleConfirm = () => {
-    const chosen = initial.options.find((o) => o.id === selectedId);
-    if (chosen) onComplete(chosen);
+  const pick = (o: ToneOption) => {
+    setSelectedId(o.id);
+    try {
+      confetti({ particleCount: 18, spread: 55, origin: { y: 0.85 }, startVelocity: 20, zIndex: 9990 });
+      navigator.vibrate?.([5, 30, 5]);
+    } catch {/* ignore */}
+    setTimeout(() => onComplete(o), 900);
   };
 
   return (
-    <ModeFrame modeId="tone" subtitle={initial.context} onExit={onExit}>
-      <div className="p-4 space-y-4">
-        {/* 안내 */}
-        <div className="text-center py-2">
-          <div className="text-[13px] font-bold text-[#5D4037]">어떤 느낌으로 가고 싶어?</div>
-          <div className="text-[11px] text-[#6D4C41]/80 mt-0.5">세 톤 미리 보고 골라봐</div>
-        </div>
-
-        {/* 3개 카드 */}
-        <div className="space-y-3">
-          {initial.options.map((opt, idx) => (
-            <ToneCard
-              key={opt.id}
-              option={opt}
-              isSelected={selectedId === opt.id}
-              isHover={hoverId === opt.id}
-              idx={idx}
-              onSelect={() => handleSelect(opt.id)}
-              onHover={(h) => setHoverId(h ? opt.id : null)}
-            />
-          ))}
-        </div>
-
-        {/* 확정 버튼 */}
-        <motion.div
-          className="sticky bottom-0 pt-2 pb-2 bg-gradient-to-t from-[#F4EFE6] via-[#F4EFE6] to-transparent"
-          initial={false}
-          animate={{ opacity: selectedId ? 1 : 0.5 }}
-        >
-          <button
-            onClick={handleConfirm}
-            disabled={!selectedId}
-            className="w-full py-3 rounded-full bg-[#B56576] text-white font-bold text-[14px] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-          >
-            {selectedId
-              ? `${initial.options.find(o => o.id === selectedId)?.label} 톤으로 결정`
-              : '골라줘'}
-          </button>
-        </motion.div>
-      </div>
-    </ModeFrame>
-  );
-}
-
-// ─────────────────────────────────────────────────
-// 톤 카드
-// ─────────────────────────────────────────────────
-
-function ToneCard({
-  option,
-  isSelected,
-  isHover,
-  idx,
-  onSelect,
-  onHover,
-}: {
-  option: ToneOption;
-  isSelected: boolean;
-  isHover: boolean;
-  idx: number;
-  onSelect: () => void;
-  onHover: (hover: boolean) => void;
-}) {
-  const intensityColor =
-    option.intensity < 33 ? '#60A5FA'      // blue (부드러움)
-    : option.intensity < 66 ? '#FBBF24'    // amber (중립)
-    : '#EF4444';                           // red (강함)
-
-  return (
-    <motion.button
+    <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1 + idx * 0.1, type: 'spring', stiffness: 320, damping: 26 }}
-      whileTap={{ scale: 0.98 }}
-      onClick={onSelect}
-      onMouseEnter={() => onHover(true)}
-      onMouseLeave={() => onHover(false)}
-      className={`w-full p-4 rounded-2xl text-left transition-all ${
-        isSelected
-          ? 'bg-white border-[2.5px] border-[#B56576] shadow-lg'
-          : 'bg-white/70 border-[2px] border-[#D5C2A5]/50 hover:border-[#B56576]/50'
-      }`}
+      className="max-w-[92%] mx-auto my-4 space-y-2"
     >
-      {/* 헤더 */}
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-xl">{option.emoji}</span>
-        <span className="text-[13px] font-bold text-[#5D4037]">{option.label}</span>
-        {isSelected && (
-          <motion.span
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className="ml-auto text-[#B56576]"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-            </svg>
-          </motion.span>
-        )}
-      </div>
-
-      {/* 내용 미리보기 */}
-      <div
-        className={`text-[13px] leading-relaxed mb-3 ${isHover || isSelected ? 'text-[#4E342E]' : 'text-[#5D4037]/80'}`}
+      {/* Luna 오프닝 */}
+      <motion.div
+        initial={{ opacity: 0, x: -10 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="flex items-end gap-2"
       >
-        &ldquo;{option.content}&rdquo;
-      </div>
-
-      {/* 온도계 */}
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] text-[#6D4C41]/70">🌡️</span>
-        <div className="flex-1 h-2 rounded-full bg-[#EAE1D0] overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${option.intensity}%` }}
-            transition={{ delay: 0.2 + idx * 0.1, duration: 0.6, ease: 'easeOut' }}
-            className="h-full rounded-full"
-            style={{ background: intensityColor }}
-          />
+        <div className="w-8 h-8 rounded-full bg-[#F4EFE6] border border-[#EACbb3] overflow-hidden shrink-0">
+          <img src="/luna_fox_transparent.png" alt="루나" className="w-full h-full object-cover" />
         </div>
-        <span className="text-[10px] font-bold tabular-nums" style={{ color: intensityColor }}>
-          {option.intensity}%
-        </span>
-      </div>
-    </motion.button>
+        <div>
+          <div className="text-[10px] font-bold text-[#5D4037] ml-1 mb-0.5">루나</div>
+          <div className="px-3 py-2 rounded-2xl rounded-tl-sm bg-[#F4EFE6] border border-[#D5C2A5] text-[13px] text-[#4E342E]">
+            같은 말 톤별로 3개 써봤어 🎨|||어떤 느낌이 맘에 와?
+          </div>
+        </div>
+      </motion.div>
+
+      {/* 3개 톤 버블 */}
+      {initial.options.map((opt, idx) => {
+        const color = opt.intensity < 33 ? '#3B82F6' : opt.intensity < 66 ? '#F59E0B' : '#EF4444';
+        const bg = opt.intensity < 33 ? '#DBEAFE' : opt.intensity < 66 ? '#FEF3C7' : '#FEE2E2';
+        const isSelected = selectedId === opt.id;
+        const isOther = selectedId && selectedId !== opt.id;
+
+        return (
+          <motion.div
+            key={opt.id}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{
+              opacity: isOther ? 0.3 : 1,
+              y: 0,
+              scale: isSelected ? 1.02 : 1,
+            }}
+            transition={{ delay: 0.25 + idx * 0.2, type: 'spring', stiffness: 300, damping: 26 }}
+            className="flex items-start gap-2 ml-10"
+          >
+            <div className="flex-1">
+              <div className="flex items-center gap-1.5 mb-1 ml-1">
+                <span className="text-[11px]">{opt.emoji}</span>
+                <span className="text-[10px] font-bold" style={{ color }}>{opt.label}</span>
+                <div className="flex-1 h-[2px] rounded-full overflow-hidden" style={{ background: `${bg}` }}>
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${opt.intensity}%` }}
+                    transition={{ delay: 0.3 + idx * 0.2, duration: 0.5 }}
+                    className="h-full rounded-full"
+                    style={{ background: color }}
+                  />
+                </div>
+                <span className="text-[9px] tabular-nums opacity-60" style={{ color }}>{opt.intensity}</span>
+              </div>
+
+              <button
+                onClick={() => !selectedId && pick(opt)}
+                disabled={!!selectedId}
+                className="w-full text-left px-3 py-2.5 rounded-2xl rounded-tl-sm text-[13px] text-[#4E342E] leading-relaxed shadow-sm border active:scale-[0.98] transition-transform disabled:cursor-not-allowed"
+                style={{
+                  background: bg,
+                  borderColor: `${color}55`,
+                  boxShadow: isSelected ? `0 0 0 2px ${color}, 0 0 20px ${color}44` : undefined,
+                }}
+              >
+                {opt.content}
+              </button>
+            </div>
+          </motion.div>
+        );
+      })}
+
+      {/* 선택 후 클로징 */}
+      <AnimatePresence>
+        {selectedId && (
+          <motion.div
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex items-end gap-2"
+          >
+            <div className="w-8 h-8 rounded-full bg-[#F4EFE6] border border-[#EACbb3] overflow-hidden shrink-0">
+              <img src="/luna_fox_transparent.png" alt="루나" className="w-full h-full object-cover" />
+            </div>
+            <div className="px-3 py-2 rounded-2xl rounded-tl-sm bg-[#F4EFE6] border border-[#D5C2A5] text-[13px] text-[#4E342E]">
+              오케이 그 톤으로 가자 ✨
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }

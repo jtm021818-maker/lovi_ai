@@ -821,7 +821,6 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
         {activeMode === 'tone' && modeState?.modeId === 'tone' && (
           <ToneMode
             initial={modeState}
-            onExit={() => modeStoreExit('유저가 모드 나감')}
             onComplete={(chosen) => {
               modeStoreExit(`톤 '${chosen.label}' 선택됨 — "${chosen.content.slice(0, 30)}..."`);
               handleSuggestionSelect(
@@ -835,7 +834,6 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
         {activeMode === 'idea' && modeState?.modeId === 'idea' && (
           <IdeaMode
             initial={modeState}
-            onExit={() => modeStoreExit('아이디어 모드 나감')}
             onRefine={async (original) => {
               const res = await fetch('/api/mode/idea/refine', {
                 method: 'POST',
@@ -857,7 +855,6 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
         {activeMode === 'draft' && modeState?.modeId === 'draft' && (
           <DraftMode
             initial={modeState}
-            onExit={() => modeStoreExit('초안 모드 나감')}
             onComplete={({ draft, finalContent }) => {
               // 🆕 v81: 확정 초안 자동 저장 (fire-and-forget, 실패해도 UX 안 막음)
               fetch('/api/mode/draft/save', {
@@ -883,7 +880,6 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
         {activeMode === 'panel' && modeState?.modeId === 'panel' && (
           <PanelMode
             initial={modeState}
-            onExit={() => modeStoreExit('패널 모드 나감')}
             onComplete={(persona) => {
               modeStoreExit(`'${persona.name}' 관점 선택: "${persona.opinion.slice(0, 40)}..."`);
               handleSuggestionSelect(
@@ -918,7 +914,6 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
         {activeMode === 'roleplay' && modeState?.modeId === 'roleplay' && (
           <RoleplayMode
             initial={modeState}
-            onExit={() => modeStoreExit('롤플레이 모드 나감')}
             onTurn={async (userChoice, history) => {
               const res = await fetch('/api/mode/roleplay/turn', {
                 method: 'POST',

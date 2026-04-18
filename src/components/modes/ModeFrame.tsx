@@ -26,10 +26,12 @@ interface ModeFrameProps {
   onExit: () => void;
   /** 종료 확인 다이얼로그 스킵 */
   skipExitConfirm?: boolean;
+  /** 🆕 v81.2: 종료 버튼 숨김 — 한 번 들어가면 완료까지 못 나감 (BRIDGE 고정 모드용) */
+  hideExit?: boolean;
   children: React.ReactNode;
 }
 
-export default function ModeFrame({ modeId, title, subtitle, onExit, skipExitConfirm = false, children }: ModeFrameProps) {
+export default function ModeFrame({ modeId, title, subtitle, onExit, skipExitConfirm = false, hideExit = false, children }: ModeFrameProps) {
   const meta = MODE_CATALOG[modeId];
   const [mounted, setMounted] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
@@ -37,6 +39,7 @@ export default function ModeFrame({ modeId, title, subtitle, onExit, skipExitCon
   useEffect(() => { setMounted(true); }, []);
 
   const handleExit = () => {
+    if (hideExit) return; // 못 나감
     if (skipExitConfirm) onExit();
     else setShowExitConfirm(true);
   };
@@ -50,7 +53,7 @@ export default function ModeFrame({ modeId, title, subtitle, onExit, skipExitCon
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.25 }}
-        onClick={handleExit}
+        onClick={hideExit ? undefined : handleExit}
       >
         <motion.div
           key="mode-frame"
@@ -69,15 +72,22 @@ export default function ModeFrame({ modeId, title, subtitle, onExit, skipExitCon
               <div className="text-[14px] font-bold truncate">{title ?? meta.label}</div>
               <div className="text-[11px] text-[#6D4C41] truncate">{subtitle ?? meta.tagline}</div>
             </div>
-            <button
-              onClick={handleExit}
-              className="shrink-0 w-8 h-8 rounded-full bg-[#EAE1D0] hover:bg-[#D5C2A5] active:scale-95 transition-all flex items-center justify-center text-[#5D4037]"
-              aria-label="모드 종료"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-            </button>
+            {!hideExit && (
+              <button
+                onClick={handleExit}
+                className="shrink-0 w-8 h-8 rounded-full bg-[#EAE1D0] hover:bg-[#D5C2A5] active:scale-95 transition-all flex items-center justify-center text-[#5D4037]"
+                aria-label="모드 종료"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+            {hideExit && (
+              <div className="shrink-0 text-[9px] text-[#6D4C41]/60 font-semibold px-2 py-1 rounded-full bg-[#EAE1D0]/60">
+                진행 중
+              </div>
+            )}
           </header>
 
           {/* 본문 */}

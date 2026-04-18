@@ -1,181 +1,197 @@
 'use client';
 
 /**
- * 💡 v81: IDEA REFINE Mode — 유저 아이디어 입력 → Luna 다듬기 → 비교
+ * 💡 v82: IDEA REFINE — 채팅 네이티브
  *
- * 흐름:
- *   1. 유저가 아이디어 입력 (textarea)
- *   2. [다듬기] 버튼 → API 호출
- *   3. 원본 vs 다듬은 것 side-by-side
- *   4. diff 하이라이트 + 이유 툴팁
- *   5. [원본 살리기] / [루나꺼로] / [섞어서 편집]
+ * 유저가 아이디어 쓰면 → Luna 가 "오케이 내가 다듬어볼게" → 다듬은 버전 카톡
+ * → 3선택 (원본/루나꺼/섞기)
  */
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { diffWords } from 'diff';
-import ModeFrame from '../ModeFrame';
+import confetti from 'canvas-confetti';
 import type { IdeaState } from '@/engines/bridge-modes/types';
 
 interface IdeaModeProps {
   initial: IdeaState & { modeId: 'idea' };
   onComplete: (chosen: { final: string; source: 'original' | 'refined' | 'merged' }) => void;
-  onExit: () => void;
-  /** 다듬기 API 호출 */
   onRefine: (original: string) => Promise<{ refined: string; reasons: string[] }>;
 }
 
-export default function IdeaMode({ initial, onComplete, onExit, onRefine }: IdeaModeProps) {
+export default function IdeaMode({ initial, onComplete, onRefine }: IdeaModeProps) {
   const [original, setOriginal] = useState(initial.original);
   const [refined, setRefined] = useState(initial.refined);
   const [reasons, setReasons] = useState<string[]>(initial.reasons ?? []);
   const [loading, setLoading] = useState(false);
-  const [merged, setMerged] = useState('');
   const [editMode, setEditMode] = useState(false);
+  const [merged, setMerged] = useState('');
 
-  const handleRefine = async () => {
-    if (!original.trim()) return;
+  const submit = async () => {
+    if (!original.trim() || loading) return;
     setLoading(true);
     try {
-      const result = await onRefine(original);
-      setRefined(result.refined);
-      setReasons(result.reasons);
-      setMerged(result.refined); // edit mode 기본값
-    } catch (err) {
-      console.error('[IdeaMode] 다듬기 실패:', err);
+      const r = await onRefine(original);
+      setRefined(r.refined);
+      setReasons(r.reasons);
+      setMerged(r.refined);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleChoose = (source: 'original' | 'refined' | 'merged') => {
+  const choose = (source: 'original' | 'refined' | 'merged') => {
     const final = source === 'original' ? original : source === 'refined' ? refined! : merged;
-    onComplete({ final, source });
+    try {
+      confetti({ particleCount: 16, spread: 50, origin: { y: 0.85 }, startVelocity: 18, zIndex: 9990 });
+      navigator.vibrate?.([5, 20, 5]);
+    } catch {/* ignore */}
+    setTimeout(() => onComplete({ final, source }), 700);
   };
 
   return (
-    <ModeFrame modeId="idea" onExit={onExit}>
-      <div className="p-4 space-y-4">
-        {/* 입력 단계 */}
-        {!refined && (
-          <>
-            <div className="text-center py-2">
-              <div className="text-[13px] font-bold text-[#5D4037]">네 아이디어 들어볼게</div>
-              <div className="text-[11px] text-[#6D4C41]/80 mt-0.5">뭐든 써봐, 내가 다듬어줄게</div>
-            </div>
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="max-w-[92%] mx-auto my-4 space-y-2"
+    >
+      {/* Luna 오프닝 */}
+      <LunaBubble>네 아이디어 들어볼게 — 뭐든 써봐 💭</LunaBubble>
+
+      {/* 유저 입력 or 원본 표시 */}
+      {!refined && (
+        <div className="flex justify-end">
+          <div className="max-w-[80%]">
             <textarea
               value={original}
               onChange={(e) => setOriginal(e.target.value)}
               placeholder="예: 이번 주말에 영화보자고 카톡 보낼까?"
-              className="w-full min-h-[120px] p-3 rounded-xl border-2 border-[#D5C2A5]/60 bg-white text-[14px] text-[#4E342E] focus:outline-none focus:border-[#B56576] resize-none"
+              className="w-full min-h-[80px] p-3 rounded-2xl rounded-tr-sm border-2 border-[#D5C2A5] bg-white text-[13px] text-[#4E342E] focus:outline-none focus:border-[#B56576] resize-none"
             />
             <button
-              onClick={handleRefine}
+              onClick={submit}
               disabled={!original.trim() || loading}
-              className="w-full py-3 rounded-full bg-[#B56576] text-white font-bold text-[14px] disabled:opacity-50 active:scale-[0.98]"
+              className="mt-1.5 ml-auto block px-4 py-2 rounded-full bg-[#B56576] text-white text-[12px] font-bold active:scale-95 disabled:opacity-50"
             >
-              {loading ? '루나가 다듬는 중...' : '🦊 루나가 다듬기'}
+              {loading ? '루나가 다듬는 중...' : '🦊 루나가 다듬어줘'}
             </button>
-          </>
-        )}
+          </div>
+        </div>
+      )}
 
-        {/* 비교 단계 */}
-        {refined && !editMode && (
-          <>
-            {/* 원본 */}
-            <div className="p-3 rounded-xl bg-[#EAE1D0]/60 border border-[#D5C2A5]">
-              <div className="text-[11px] font-bold text-[#6D4C41] mb-1">✍️ 네 원본</div>
-              <div className="text-[13px] text-[#4E342E] leading-relaxed">{original}</div>
+      {/* 원본 유저 메시지 (제출 후) */}
+      {refined && (
+        <>
+          <div className="flex justify-end">
+            <div className="max-w-[80%] px-3 py-2 rounded-2xl rounded-tr-sm bg-[#EAE1D0] text-[#4E342E] text-[13px]">
+              {original}
             </div>
+          </div>
 
-            {/* 루나 다듬음 + diff */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 26 }}
-              className="p-3 rounded-xl bg-gradient-to-br from-pink-50 to-rose-50 border-2 border-[#B56576]/40"
-            >
-              <div className="text-[11px] font-bold text-[#B56576] mb-1">🦊 루나 다듬음</div>
-              <div className="text-[13px] text-[#4E342E] leading-relaxed">
+          {/* Luna 다듬은 버전 — 반짝 등장 */}
+          <LunaBubble>오케이 내가 다듬어봤어 ✨</LunaBubble>
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 26, delay: 0.2 }}
+            className="flex items-start gap-2 ml-10"
+          >
+            <div className="flex-1">
+              <div
+                className="px-3 py-2.5 rounded-2xl rounded-tl-sm text-[13px] leading-relaxed shadow-md"
+                style={{ background: 'linear-gradient(135deg, #fdf4ff, #fae8ff)', border: '1.5px solid #d8b4fe' }}
+              >
                 <DiffView original={original} refined={refined} />
               </div>
-            </motion.div>
 
-            {/* 이유들 */}
-            {reasons.length > 0 && (
-              <div className="space-y-1.5">
-                {reasons.map((reason, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.2 + i * 0.1 }}
-                    className="text-[11px] text-[#6D4C41] px-2 italic"
-                  >
-                    💡 {reason}
-                  </motion.div>
-                ))}
-              </div>
-            )}
-
-            {/* 선택 버튼 */}
-            <div className="flex gap-2 pt-2">
-              <button
-                onClick={() => handleChoose('original')}
-                className="flex-1 py-2.5 rounded-full bg-[#EAE1D0] text-[#5D4037] font-bold text-[12px] active:scale-[0.98]"
-              >
-                원본 살리기
-              </button>
-              <button
-                onClick={() => { setMerged(refined); setEditMode(true); }}
-                className="flex-1 py-2.5 rounded-full bg-white border-2 border-[#B56576]/40 text-[#B56576] font-bold text-[12px] active:scale-[0.98]"
-              >
-                섞어서 편집
-              </button>
-              <button
-                onClick={() => handleChoose('refined')}
-                className="flex-1 py-2.5 rounded-full bg-[#B56576] text-white font-bold text-[12px] active:scale-[0.98]"
-              >
-                루나꺼로
-              </button>
+              {/* 이유들 */}
+              {reasons.length > 0 && (
+                <div className="space-y-1 mt-2 ml-1">
+                  {reasons.map((reason, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 0, x: -6 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.3 + i * 0.1 }}
+                      className="text-[11px] text-[#6D4C41] italic"
+                    >
+                      💡 {reason}
+                    </motion.div>
+                  ))}
+                </div>
+              )}
             </div>
-          </>
-        )}
+          </motion.div>
 
-        {/* 편집 단계 */}
-        <AnimatePresence>
+          {/* 선택지 */}
+          {!editMode && (
+            <AnimatePresence>
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6 }}
+                className="flex gap-1.5 ml-10 mt-2"
+              >
+                <button
+                  onClick={() => choose('original')}
+                  className="flex-1 py-2 rounded-full bg-[#EAE1D0] text-[#5D4037] font-bold text-[11px] active:scale-95"
+                >
+                  원본 살리기
+                </button>
+                <button
+                  onClick={() => { setMerged(refined); setEditMode(true); }}
+                  className="flex-1 py-2 rounded-full bg-white border-2 border-[#B56576]/40 text-[#B56576] font-bold text-[11px] active:scale-95"
+                >
+                  섞어 편집
+                </button>
+                <button
+                  onClick={() => choose('refined')}
+                  className="flex-1 py-2 rounded-full bg-[#B56576] text-white font-bold text-[11px] active:scale-95"
+                >
+                  루나꺼로
+                </button>
+              </motion.div>
+            </AnimatePresence>
+          )}
+
           {editMode && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="space-y-3"
-            >
-              <div className="text-[12px] font-bold text-[#5D4037]">✂️ 섞어서 편집</div>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="ml-10 space-y-1.5 mt-2">
               <textarea
                 value={merged}
                 onChange={(e) => setMerged(e.target.value)}
-                className="w-full min-h-[100px] p-3 rounded-xl border-2 border-[#B56576] bg-white text-[14px] text-[#4E342E] focus:outline-none resize-none"
+                autoFocus
+                className="w-full min-h-[70px] p-2.5 rounded-2xl border-2 border-[#B56576] bg-white text-[13px] text-[#4E342E] focus:outline-none resize-none"
               />
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setEditMode(false)}
-                  className="flex-1 py-2.5 rounded-full bg-[#EAE1D0] text-[#5D4037] font-bold text-[12px]"
-                >
-                  취소
-                </button>
-                <button
-                  onClick={() => handleChoose('merged')}
-                  className="flex-1 py-2.5 rounded-full bg-[#B56576] text-white font-bold text-[12px]"
-                >
-                  이걸로 결정
-                </button>
+              <div className="flex gap-1.5">
+                <button onClick={() => setEditMode(false)} className="flex-1 py-2 rounded-full bg-[#EAE1D0] text-[#5D4037] font-bold text-[11px]">취소</button>
+                <button onClick={() => choose('merged')} className="flex-1 py-2 rounded-full bg-[#B56576] text-white font-bold text-[11px]">이걸로</button>
               </div>
             </motion.div>
           )}
-        </AnimatePresence>
+        </>
+      )}
+    </motion.div>
+  );
+}
+
+function LunaBubble({ children }: { children: React.ReactNode }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
+      className="flex items-end gap-2"
+    >
+      <div className="w-8 h-8 rounded-full bg-[#F4EFE6] border border-[#EACbb3] overflow-hidden shrink-0">
+        <img src="/luna_fox_transparent.png" alt="루나" className="w-full h-full object-cover" />
       </div>
-    </ModeFrame>
+      <div>
+        <div className="text-[10px] font-bold text-[#5D4037] ml-1 mb-0.5">루나</div>
+        <div className="px-3 py-2 rounded-2xl rounded-tl-sm bg-[#F4EFE6] border border-[#D5C2A5] text-[13px] text-[#4E342E]">
+          {children}
+        </div>
+      </div>
+    </motion.div>
   );
 }
 
@@ -184,7 +200,7 @@ function DiffView({ original, refined }: { original: string; refined: string }) 
   return (
     <>
       {parts.map((p, i) => {
-        if (p.added) return <span key={i} className="bg-green-200/60 rounded px-0.5">{p.value}</span>;
+        if (p.added) return <span key={i} className="bg-green-200/70 rounded px-0.5 text-[#064e3b] font-semibold">{p.value}</span>;
         if (p.removed) return <span key={i} className="bg-red-200/50 line-through opacity-60 rounded px-0.5">{p.value}</span>;
         return <span key={i}>{p.value}</span>;
       })}
