@@ -353,8 +353,18 @@ function VNScene({
     }
     return 0;
   })();
-  // Solo: 480px, Duo: 300px (화면 꽉 채우기 - VN 느낌 극대화)
-  const spriteSize = isDuo ? 300 : 480;
+  // 솔로/듀오 모두 520px — 화면을 꽉 채우는 Heroic VN 느낌
+  const spriteSize = 520;
+
+  // Duo 모드: 현재 화자 스프라이트 시트 결정 (한 명씩 교체)
+  const activeDuoSheet = (() => {
+    if (!isDuo) return mainSheet;
+    if (currentLineGender === 'male') return maleSheet;
+    if (currentLineGender === 'female') return femaleSheet;
+    return mainSheet; // 화자 미지정 fallback
+  })();
+  // 화자 전환 감지 키 (AnimatePresence용)
+  const duoSpeakerKey = isDuo ? (currentLineGender ?? 'unknown') : 'solo';
 
   // closed 상태 → 인라인 요약 카드 (채팅에 남김)
   if (phase === 'closed') {
@@ -483,118 +493,58 @@ function VNScene({
           )}
         </AnimatePresence>
 
-        {/* 캐릭터 스프라이트 — 종이연극 스타일 */}
+        {/* 🎬 캐릭터 스프라이트 — VN 히어로 스타일 (한 번에 한 명) */}
         <div className="absolute inset-0 z-10 pointer-events-none">
-          {isDuo && phase !== 'message' && phase !== 'choice' ? (
-            <>
-              {/* 남자 (왼쪽) — 스포트라이트 효과 추가 */}
-              <motion.div
-                animate={{
-                  scale: currentLineGender === 'male' ? [1, 1.03, 1] : [1, 0.97, 1],
-                  y: currentLineGender === 'male' ? [0, -6, 0] : [0, 2, 0],
-                  opacity: currentLineGender === 'male' ? 1 : 0.4,
-                  filter: currentLineGender === 'male'
-                    ? 'brightness(1.1) saturate(1.1) drop-shadow(0 0 20px rgba(96,165,250,0.3))'
-                    : 'brightness(0.4) saturate(0.5)',
-                }}
-                transition={{
-                  scale: { duration: 3, repeat: Infinity, ease: 'easeInOut' },
-                  y: { duration: 2.5, repeat: Infinity, ease: 'easeInOut' },
-                  opacity: { duration: 0.5 },
-                  filter: { duration: 0.5 },
-                }}
-                className="absolute bottom-[20%] left-[2%]"
-              >
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={`main-${currentFrame}`}
-                    initial={{ rotateY: 90, opacity: 0 }}
-                    animate={{ rotateY: 0, opacity: 1 }}
-                    exit={{ rotateY: -90, opacity: 0 }}
-                    transition={{ duration: 0.3, ease: 'easeOut' }}
-                    style={getSpriteStyle(currentFrame, maleSheet, spriteSize)}
-                  />
-                </AnimatePresence>
-              </motion.div>
-              {/* 여자 (오른쪽) */}
-              <motion.div
-                animate={{
-                  scale: currentLineGender === 'female' ? [1, 1.03, 1] : [1, 0.97, 1],
-                  y: currentLineGender === 'female' ? [0, -6, 0] : [0, 2, 0],
-                  opacity: currentLineGender === 'female' ? 1 : 0.4,
-                  filter: currentLineGender === 'female'
-                    ? 'brightness(1.1) saturate(1.1) drop-shadow(0 0 20px rgba(244,114,182,0.3))'
-                    : 'brightness(0.4) saturate(0.5)',
-                }}
-                transition={{
-                  scale: { duration: 3, repeat: Infinity, ease: 'easeInOut', delay: 0.3 },
-                  y: { duration: 2.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 },
-                  opacity: { duration: 0.5 },
-                  filter: { duration: 0.5 },
-                }}
-                className="absolute bottom-[20%] right-[2%]"
-                style={{ transform: 'scaleX(-1)' }}
-              >
-                <div style={getSpriteStyle(0, femaleSheet, spriteSize)} />
-              </motion.div>
-            </>
-          ) : (
-            /* Solo 모드 — 중앙 배치 + 시네마 라이팅 */
-            <motion.div
-              animate={{
-                scale: [1, 1.04, 1],
-                y: [0, -5, 0],
-                rotate: [0, -0.5, 0.5, 0],
-              }}
-              transition={{
-                scale: { duration: 3.5, repeat: Infinity, ease: 'easeInOut' },
-                y: { duration: 3, repeat: Infinity, ease: 'easeInOut' },
-                rotate: { duration: 5, repeat: Infinity, ease: 'easeInOut' },
-              }}
-              className="absolute bottom-[20%] left-1/2"
-              style={{
-                marginLeft: -(spriteSize / 2),
-                filter: 'drop-shadow(0 8px 30px rgba(0,0,0,0.5))',
-              }}
-            >
-              <AnimatePresence mode="wait">
-                {(phase === 'message' || phase === 'choice') ? (
-                  <motion.div
-                    key="special-luna"
-                    initial={{ scale: 0, rotate: -10, opacity: 0, y: 40 }}
-                    animate={{
-                      scale: [0, 1.1, 0.9],
-                      rotate: [-10, 5, 0],
-                      y: [40, -30, -60],
-                      opacity: 1
-                    }}
-                    transition={{
-                      duration: 0.8,
-                      ease: [0.34, 1.56, 0.64, 1],
-                      times: [0, 0.6, 1]
-                    }}
-                    style={{
-                      width: spriteSize,
-                      height: spriteSize * (384 / 344),
-                      backgroundImage: 'url(/char_img/igmg.png)',
-                      backgroundSize: 'contain',
-                      backgroundPosition: 'center bottom',
-                      backgroundRepeat: 'no-repeat',
-                    }}
-                  />
-                ) : (
-                  <motion.div
-                    key={`solo-${currentFrame}`}
-                    initial={{ rotateY: 90, opacity: 0, scale: 0.8 }}
-                    animate={{ rotateY: 0, opacity: 1, scale: 1 }}
-                    exit={{ rotateY: -90, opacity: 0, scale: 0.8 }}
-                    transition={{ duration: 0.35, ease: 'easeOut' }}
-                    style={getSpriteStyle(currentFrame, mainSheet, spriteSize)}
-                  />
-                )}
-              </AnimatePresence>
-            </motion.div>
-          )}
+          {/* 솔로/듀오 공통: 중앙 한 명만 렌더링 */}
+          <motion.div
+            animate={{
+              scale: [1, 1.03, 1],
+              y: [0, -6, 0],
+            }}
+            transition={{
+              scale: { duration: 3.5, repeat: Infinity, ease: 'easeInOut' },
+              y: { duration: 3, repeat: Infinity, ease: 'easeInOut' },
+            }}
+            className="absolute bottom-[24%] left-1/2"
+            style={{
+              marginLeft: -(spriteSize / 2),
+              filter: 'drop-shadow(0 12px 40px rgba(0,0,0,0.6))',
+            }}
+          >
+            <AnimatePresence mode="wait">
+              {(phase === 'message' || phase === 'choice') ? (
+                /* 메시지/선택지: igmg.png 루나 등장 */
+                <motion.div
+                  key="special-luna"
+                  initial={{ scale: 0.5, opacity: 0, y: 60 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  exit={{ scale: 0.8, opacity: 0, y: 30 }}
+                  transition={{ duration: 0.6, ease: [0.34, 1.56, 0.64, 1] }}
+                  style={{
+                    width: spriteSize,
+                    height: spriteSize * (384 / 344),
+                    backgroundImage: 'url(/char_img/igmg.png)',
+                    backgroundSize: 'contain',
+                    backgroundPosition: 'center bottom',
+                    backgroundRepeat: 'no-repeat',
+                  }}
+                />
+              ) : (
+                /* playing/reveal: 현재 화자 스프라이트 (솔로/듀오 모두) */
+                <motion.div
+                  key={`speaker-${duoSpeakerKey}-${currentFrame}`}
+                  initial={{ opacity: 0, scale: 0.88, x: currentLineGender === 'male' ? -30 : 30 }}
+                  animate={{ opacity: 1, scale: 1, x: 0 }}
+                  exit={{ opacity: 0, scale: 0.88, x: currentLineGender === 'male' ? 30 : -30 }}
+                  transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+                  style={{
+                    ...getSpriteStyle(currentFrame, activeDuoSheet, spriteSize),
+                    filter: 'brightness(1.05) saturate(1.1)',
+                  }}
+                />
+              )}
+            </AnimatePresence>
+          </motion.div>
         </div>
 
         {/* 🎬 대화 영역 — 시네마 자막 패널 */}
