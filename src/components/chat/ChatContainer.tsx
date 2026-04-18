@@ -826,7 +826,7 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
               modeStoreExit(`톤 '${chosen.label}' 선택됨 — "${chosen.content.slice(0, 30)}..."`);
               handleSuggestionSelect(
                 `톤은 '${chosen.label}' 으로 갈게. 예시: "${chosen.content}"`,
-                { source: 'tone_mode' as any, context: { tone: chosen.id, content: chosen.content } as any }
+                { source: 'tone_mode' as any, context: { tone: chosen.id, content: chosen.content, bridgeCompleted: true } as any }
               );
             }}
           />
@@ -848,7 +848,7 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
               modeStoreExit(`아이디어 확정 (${source}): "${final.slice(0, 40)}"`);
               handleSuggestionSelect(
                 `이 아이디어로 갈게: "${final}"`,
-                { source: 'idea_mode' as any, context: { final, source } as any }
+                { source: 'idea_mode' as any, context: { final, source, bridgeCompleted: true } as any }
               );
             }}
           />
@@ -874,7 +874,7 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
               modeStoreExit(`초안 '${draft.label}' 확정: "${finalContent.slice(0, 40)}..."`);
               handleSuggestionSelect(
                 `초안 확정했어 (${draft.label}): "${finalContent}" (초안함에 저장해뒀어)`,
-                { source: 'draft_mode' as any, context: { draftId: draft.id, tone: draft.tone, content: finalContent } as any }
+                { source: 'draft_mode' as any, context: { draftId: draft.id, tone: draft.tone, content: finalContent, bridgeCompleted: true } as any }
               );
             }}
           />
@@ -888,7 +888,7 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
               modeStoreExit(`'${persona.name}' 관점 선택: "${persona.opinion.slice(0, 40)}..."`);
               handleSuggestionSelect(
                 `${persona.emoji} ${persona.name} 관점이 제일 와닿았어: "${persona.opinion}"`,
-                { source: 'panel_mode' as any, context: { personaId: persona.id, opinion: persona.opinion } as any }
+                { source: 'panel_mode' as any, context: { personaId: persona.id, opinion: persona.opinion, bridgeCompleted: true } as any }
               );
             }}
           />
@@ -932,7 +932,7 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
               const userLines = history.filter((h) => h.role === 'user').map((h) => h.content).slice(-3);
               handleSuggestionSelect(
                 `롤플레이 연습 끝. 핵심은: ${summary}. 내가 시도해본 대사: ${userLines.join(' / ')}`,
-                { source: 'roleplay_mode' as any, context: { summary, turns: history.length } as any }
+                { source: 'roleplay_mode' as any, context: { summary, turns: history.length, bridgeCompleted: true } as any }
               );
             }}
           />

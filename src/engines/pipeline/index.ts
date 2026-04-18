@@ -529,6 +529,14 @@ export class CounselingPipeline {
       activeMode: ragContext?.activeMode ?? null,
     };
     let newPhaseV2 = PhaseManager.getCurrentPhase(phaseCtx);
+
+    // 🆕 v81: 몰입 모드 완료 시 즉시 BRIDGE → SOLVE 강제 전환
+    //   프론트에서 모드 완료 → handleSuggestionSelect(meta.bridgeCompleted=true) 로 전달됨
+    //   파이프라인이 이 플래그 감지하면 Phase 우회
+    if ((suggestionMeta?.context as any)?.bridgeCompleted === true && (currentPhaseV2 ?? prevPhaseV2) === 'BRIDGE') {
+      console.log(`[Pipeline] 🎬 v81: 몰입 모드 완료 신호 → BRIDGE → SOLVE 강제 전환`);
+      newPhaseV2 = 'SOLVE';
+    }
     const phaseChanged = newPhaseV2 !== prevPhaseV2;
 
     // 🆕 v20: Phase 전환 시 phaseStartTurn 갱신
