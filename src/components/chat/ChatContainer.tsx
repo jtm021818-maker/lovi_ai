@@ -271,6 +271,12 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
   const activeMode = useModeStore((s) => s.activeMode);
   const modeState = useModeStore((s) => s.modeState);
   const modeStoreExit = useModeStore((s) => s.exit);
+  const modeEnsureSession = useModeStore((s) => s.ensureSession);
+
+  // 🆕 v82.2: 세션 교체 시 이전 세션 모드 잔상 제거 — persist 된 modeState 오염 방지
+  useEffect(() => {
+    modeEnsureSession(sessionId);
+  }, [sessionId, modeEnsureSession]);
   // 🆕 v81: 설정 / 초안함 토글
   const [showSettings, setShowSettings] = useState(false);
   const [showDraftsVault, setShowDraftsVault] = useState(false);
@@ -293,7 +299,7 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
           context,
           options,
           selectedId: null,
-        });
+        }, sessionId);
       } catch (err) {
         console.error('[Mode:tone] 생성 실패, 폴백:', err);
         modeStoreEnter('tone', {
@@ -305,7 +311,7 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
             { id: 'firm',   label: '단호하게', emoji: '🔥', content: '확실히 말해볼게', intensity: 82 },
           ],
           selectedId: null,
-        });
+        }, sessionId);
       }
     } else if (mode === 'idea') {
       // 🆕 v81: Idea Refine — 빈 입력창으로 바로 진입
@@ -314,7 +320,7 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
         original: '',
         refined: null,
         reasons: [],
-      });
+      }, sessionId);
     } else if (mode === 'draft') {
       // 🆕 v81: Draft Workshop — LLM 으로 3초안 생성
       try {
@@ -333,7 +339,7 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
           drafts,
           selectedId: null,
           edits: [],
-        });
+        }, sessionId);
       } catch (err) {
         console.error('[Mode:draft] 생성 실패:', err);
         alert('초안 생성 실패 — 잠시 후 다시 시도해줘');
@@ -355,7 +361,7 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
           personas,
           chosenPersonaId: null,
           deepenTurns: [],
-        });
+        }, sessionId);
       } catch (err) {
         console.error('[Mode:panel] 생성 실패:', err);
         alert('패널 생성 실패 — 잠시 후 다시 시도해줘');
@@ -376,7 +382,7 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
           scenario: data.scenario,
           history: [],
         };
-        modeStoreEnter('roleplay', stateInit);
+        modeStoreEnter('roleplay', stateInit, sessionId);
       } catch (err) {
         console.error('[Mode:roleplay] 생성 실패:', err);
         alert('롤플레이 시나리오 생성 실패 — 잠시 후 다시 시도해줘');

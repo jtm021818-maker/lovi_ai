@@ -16,12 +16,14 @@ interface ModeStoreState {
   activeMode: ModeId | null;
   modeState: AnyModeState | null;
   modeStartedAt: string | null;
+  /** 🆕 v82.2: 모드가 속한 세션 ID — 세션 교체 시 판별용 */
+  modeSessionId: string | null;
   history: ModeCompletion[];
 }
 
 interface ModeStoreActions {
   /** 모드 진입 */
-  enter: (mode: ModeId, initialState: AnyModeState) => void;
+  enter: (mode: ModeId, initialState: AnyModeState, sessionId?: string) => void;
   /** 상태 부분 갱신 (타입 안전성은 caller 책임) */
   patch: (patch: Partial<AnyModeState>) => void;
   /** 완전 교체 */
@@ -30,6 +32,8 @@ interface ModeStoreActions {
   exit: (summary?: string, nextStep?: string) => void;
   /** 모든 기록 초기화 (세션 교체 시) */
   reset: () => void;
+  /** 🆕 v82.2: sessionId 불일치 시에만 활성 모드 초기화 (history 는 유지) */
+  ensureSession: (sessionId: string) => void;
 }
 
 export const useModeStore = create<ModeStoreState & ModeStoreActions>()(
@@ -38,13 +42,15 @@ export const useModeStore = create<ModeStoreState & ModeStoreActions>()(
       activeMode: null,
       modeState: null,
       modeStartedAt: null,
+      modeSessionId: null,
       history: [],
 
-      enter: (mode, initialState) =>
+      enter: (mode, initialState, sessionId) =>
         set({
           activeMode: mode,
           modeState: initialState,
           modeStartedAt: new Date().toISOString(),
+          modeSessionId: sessionId ?? null,
         }),
 
       patch: (patch) =>
@@ -68,11 +74,25 @@ export const useModeStore = create<ModeStoreState & ModeStoreActions>()(
             activeMode: null,
             modeState: null,
             modeStartedAt: null,
+            modeSessionId: null,
             history: [...s.history, completion].slice(-20),
           };
         }),
 
-      reset: () => set({ activeMode: null, modeState: null, modeStartedAt: null, history: [] }),
+      reset: () => set({ activeMode: null, modeState: null, modeStartedAt: null, modeSessionId: null, history: [] }),
+
+      ensureSession: (sessionId) =>
+        set((s) => {
+          // 🆕 v82.2: 현재 persist 된 모드가 다른 세션 것이면 강제 종료 (history 유지)
+          if (s.activeMode && s.modeSessionId && s.modeSessionId !== sessionId) {
+            return { activeMode: null, modeState: null, modeStartedAt: null, modeSessionId: null };
+          }
+          // 세션 ID 는 아직 없는데 모드가 활성이면 새 세션 ID 로 바인딩
+          if (s.activeMode && !s.modeSessionId) {
+            return { modeSessionId: sessionId };
+          }
+          return s;
+        }),
     }),
     {
       name: 'luna-bridge-mode-v81',
@@ -80,6 +100,7 @@ export const useModeStore = create<ModeStoreState & ModeStoreActions>()(
         activeMode: s.activeMode,
         modeState: s.modeState,
         modeStartedAt: s.modeStartedAt,
+        modeSessionId: s.modeSessionId,
         history: s.history,
       }),
     },
