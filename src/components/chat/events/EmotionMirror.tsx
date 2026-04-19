@@ -125,7 +125,10 @@ interface EmotionMirrorProps {
   disabled?: boolean;
 }
 
-type ScenePhase = 'intro' | 'playing' | 'reveal' | 'message' | 'choice' | 'closing' | 'closed';
+type ScenePhase = 'intro' | 'playing' | 'reveal' | 'message' | 'choice' | 'correction' | 'closing' | 'closed';
+
+/** 🆕 v82.10: 정정 메시지 마커 — MessageBubble 에서 감지해서 특화 스타일 적용 */
+export const MIRROR_CORRECTION_MARKER = '📝 내 진짜 마음은 이래: ';
 
 // ============================================================
 // VN 씬 대사 컴포넌트
@@ -217,16 +220,32 @@ export default function EmotionMirror({ event, onSelect, disabled }: EmotionMirr
   // VN 모드 여부
   const hasScene = data.sceneLines && data.sceneLines.length > 0 && data.reveal;
 
-  function handleSelect(value: string) {
+  function handleConfirmSelect() {
     if (disabled || submitted) return;
     setSubmitted(true);
-    // 🆕 v80: 답변 톤도 "오 맞네 / 음 좀 다른데?" 자연스럽게
-    const text = value === 'confirm'
-      ? `어... 맞아, 그런 것 같아`
-      : '음 좀 다른 느낌인데, 내가 얘기해볼게';
-    onSelect(text, {
+    onSelect('어... 맞아, 그런 것 같아', {
       source: 'emotion_mirror',
-      context: { confirmed: value === 'confirm', reveal: data.reveal, lunaHunch: data.lunaHunch },
+      context: { confirmed: true, reveal: data.reveal, lunaHunch: data.lunaHunch },
+    });
+  }
+
+  /** 🆕 v82.10: 정정 제출 — 유저가 적은 실제 마음 + 루나 틀린 부분 함께 전달 */
+  function handleCorrectionSubmit(correctionText: string) {
+    if (disabled || submitted) return;
+    const clean = correctionText.trim();
+    if (!clean) return;
+    setSubmitted(true);
+    // 루나 프롬프트에 충분한 맥락: 루나가 추리한 게 뭐였고 / 실제는 뭔지.
+    const richText = `${MIRROR_CORRECTION_MARKER}${clean}`;
+    onSelect(richText, {
+      source: 'emotion_mirror',
+      context: {
+        confirmed: false,
+        correction: true,
+        userCorrection: clean,
+        lunaGuessed: data.reveal,
+        lunaHunch: data.lunaHunch,
+      },
     });
   }
 
@@ -237,7 +256,8 @@ export default function EmotionMirror({ event, onSelect, disabled }: EmotionMirr
     return (
       <VNScene
         data={data}
-        onSelect={handleSelect}
+        onConfirm={handleConfirmSelect}
+        onCorrect={handleCorrectionSubmit}
         disabled={disabled}
         submitted={submitted}
       />
@@ -247,7 +267,7 @@ export default function EmotionMirror({ event, onSelect, disabled }: EmotionMirr
   // ─────────────────────────────────────────
   // 레거시 폴백 (sceneLines 없을 때)
   // ─────────────────────────────────────────
-  return <LegacyMirror data={data} onSelect={handleSelect} disabled={disabled} submitted={submitted} />;
+  return <LegacyMirror data={data} onConfirm={handleConfirmSelect} onCorrect={handleCorrectionSubmit} disabled={disabled} submitted={submitted} />;
 }
 
 // ============================================================
@@ -256,12 +276,14 @@ export default function EmotionMirror({ event, onSelect, disabled }: EmotionMirr
 
 function VNScene({
   data,
-  onSelect,
+  onConfirm,
+  onCorrect,
   disabled,
   submitted,
 }: {
   data: EmotionMirrorData;
-  onSelect: (value: string) => void;
+  onConfirm: () => void;
+  onCorrect: (correctionText: string) => void;
   disabled?: boolean;
   submitted: boolean;
 }) {
@@ -272,6 +294,8 @@ function VNScene({
   const [phase, setPhase] = useState<ScenePhase>('intro');
   const [lineIndex, setLineIndex] = useState(0);
   const [mounted, setMounted] = useState(false);
+  // 🆕 v82.10: 정정 입력 상태
+  const [correctionInput, setCorrectionInput] = useState('');
 
   // Portal mount (SSR 방지)
   useEffect(() => { setMounted(true); }, []);
@@ -299,11 +323,30 @@ function VNScene({
     }
   }, [phase]);
 
-  // 선택 후 closing 트리거
+  // 🆕 v82.10: confirm 은 즉시 종료, different 는 correction phase 로 전환
   const handleChoice = useCallback((value: string) => {
-    onSelect(value);
+    if (value === 'confirm') {
+      onConfirm();
+      setTimeout(() => setPhase('closing'), 300);
+    } else {
+      // "다른 느낌" → 즉시 종료 X. 유저가 "진짜 마음" 을 적을 기회를 먼저 줌.
+      setPhase('correction');
+    }
+  }, [onConfirm]);
+
+  // 🆕 v82.10: 정정 제출
+  const handleCorrectionSend = useCallback(() => {
+    const clean = correctionInput.trim();
+    if (!clean) return;
+    onCorrect(clean);
     setTimeout(() => setPhase('closing'), 300);
-  }, [onSelect]);
+  }, [correctionInput, onCorrect]);
+
+  // 🆕 v82.10: 정정 건너뛰기 — 유저가 적을 말 없으면 그냥 닫기 (이전 프리팹 폴백)
+  const handleCorrectionSkip = useCallback(() => {
+    onCorrect('루나 짐작이 좀 어긋났어');
+    setTimeout(() => setPhase('closing'), 300);
+  }, [onCorrect]);
 
   // 스프라이트 시트 결정 — [남자] → man, [여자] → girl 고정 매핑
   const gender = data.characterSetup?.userGender || 'female';
@@ -769,6 +812,86 @@ function VNScene({
             {phase === 'intro' && (
               <motion.div key="intro" className="py-5" />
             )}
+
+            {/* 🆕 v82.10: 정정 입력 — "다른 느낌" 눌렀을 때 유저의 실제 마음 받기 */}
+            {phase === 'correction' && (
+              <motion.div
+                key="correction"
+                initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 26 }}
+                className="mx-3 rounded-2xl overflow-hidden"
+                style={{
+                  background: 'linear-gradient(180deg, rgba(35,15,55,0.95) 0%, rgba(45,20,70,0.97) 100%)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1.5px solid rgba(217,70,239,0.45)',
+                  boxShadow: '0 0 60px rgba(168,85,247,0.3), inset 0 1px 0 rgba(255,255,255,0.08)',
+                }}
+              >
+                <div className="px-5 py-4">
+                  {/* 헤더 — 루나 틀린 걸 인정 */}
+                  <div className="flex items-center justify-center gap-2 mb-3">
+                    <div className="w-4 h-[1px] bg-fuchsia-400/50" />
+                    <span className="text-[9px] tracking-[0.3em] uppercase text-fuchsia-300/80 font-medium">내 진짜 마음은</span>
+                    <div className="w-4 h-[1px] bg-fuchsia-400/50" />
+                  </div>
+
+                  {/* 루나가 짐작한 것 (틀린 것) — 회색톤 strikethrough 느낌 */}
+                  <p className="text-[11px] text-white/45 text-center mb-2 leading-relaxed line-through">
+                    루나 짐작: &ldquo;{data.reveal}&rdquo;
+                  </p>
+
+                  {/* 입력 라벨 */}
+                  <p className="text-[12px] text-fuchsia-200 text-center mb-2 leading-relaxed">
+                    ✏️ 어디가 달랐어? 네 버전으로 얘기해줘
+                  </p>
+
+                  {/* 정정 textarea */}
+                  <textarea
+                    autoFocus
+                    value={correctionInput}
+                    onChange={(e) => setCorrectionInput(e.target.value)}
+                    placeholder="예: 분노보다는 허탈함에 가까워..."
+                    className="w-full min-h-[80px] p-3 rounded-xl text-[13px] leading-relaxed text-white placeholder-white/30 focus:outline-none resize-none"
+                    style={{
+                      background: 'rgba(0,0,0,0.3)',
+                      border: '1px solid rgba(217,70,239,0.3)',
+                      boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.3)',
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleCorrectionSend();
+                    }}
+                  />
+
+                  {/* 버튼들 */}
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      onClick={handleCorrectionSkip}
+                      disabled={disabled || submitted}
+                      className="flex-1 py-2.5 rounded-xl text-[12px] font-bold text-white/60 disabled:opacity-40"
+                      style={{
+                        background: 'rgba(255,255,255,0.06)',
+                        border: '1px solid rgba(255,255,255,0.12)',
+                      }}
+                    >
+                      그냥 넘길래
+                    </button>
+                    <button
+                      onClick={handleCorrectionSend}
+                      disabled={!correctionInput.trim() || disabled || submitted}
+                      className="flex-[1.6] py-2.5 rounded-xl text-[12.5px] font-bold text-white disabled:opacity-40 active:scale-[0.98] transition-transform"
+                      style={{
+                        background: 'linear-gradient(135deg, #c026d3, #a21caf)',
+                        border: '1px solid rgba(217,70,239,0.6)',
+                        boxShadow: '0 4px 20px rgba(192,38,211,0.4), inset 0 1px 0 rgba(255,255,255,0.2)',
+                      }}
+                    >
+                      루나한테 알려주기
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
           </AnimatePresence>
         </div>
 
@@ -846,15 +969,22 @@ function VNScene({
 
 function LegacyMirror({
   data,
-  onSelect,
+  onConfirm,
+  onCorrect,
   disabled,
   submitted,
 }: {
   data: EmotionMirrorData;
-  onSelect: (value: string) => void;
+  onConfirm: () => void;
+  onCorrect: (correctionText: string) => void;
   disabled?: boolean;
   submitted: boolean;
 }) {
+  // 🆕 v82.10: 레거시 UI 는 정정 textarea 없음 → confirm/different 만 구분해서 라우팅
+  const handleLegacyChoice = (value: string) => {
+    if (value === 'confirm') onConfirm();
+    else onCorrect('루나 짐작이 좀 어긋났어');
+  };
   return (
     <motion.div
       initial={{ opacity: 0, y: 15, rotate: -0.5, scale: 0.95 }}
@@ -938,7 +1068,7 @@ function LegacyMirror({
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.8 + idx * 0.1 }}
                   whileTap={{ scale: 0.96 }}
-                  onClick={() => onSelect(choice.value)}
+                  onClick={() => handleLegacyChoice(choice.value)}
                   disabled={disabled}
                   className={`py-3 font-bold text-[12.5px] transition-all border-[2.5px] ${
                     idx === 0

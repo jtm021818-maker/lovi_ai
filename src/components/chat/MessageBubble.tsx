@@ -62,6 +62,10 @@ export default function MessageBubble({ message, isTyping, onSpeak, isSpeaking, 
   // 🆕 v22: [STICKER:xxx] 태그 파싱
   const stickerMatch = !isUser ? message.content?.match(/\[STICKER:(\w+)\]/) : null;
   const stickerId = stickerMatch?.[1] ?? null;
+
+  // 🆕 v82.10: 루나 극장 "정정" 메시지 감지 — 특화 스타일 (보라톤 + 📝 뱃지)
+  const CORRECTION_PREFIX = '📝 내 진짜 마음은 이래: ';
+  const isMirrorCorrection = isUser && message.content.startsWith(CORRECTION_PREFIX);
   // 🆕 v25: 유효/무효 관계없이 태그는 항상 텍스트에서 제거
   // 🆕 v35: 선택지 배열이 텍스트에 남는 버그 수정 — 버튼으로 이미 표시되므로 텍스트에서 제거
   const textContent = message.content
@@ -89,6 +93,8 @@ export default function MessageBubble({ message, isTyping, onSpeak, isSpeaking, 
     .replace(/\[OPERATION_COMPLETE[^\]]*\]/gi, '')
     // 🆕 v42: 빈 대괄호 [] 제거 (선택지 제거 후 남은 잔해)
     .replace(/\[\s*\]/g, '')
+    // 🆕 v82.10: 정정 메시지 prefix 제거 — 뱃지로 대체 렌더
+    .replace(/^📝 내 진짜 마음은 이래:\s*/, '')
     // 🆕 v82.5: 카톡 스타일 — 한 버블 안에서 newline 불필요. 공백 1개로 정리.
     //   `\n{3,}` 만 collapse 하던 이전 로직은 `\n\n` (빈 줄) 을 남겨서 중간에 공백 줄 떴음.
     .replace(/\s*\n\s*/g, ' ')
@@ -123,6 +129,14 @@ export default function MessageBubble({ message, isTyping, onSpeak, isSpeaking, 
           </span>
         )}
         {/* bubble — 스티커만이면 버블 숨김 */}
+        {/* 🆕 v82.10: 정정 메시지 — 위에 "📝 루나한테 정정" 뱃지 */}
+        {isMirrorCorrection && (
+          <div className="mb-1 flex items-center gap-1.5 text-[10px] font-bold text-fuchsia-600 ml-1">
+            <span>📝</span>
+            <span>루나한테 정정</span>
+            <div className="flex-1 h-[1px] max-w-[60px]" style={{ background: 'linear-gradient(90deg, rgba(192,38,211,0.4), transparent)' }} />
+          </div>
+        )}
         {!isStickerOnly && <div
           onMouseDown={handlePressStart}
           onMouseUp={handlePressEnd}
@@ -133,9 +147,17 @@ export default function MessageBubble({ message, isTyping, onSpeak, isSpeaking, 
           data-luna-bubble={!isUser ? 'true' : undefined}
           className={`px-4 py-2.5 shadow-sm select-none ${bubbleFxClass} ${
             isUser
-              ? 'bg-[#EAE1D0] text-[#4E342E] rounded-[20px] rounded-tr-[4px] border border-[#D5C2A5]'
+              ? isMirrorCorrection
+                // 🆕 v82.10: 정정 메시지 — 보라 그라디언트 + fuchsia border + glow
+                ? 'text-[#3b0764] rounded-[20px] rounded-tr-[4px] border-2'
+                : 'bg-[#EAE1D0] text-[#4E342E] rounded-[20px] rounded-tr-[4px] border border-[#D5C2A5]'
               : 'bg-[#F4EFE6] text-[#4E342E] rounded-[20px] rounded-tl-[4px] border border-[#D5C2A5]'
           }`}
+          style={isMirrorCorrection ? {
+            background: 'linear-gradient(135deg, #fae8ff 0%, #f5d0fe 100%)',
+            borderColor: 'rgba(192,38,211,0.55)',
+            boxShadow: '0 2px 12px rgba(192,38,211,0.2), inset 0 1px 0 rgba(255,255,255,0.5)',
+          } : undefined}
         >
           {isTyping && !message.content ? (
             <div className="flex space-x-1.5 py-1 items-center h-5">

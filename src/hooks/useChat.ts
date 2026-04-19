@@ -639,6 +639,12 @@ export function useChat(sessionId: string): UseChatReturn {
       // 🆕 ACE v4: ||| 분리 완료 후 버퍼된 이벤트를 마지막에 삽입
       // 이렇게 하면 이벤트가 항상 루나 말풍선들 뒤에 나옴
       if (pendingEventsBuffer.length > 0) {
+        // 🆕 v82.9: 마지막 말풍선 다 뜬 뒤 3초 "읽을 시간" 확보.
+        //   이전: 타이핑 끝난 직후 즉시 이벤트/루나극장 발동 → 유저가 마지막 대사 읽기 전에 지나감.
+        //   지금: 3초 뒤 삽입 → "내가 상상한 거 맞는지 한번 봐볼래?" 같은 공약성 대사 읽은 후 전환.
+        console.log(`[useChat] ⏱️ 이벤트 발동 3초 대기 중 — 마지막 말풍선 읽을 시간 확보 (${pendingEventsBuffer.map(e => e.type).join(', ')})`);
+        await new Promise((r) => setTimeout(r, 3000));
+
         setMessages((prev) => [
           ...prev,
           ...pendingEventsBuffer.map((evt) => ({
