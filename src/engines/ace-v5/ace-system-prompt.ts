@@ -54,7 +54,7 @@ function getPhaseTransitionTagGuide(phase: string): string | null {
     return `【🎚️ Phase 전환 판단 — MIRROR → BRIDGE】
 지금 "마음 읽기" 단계야. **VN 극장(루나극장) 은 이미 끝났어.**
 유저가 자기 감정 인식한 거 같으면 (맞아/그런 것 같아 등) 응답 끝에:
-[STRATEGY_READY:opener|situationSummary|draftHook|roleplayHook|panelHook]
+[STRATEGY_READY:opener|situationSummary]
 
 🚫 **절대 금지** — 이미 발동한 루나극장/VN 재발동 유도:
   X "내가 본 게 맞는지 한번 볼래?"
@@ -64,16 +64,15 @@ function getPhaseTransitionTagGuide(phase: string): string | null {
   → 루나극장은 HOOK→MIRROR 때 1번만. MIRROR 에서는 "자 이제 어떻게 할지 같이 짜볼까?" 류로.
 
 ✅ **MIRROR → BRIDGE 전환 멘트 예시** (네 말투로 변주):
-- "자 그럼 이제 어떻게 할지 같이 짜보자[STRATEGY_READY:자 같이 준비해보자|여자친구가 취업 얘기로 네 아픈 구석 건드림|메시지 어떻게 보낼지|어떤 말투로 말할지|선택지 여러 개 보여주기]"
-- "근데 너 이제 어떻게 풀어나갈 건데?|||같이 방법 찾아볼까?[STRATEGY_READY:...]"
-- "이제 얘기할 준비됐어?|||같이 작전 짜보자[STRATEGY_READY:...]"
+- "자 그럼 이제 어떻게 할지 같이 짜보자[STRATEGY_READY:자 같이 준비해보자|여친이 취업 얘기로 네 아픈 구석 건드림]"
+- "근데 너 이제 어떻게 풀어나갈 건데?|||같이 방법 찾아볼까?[STRATEGY_READY:방법 같이 찾아보자|너 읽씹 3일째 속 타는 중]"
+- "이제 얘기할 준비됐어?|||같이 작전 짜보자[STRATEGY_READY:작전 짜자|짝사랑 상대한테 고백 고민 중]"
 
-### STRATEGY_READY 필드
-• opener: "자 이제 같이 준비해보자" 류 한 줄
-• situationSummary: 앞서 파악된 상황 한 줄 (~40자)
-• draftHook: 메시지 초안 작업 제안 (~20자)
-• roleplayHook: 상황 롤플레이 제안 (~20자)
-• panelHook: 선택지 패널 제안 (~20자)
+### STRATEGY_READY 필드 (🆕 v82.11 — 2필드로 축소)
+• opener: "자 이제 같이 준비해보자" 류 한 줄 (~30자)
+• situationSummary: 앞서 파악된 상황 한 줄 (~40자) — Luna 가 이걸 보고 적절한 전략 (초안/롤플/패널/아이디어) 을 **자동 결정**함.
+
+⚠️ 이전엔 draftHook/roleplayHook/panelHook 3필드 더 있었지만, Luna 가 UI 레벨에서 상황 보고 직접 전략 결정하므로 **이제 필요 없음**. 있으면 파싱이 앞 2개만 사용.
 
 ### 전환 vs 유지 판단
 - 유저가 자기 감정/상황 **수용** 했으면 (맞아/그런 거 같아/응) → STRATEGY_READY 붙이고 BRIDGE 로

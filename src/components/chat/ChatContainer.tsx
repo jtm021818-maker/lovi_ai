@@ -25,6 +25,7 @@ import LunaStory from './events/LunaStory';
 import LunaStrategy from './events/LunaStrategy';
 // 🆕 v81: BRIDGE 몰입 모드
 import ModeSelector from '@/components/modes/ModeSelector';
+import LunaStrategyDecision from '@/components/modes/LunaStrategyDecision';
 import ToneMode from '@/components/modes/tone/ToneMode';
 import IdeaMode from '@/components/modes/idea/IdeaMode';
 import DraftMode from '@/components/modes/draft/DraftMode';
@@ -266,6 +267,9 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
     }).catch(err => console.error('[Scenario] DB 업데이트 실패:', err));
   }
 
+  // 🆕 v82.11: Luna 자동 전략 결정 — "다른 방법으로 할래" 누른 이벤트는 수동 ModeSelector 로 폴백
+  const [manualStrategyOverride, setManualStrategyOverride] = useState<Record<string, boolean>>({});
+
   // 🆕 v81: 몰입 모드 진입 — ModeSelector 에서 호출
   const modeStoreEnter = useModeStore((s) => s.enter);
   const activeModeRaw = useModeStore((s) => s.activeMode);
@@ -418,15 +422,45 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
       case 'INSIGHT_CARD': return <InsightCard key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
       case 'EMOTION_MIRROR': return <EmotionMirror key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
       case 'LUNA_STORY': return <LunaStory key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
-      // 🆕 v81: LUNA_STRATEGY → ModeSelector 로 업그레이드 (몰입 모드 진입 카드)
+      // 🆕 v82.11: LUNA_STRATEGY → Luna 가 4전략 중 자동 선택 + 수동 escape 시 ModeSelector 폴백
       case 'LUNA_STRATEGY': {
         const strategyData = event.data as { opener?: string; situationSummary?: string };
+        const eventKey = String(idx);
+        const isOverride = manualStrategyOverride[eventKey];
+
+        if (isOverride) {
+          return (
+            <ModeSelector
+              key={`event-${idx}-manual`}
+              opener={strategyData.opener}
+              situationSummary={strategyData.situationSummary}
+              onSelect={(mode) => handleModeEnter(mode, strategyData)}
+            />
+          );
+        }
+
+        // 최근 대화 맥락 (맨 뒤 8턴) — Luna 가 전략 결정할 때 참고
+        const recent = messages
+          .filter((m) => m.senderType === 'user' || m.senderType === 'ai')
+          .slice(-8)
+          .map((m) => ({ role: m.senderType as 'user' | 'ai', content: m.content }));
+
         return (
-          <ModeSelector
+          <LunaStrategyDecision
             key={`event-${idx}`}
+            situationSummary={strategyData.situationSummary ?? ''}
             opener={strategyData.opener}
-            situationSummary={strategyData.situationSummary}
-            onSelect={(mode) => handleModeEnter(mode, strategyData)}
+            recentHistory={recent}
+            onDecide={(mode, enrichedOpener, reasoning) => {
+              // Luna 결정 멘트를 opener 로 보강
+              handleModeEnter(mode, {
+                ...strategyData,
+                opener: enrichedOpener,
+                situationSummary: strategyData.situationSummary ?? '',
+              });
+              console.log(`[LunaStrategy] 자동 선택: ${mode} — ${reasoning}`);
+            }}
+            onEscape={() => setManualStrategyOverride((prev) => ({ ...prev, [eventKey]: true }))}
           />
         );
       }
