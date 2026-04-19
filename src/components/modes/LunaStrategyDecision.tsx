@@ -17,39 +17,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ModeId } from '@/engines/bridge-modes/types';
+import LunaSprite from '@/components/common/LunaSprite';
 
 type StrategyMode = 'idea' | 'draft' | 'panel' | 'roleplay';
-
-/** 🆕 v82.14: Luna Animated Sprite Component (4x2 Grid) */
-const LunaSprite = ({ className, size = 40, style }: { className?: string; size?: number; style?: React.CSSProperties }) => {
-  return (
-    <div
-      className={`relative overflow-hidden ${className}`}
-      style={{ width: size, height: size, borderRadius: '50%', ...style }}
-    >
-      <motion.div
-        style={{
-          width: '100%',
-          height: '100%',
-          backgroundImage: 'url(/splite/luna_sprite_1.png)',
-          backgroundSize: '400% 200%',
-          backgroundRepeat: 'no-repeat',
-        }}
-        animate={{
-          backgroundPosition: [
-            '0% 0%', '33.333% 0%', '66.666% 0%', '100% 0%',
-            '0% 100%', '33.333% 100%', '66.666% 100%', '100% 100%'
-          ]
-        }}
-        transition={{
-          duration: 1.2,
-          repeat: Infinity,
-          ease: 'steps(8, end)',
-        }}
-      />
-    </div>
-  );
-};
 
 
 interface StrategyDecision {
