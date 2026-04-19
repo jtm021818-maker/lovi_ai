@@ -4,22 +4,29 @@ import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
- * 🎬 v79: 루나극장 진입 시네마틱 전환 — 말풍선 모핑 버전
+ * 🎬 v82.8: 루나극장 진입 시네마틱 전환 — 3초 글로우 + 말풍선 모핑 버전
  *
- * 연출 시퀀스 (총 ~2.8초):
- *   1. (0.0~0.1s) 마지막 루나 말풍선 위치 감지 (DOM 쿼리 `[data-luna-bubble]` 마지막)
- *   2. (0.1~0.9s) **말풍선 클론** 이 그 자리에서 등장 → 시네마 프레임으로 모핑
- *                  - bubble-tail(말꼬리) radius 사라지고 직사각형화
- *                  - 색상 transition: #F4EFE6 → #1a0e08 (sepia dark)
- *                  - 크기: 작은 버블 → 중앙 큰 필름 프레임
- *   3. (0.9~1.5s) 스프라켓 홀 슬라이드 인 + 그레인/스캔라인 오버레이
- *   4. (1.5~2.1s) 미세 쉐이크 (필름 돌아가는 느낌) + tagline 등장
- *   5. (2.1~2.8s) 원형 clip-path 폭발 확장 → VN 씬 시작
+ * 연출 시퀀스 (총 ~5.8초):
+ *   0. (0.0~2.5s) **PRE_GLOW** (신규) — 마지막 루나 말풍선 위치에서 앰버 글로우 펄스
+ *                                        - 유저가 마지막 대사 읽을 시간 확보
+ *                                        - 주변 ✨ 파티클 shimmer
+ *                                        - 점진적 스크린 딤 (0→0.3)
+ *   1. (2.5~3.0s) **BURST** (신규) — 화이트 쇼크웨이브 확산 + 플래시 피크
+ *                                     - 말풍선 중심으로 radial expand
+ *                                     - 스크린 딤 0.3→0.92 급가속
+ *   2. (3.0~3.9s) **MORPH** — 말풍선 클론이 시네마 필름 프레임으로 변형
+ *                              - bubble-tail radius 사라지고 직사각형
+ *                              - 색상 #F4EFE6 → #1a0e08 (sepia dark)
+ *                              - 작은 버블 → 중앙 큰 필름 프레임
+ *   3. (3.9~4.5s) **FRAME** — 스프라켓 홀 슬라이드 인 + 그레인 + 스캔라인
+ *   4. (4.5~5.1s) **SHAKE** — 필름 쉐이크 (릴 돌아가는 느낌) + tagline 등장
+ *   5. (5.1~5.8s) **EXPLODE** — 원형 clip-path 폭발 확장 → VN 씬 시작
  *
- * 연구 기반 (Motion 공식 "iOS App Store", react-morphing-modal, Codrops 2025):
- *   - Framer Motion v12 `motion.div` + FLIP 기반 layout 모핑
- *   - `getBoundingClientRect()` 로 소스 위치 캡처 후 fixed 포지셔닝
+ * 연구 기반 (2026 최신):
+ *   - Framer Motion v12 `motion.div` + FLIP layout 모핑 (shared-element 패턴)
+ *   - `getBoundingClientRect()` 소스 위치 캡처 후 fixed 포지셔닝
  *   - CSS `clip-path` radial 폭발 (하드웨어 가속)
+ *   - View Transitions API 스타일 circular reveal 기법
  *
  * 번들 증가: 0 (framer-motion / React 만 사용)
  */
@@ -61,11 +68,18 @@ export default function CinematicTransition({ onComplete, tagline }: CinematicTr
       const id = window.setTimeout(fn, ms);
       timersRef.current.push(id);
     };
-    sched(100,  () => setStage(1));   // 말풍선 클론 나타남 → 모핑 시작
-    sched(900,  () => setStage(2));   // 스프라켓 + 그레인
-    sched(1500, () => setStage(3));   // 쉐이크 + tagline
-    sched(2100, () => setStage(4));   // 폭발 시작
-    sched(2800, () => { setStage(5); onComplete(); });
+    // 🆕 v82.8: 3초 pre-glow + burst 후 기존 모핑 진행
+    //   stage 0 (0~3000ms)   → PRE_GLOW + BURST (별도 렌더 블록으로 처리)
+    //   stage 1 (3000~3900)  → MORPH
+    //   stage 2 (3900~4500)  → FRAME
+    //   stage 3 (4500~5100)  → SHAKE + tagline
+    //   stage 4 (5100~5800)  → EXPLODE
+    //   stage 5              → DONE
+    sched(3000, () => setStage(1));   // 말풍선 클론 → 필름 프레임 모핑
+    sched(3900, () => setStage(2));   // 스프라켓 + 그레인
+    sched(4500, () => setStage(3));   // 쉐이크 + tagline
+    sched(5100, () => setStage(4));   // 폭발 시작
+    sched(5800, () => { setStage(5); onComplete(); });
     return () => { timersRef.current.forEach(clearTimeout); };
   }, [onComplete]);
 
@@ -91,9 +105,16 @@ export default function CinematicTransition({ onComplete, tagline }: CinematicTr
     <motion.div
       className="fixed inset-0 z-[9998] overflow-hidden"
       initial={{ backgroundColor: 'rgba(0,0,0,0)' }}
-      animate={{ backgroundColor: stage >= 2 ? 'rgba(26,14,10,0.92)' : 'rgba(0,0,0,0.2)' }}
+      // 🆕 v82.8: 3단계 딤 — stage 0 은 초반 투명 → 말미에 약하게 (0.3)
+      //           stage >= 1 부턴 급격히 어두워짐 (0.92)
+      animate={{
+        backgroundColor:
+          stage >= 2 ? 'rgba(26,14,10,0.92)' :
+          stage >= 1 ? 'rgba(26,14,10,0.6)' :
+          'rgba(26,14,10,0)',
+      }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.6, ease: 'easeOut' }}
+      transition={{ duration: 0.7, ease: 'easeOut' }}
       onClick={handleSkip}
     >
       {/* SVG 그레인 필터 정의 */}
@@ -106,6 +127,146 @@ export default function CinematicTransition({ onComplete, tagline }: CinematicTr
           </filter>
         </defs>
       </svg>
+
+      {/* ── 🆕 v82.8: PRE_GLOW (stage 0, 0~2500ms) — 말풍선 위치 앰버 글로우 + 파티클 ── */}
+      {stage === 0 && sourceRect && (
+        <>
+          {/* 중앙 앰버 글로우 펄스 — scale 1→1.8 반복, opacity 0.3→0.75 */}
+          <motion.div
+            className="absolute pointer-events-none"
+            style={{
+              left: sourceRect.x + sourceRect.width / 2,
+              top: sourceRect.y + sourceRect.height / 2,
+              width: Math.max(sourceRect.width, 240),
+              height: Math.max(sourceRect.width, 240),
+              marginLeft: -Math.max(sourceRect.width, 240) / 2,
+              marginTop: -Math.max(sourceRect.width, 240) / 2,
+              background: 'radial-gradient(circle, rgba(255,213,128,0.55) 0%, rgba(255,180,90,0.25) 40%, transparent 70%)',
+              filter: 'blur(18px)',
+              mixBlendMode: 'screen',
+            }}
+            animate={{
+              scale: [1, 1.8, 1],
+              opacity: [0.25, 0.75, 0.25],
+            }}
+            transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+          />
+
+          {/* 2차 더 작고 밝은 글로우 (중심 강조) */}
+          <motion.div
+            className="absolute pointer-events-none"
+            style={{
+              left: sourceRect.x + sourceRect.width / 2,
+              top: sourceRect.y + sourceRect.height / 2,
+              width: 120,
+              height: 120,
+              marginLeft: -60,
+              marginTop: -60,
+              background: 'radial-gradient(circle, rgba(255,240,200,0.9) 0%, transparent 70%)',
+              filter: 'blur(8px)',
+              mixBlendMode: 'screen',
+            }}
+            animate={{
+              scale: [0.9, 1.35, 0.9],
+              opacity: [0.4, 0.9, 0.4],
+            }}
+            transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut', delay: 0.2 }}
+          />
+
+          {/* ✨ 파티클 8개 — 말풍선 주변 공전 */}
+          {Array.from({ length: 8 }).map((_, i) => {
+            const angle = (i / 8) * Math.PI * 2;
+            const radius = 90 + (i % 2) * 30;
+            return (
+              <motion.div
+                key={`particle-${i}`}
+                className="absolute pointer-events-none text-[14px]"
+                style={{
+                  left: sourceRect.x + sourceRect.width / 2,
+                  top: sourceRect.y + sourceRect.height / 2,
+                  filter: 'drop-shadow(0 0 6px rgba(255,220,150,0.9))',
+                }}
+                initial={{ opacity: 0, scale: 0 }}
+                animate={{
+                  opacity: [0, 1, 0.6, 1, 0],
+                  scale: [0, 1, 0.8, 1.1, 0],
+                  x: [0, Math.cos(angle) * radius * 0.5, Math.cos(angle) * radius, Math.cos(angle + 0.3) * radius],
+                  y: [0, Math.sin(angle) * radius * 0.5, Math.sin(angle) * radius, Math.sin(angle + 0.3) * radius],
+                }}
+                transition={{
+                  duration: 2.3,
+                  delay: 0.2 + i * 0.08,
+                  ease: 'easeOut',
+                  repeat: 1,
+                }}
+              >
+                ✨
+              </motion.div>
+            );
+          })}
+
+          {/* 살짝 힌트 텍스트 — "머릿속에 그려지는 중..." */}
+          <motion.div
+            className="absolute pointer-events-none font-bold text-[11px] tracking-widest"
+            style={{
+              left: sourceRect.x + sourceRect.width / 2,
+              top: sourceRect.y + sourceRect.height + 24,
+              transform: 'translateX(-50%)',
+              color: 'rgba(255,220,150,0.85)',
+              textShadow: '0 2px 12px rgba(0,0,0,0.6), 0 0 20px rgba(255,180,90,0.5)',
+            }}
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: [0, 1, 0.6, 1], y: 0 }}
+            transition={{ duration: 2.5, ease: 'easeOut' }}
+          >
+            머릿속에 그려지는 중...
+          </motion.div>
+        </>
+      )}
+
+      {/* ── 🆕 v82.8: BURST (stage 0 말미 ~ stage 1 초입) — 화이트 쇼크웨이브 플래시 ── */}
+      {/*   framer-motion 자체 타이머로 처리 (2500ms 시점 peak) */}
+      {stage === 0 && sourceRect && (
+        <motion.div
+          key="burst-shockwave"
+          className="absolute rounded-full pointer-events-none"
+          style={{
+            left: sourceRect.x + sourceRect.width / 2,
+            top: sourceRect.y + sourceRect.height / 2,
+            width: 60,
+            height: 60,
+            marginLeft: -30,
+            marginTop: -30,
+            background: 'radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(255,220,150,0.5) 40%, transparent 70%)',
+            mixBlendMode: 'screen',
+          }}
+          initial={{ scale: 0.3, opacity: 0 }}
+          animate={{
+            scale: [0.3, 0.3, 0.3, 8, 18],
+            opacity: [0, 0, 0, 1, 0],
+          }}
+          transition={{
+            duration: 3,
+            times: [0, 0.7, 0.83, 0.92, 1],
+            ease: 'easeOut',
+          }}
+        />
+      )}
+
+      {/* BURST 2차 — 흰색 전체 플래시 (2800ms 시점) */}
+      {stage === 0 && (
+        <motion.div
+          key="burst-flash"
+          className="absolute inset-0 pointer-events-none bg-white"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: [0, 0, 0, 0, 0.6, 0] }}
+          transition={{
+            duration: 3,
+            times: [0, 0.85, 0.9, 0.92, 0.95, 1],
+            ease: 'easeOut',
+          }}
+        />
+      )}
 
       {/* 세피아 비네트 */}
       <motion.div

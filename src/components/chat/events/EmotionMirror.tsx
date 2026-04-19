@@ -9,10 +9,11 @@ import { useTypewriter } from '@/hooks/useTypewriter';
 import TheaterOpening from './TheaterOpening';
 import CinematicTransition from './CinematicTransition';
 
-// 🆕 v79: 루나극장 진입 시 시네마틱 전환 (필름릴 → 폭발 확장) 사용
-//   `true`  → CinematicTransition (CSS+Framer Motion, 번들 추가 0)
+// 🆕 v82.8: 루나극장 진입 — 3초 글로우 + 말풍선 모핑 확장
+//   `true`  → CinematicTransition (3s pre-glow → bubble morph → film frame → explosion)
 //   `false` → TheaterOpening (mp4 비디오 — `/루나극장_오프닝.mp4`)
-const USE_CINEMATIC_TRANSITION = false;
+//   유저 피드백: mp4 는 1초 만에 지나감. 3초 동안 이전 버블 읽고 burst → 필름 확산 원함.
+const USE_CINEMATIC_TRANSITION = true;
 
 /**
  * v49: 루나의 1인/2인 연극 — Visual Novel 스타일
@@ -399,21 +400,29 @@ function VNScene({
 
   // 풀스크린 VN 씬 (Portal → document.body) — v50 영화관 컨셉
   const vnContent = (
-    <AnimatePresence>
+    <>
+      {/* 🆕 v82.8: CinematicTransition 을 VN 백드롭 "밖" 으로 분리.
+          bg-black 이 원본 말풍선을 가리면 pre-glow 시각적 앵커가 사라짐.
+          분리 후 transition 은 투명 배경으로 실제 채팅 말풍선 위에 글로우 얹기. */}
+      {phase === 'intro' && USE_CINEMATIC_TRANSITION && (
+        <CinematicTransition onComplete={handleIntroComplete} tagline={data.sceneTitle} />
+      )}
+
+      <AnimatePresence>
         <motion.div
           key="vn-fullscreen"
           initial={{ opacity: 0 }}
-          animate={{ opacity: phase === 'closing' ? 0 : 1 }}
+          // 🆕 v82.8: intro 동안엔 VN 백드롭 opacity=0 유지 — 원본 채팅 말풍선 보이게.
+          //   CinematicTransition 이 온전히 연출을 맡음. phase 가 'playing' 이 되는 순간 백드롭 등장.
+          animate={{ opacity: (phase === 'closing' || phase === 'intro') ? 0 : 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: phase === 'closing' ? 0.5 : 0.4 }}
-          className="fixed inset-0 z-50 bg-black"
+          className="fixed inset-0 z-40 bg-black"
           style={{ height: '100dvh' }}
         >
-          {/* 🎬 오프닝 연출 (intro phase에서만) */}
-          {phase === 'intro' && (
-            USE_CINEMATIC_TRANSITION
-              ? <CinematicTransition onComplete={handleIntroComplete} tagline={data.sceneTitle} />
-              : <TheaterOpening onComplete={handleIntroComplete} />
+          {/* 🎬 fallback (cinematic 비활성 시 mp4 오프닝) */}
+          {phase === 'intro' && !USE_CINEMATIC_TRANSITION && (
+            <TheaterOpening onComplete={handleIntroComplete} />
           )}
 
           {/* 씬 컨테이너 (풀스크린) */}
@@ -823,6 +832,7 @@ function VNScene({
           </motion.div>
         </motion.div>
     </AnimatePresence>
+    </>
   );
 
   // Portal로 body에 렌더 (모바일 풀스크린)
