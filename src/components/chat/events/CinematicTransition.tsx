@@ -36,6 +36,12 @@ interface CinematicTransitionProps {
   onComplete: () => void;
   /** 선택: 필름 프레임에 살짝 비칠 미리보기 텍스트 (루나극장 제목) */
   tagline?: string;
+  /**
+   * 🆕 v82.13: 모드 선택
+   *   'full'      — 글로우 → 버스트 → 모핑 → 필름 → 쉐이크 → 폭발 (기본, 독립 전환용)
+   *   'glow-only' — 글로우 → 버스트 후 즉시 완료 (mp4 오프닝과 체인 연결용)
+   */
+  mode?: 'full' | 'glow-only';
 }
 
 interface BubbleRect {
@@ -45,7 +51,7 @@ interface BubbleRect {
   height: number;
 }
 
-export default function CinematicTransition({ onComplete, tagline }: CinematicTransitionProps) {
+export default function CinematicTransition({ onComplete, tagline, mode = 'full' }: CinematicTransitionProps) {
   const [stage, setStage] = useState<0 | 1 | 2 | 3 | 4 | 5>(0);
   const [sourceRect, setSourceRect] = useState<BubbleRect | null>(null);
   const timersRef = useRef<number[]>([]);
@@ -68,20 +74,21 @@ export default function CinematicTransition({ onComplete, tagline }: CinematicTr
       const id = window.setTimeout(fn, ms);
       timersRef.current.push(id);
     };
-    // 🆕 v82.8: 3초 pre-glow + burst 후 기존 모핑 진행
-    //   stage 0 (0~3000ms)   → PRE_GLOW + BURST (별도 렌더 블록으로 처리)
-    //   stage 1 (3000~3900)  → MORPH
-    //   stage 2 (3900~4500)  → FRAME
-    //   stage 3 (4500~5100)  → SHAKE + tagline
-    //   stage 4 (5100~5800)  → EXPLODE
-    //   stage 5              → DONE
-    sched(3000, () => setStage(1));   // 말풍선 클론 → 필름 프레임 모핑
-    sched(3900, () => setStage(2));   // 스프라켓 + 그레인
-    sched(4500, () => setStage(3));   // 쉐이크 + tagline
-    sched(5100, () => setStage(4));   // 폭발 시작
-    sched(5800, () => { setStage(5); onComplete(); });
+    // 🆕 v82.13: mode 분기
+    //   'glow-only': 글로우 (0~2500ms) → 버스트 (2500~3000ms) → 즉시 onComplete
+    //                → EmotionMirror 가 mp4 오프닝을 다음 stage 로 체인
+    //   'full':      기존 6-stage 전체 (독립 전환용)
+    if (mode === 'glow-only') {
+      sched(3000, () => { setStage(5); onComplete(); });
+    } else {
+      sched(3000, () => setStage(1));   // 말풍선 클론 → 필름 프레임 모핑
+      sched(3900, () => setStage(2));   // 스프라켓 + 그레인
+      sched(4500, () => setStage(3));   // 쉐이크 + tagline
+      sched(5100, () => setStage(4));   // 폭발 시작
+      sched(5800, () => { setStage(5); onComplete(); });
+    }
     return () => { timersRef.current.forEach(clearTimeout); };
-  }, [onComplete]);
+  }, [onComplete, mode]);
 
   const handleSkip = () => {
     timersRef.current.forEach(clearTimeout);

@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import type { ChatMessage } from '@/types/chat.types';
 import type { PersonaMode } from '@/types/persona.types';
 import LunaSticker, { isValidSticker } from './LunaSticker';
@@ -22,8 +21,6 @@ interface MessageBubbleProps {
   isLastAi?: boolean;
 }
 
-const REACTIONS = ['❤️', '🥺', '😢', '😮', '👍', '💪'];
-
 /** **bold** 마크다운을 <strong>으로 변환 */
 function renderFormattedText(text: string) {
   // **text** → <strong>text</strong>
@@ -38,26 +35,10 @@ function renderFormattedText(text: string) {
 
 export default function MessageBubble({ message, isTyping, onSpeak, isSpeaking, isPremium = true, persona = 'luna', isLastAi = false }: MessageBubbleProps) {
   const isUser = message.senderType === 'user';
-  const [showReactions, setShowReactions] = useState(false);
-  const [chosenReaction, setChosenReaction] = useState<string | null>(null);
-  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 🆕 v79: bubble FX 구독 (AI 메시지만)
   const bubbleFx = useBubbleFx(message.id, !isUser && isLastAi);
   const bubbleFxClass = !isUser ? bubbleFx.classes.join(' ') : '';
-
-  function handlePressStart() {
-    pressTimer.current = setTimeout(() => setShowReactions(true), 500);
-  }
-
-  function handlePressEnd() {
-    if (pressTimer.current) clearTimeout(pressTimer.current);
-  }
-
-  function handleReact(emoji: string) {
-    setChosenReaction(emoji);
-    setShowReactions(false);
-  }
 
   // 🆕 v22: [STICKER:xxx] 태그 파싱
   const stickerMatch = !isUser ? message.content?.match(/\[STICKER:(\w+)\]/) : null;
@@ -144,11 +125,6 @@ export default function MessageBubble({ message, isTyping, onSpeak, isSpeaking, 
           </div>
         )}
         {!isStickerOnly && <div
-          onMouseDown={handlePressStart}
-          onMouseUp={handlePressEnd}
-          onMouseLeave={handlePressEnd}
-          onTouchStart={handlePressStart}
-          onTouchEnd={handlePressEnd}
           // 🆕 v79: 루나 메시지 버블에 data-attr — CinematicTransition 이 마지막 버블 위치 감지
           data-luna-bubble={!isUser ? 'true' : undefined}
           className={`px-4 py-2.5 shadow-sm select-none ${bubbleFxClass} ${
@@ -223,49 +199,7 @@ export default function MessageBubble({ message, isTyping, onSpeak, isSpeaking, 
           </button>
         )}
 
-        {/* chosen reaction badge */}
-        {chosenReaction && (
-          <motion.span
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className={`absolute -bottom-2 ${isUser ? '-left-2' : '-right-2'} text-base leading-none`}
-          >
-            {chosenReaction}
-          </motion.span>
-        )}
-
-        {/* reaction popup */}
-        <AnimatePresence>
-          {showReactions && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.8, y: 6 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.8, y: 6 }}
-              transition={{ duration: 0.2 }}
-              className={`absolute ${isUser ? 'right-0' : 'left-0'} -top-12 z-10 flex gap-1 bg-white/95 backdrop-blur-sm border border-pink-100 rounded-2xl px-3 py-2 shadow-lg`}
-            >
-              {REACTIONS.map((emoji) => (
-                <button
-                  key={emoji}
-                  onClick={() => handleReact(emoji)}
-                  className="text-xl hover:scale-125 transition-transform active:scale-110"
-                  aria-label={emoji}
-                >
-                  {emoji}
-                </button>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
-
-      {/* dismiss overlay when reactions shown */}
-      {showReactions && (
-        <div
-          className="fixed inset-0 z-0"
-          onClick={() => setShowReactions(false)}
-        />
-      )}
     </motion.div>
   );
 }

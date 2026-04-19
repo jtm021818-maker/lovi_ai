@@ -125,7 +125,7 @@ interface EmotionMirrorProps {
   disabled?: boolean;
 }
 
-type ScenePhase = 'intro' | 'playing' | 'reveal' | 'message' | 'choice' | 'correction' | 'closing' | 'closed';
+type ScenePhase = 'intro' | 'intro_video' | 'playing' | 'reveal' | 'message' | 'choice' | 'correction' | 'closing' | 'closed';
 
 /** 🆕 v82.10: 정정 메시지 마커 — MessageBubble 에서 감지해서 특화 스타일 적용 */
 export const MIRROR_CORRECTION_MARKER = '📝 내 진짜 마음은 이래: ';
@@ -444,26 +444,34 @@ function VNScene({
   // 풀스크린 VN 씬 (Portal → document.body) — v50 영화관 컨셉
   const vnContent = (
     <>
-      {/* 🆕 v82.8: CinematicTransition 을 VN 백드롭 "밖" 으로 분리.
-          bg-black 이 원본 말풍선을 가리면 pre-glow 시각적 앵커가 사라짐.
-          분리 후 transition 은 투명 배경으로 실제 채팅 말풍선 위에 글로우 얹기. */}
+      {/* 🆕 v82.13: 2-stage 인트로 체인
+          Stage 1: 말풍선 글로우 + 버스트 (CinematicTransition, mode='glow-only')
+          Stage 2: mp4 오프닝 영상 (TheaterOpening)
+          Stage 3: VN 씬 (phase='playing')
+          유저 피드백: 글로우 연출이 예쁘니 유지 + 오프닝 영상도 재생 후 VN 진행. */}
       {phase === 'intro' && USE_CINEMATIC_TRANSITION && (
-        <CinematicTransition onComplete={handleIntroComplete} tagline={data.sceneTitle} />
+        <CinematicTransition
+          mode="glow-only"
+          onComplete={() => setPhase('intro_video')}
+          tagline={data.sceneTitle}
+        />
+      )}
+      {phase === 'intro_video' && (
+        <TheaterOpening onComplete={handleIntroComplete} />
       )}
 
       <AnimatePresence>
         <motion.div
           key="vn-fullscreen"
           initial={{ opacity: 0 }}
-          // 🆕 v82.8: intro 동안엔 VN 백드롭 opacity=0 유지 — 원본 채팅 말풍선 보이게.
-          //   CinematicTransition 이 온전히 연출을 맡음. phase 가 'playing' 이 되는 순간 백드롭 등장.
-          animate={{ opacity: (phase === 'closing' || phase === 'intro') ? 0 : 1 }}
+          // 🆕 v82.13: intro/intro_video 동안엔 VN 백드롭 opacity=0 유지 — 각 stage 가 각자 렌더.
+          animate={{ opacity: (phase === 'closing' || phase === 'intro' || phase === 'intro_video') ? 0 : 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: phase === 'closing' ? 0.5 : 0.4 }}
           className="fixed inset-0 z-40 bg-black"
           style={{ height: '100dvh' }}
         >
-          {/* 🎬 fallback (cinematic 비활성 시 mp4 오프닝) */}
+          {/* 🎬 fallback (cinematic 비활성 시 mp4 오프닝만) */}
           {phase === 'intro' && !USE_CINEMATIC_TRANSITION && (
             <TheaterOpening onComplete={handleIntroComplete} />
           )}

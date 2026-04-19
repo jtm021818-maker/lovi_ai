@@ -130,24 +130,23 @@ export default function LunaStrategyDecision({
     return () => { phraseTimers.forEach(clearTimeout); };
   }, [situationSummary, recentHistory]);
 
-  // Phase A → B 전환 (최소 2.5초 + API 완료)
+  // Phase A → B 전환 (최소 2초 + API 완료). thinking 페이즈가 너무 오래 끌면 유저가 답답함.
   useEffect(() => {
     if (!decision) return;
-    const elapsed = Date.now();
-    const minWait = 2500;
-    const started = elapsed - (THINKING_PHRASES.length * 600);
-    const remaining = Math.max(0, minWait - (elapsed - started));
-    const timer = setTimeout(() => setPhase('reveal'), remaining);
+    const timer = setTimeout(() => setPhase('reveal'), 1800);
     return () => clearTimeout(timer);
   }, [decision]);
 
-  // Phase B → C 자동 진입 (reveal 표시 2초 후)
+  // 🆕 v82.12: Phase B → C 자동 진입 시간 2s → 8s 로 대폭 늘림.
+  //   유저가 이모지/타이틀/라벨/reasoning 순차 등장 다 읽고 "바로 시작" 탭할 시간 확보.
+  //   또는 카운트다운 진행 바가 채워지면 자동 진입.
+  const AUTO_ENTER_MS = 8000;
   useEffect(() => {
     if (phase !== 'reveal' || !decision) return;
     const timer = setTimeout(() => {
       setPhase('entering');
       onDecide(decision.mode as ModeId, decision.opener, decision.reasoning);
-    }, 2000);
+    }, AUTO_ENTER_MS);
     return () => clearTimeout(timer);
   }, [phase, decision, onDecide]);
 
@@ -334,28 +333,41 @@ export default function LunaStrategyDecision({
                   {decision.reasoning}
                 </motion.div>
 
-                {/* 하단 CTA + 카운트다운 */}
+                {/* 🆕 v82.12: 카운트다운 진행 바 — 유저가 "얼마 남았는지" 시각적으로 알 수 있게 */}
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ delay: 0.7 }}
-                  className="px-4 pb-3 flex items-center justify-between gap-2"
+                  transition={{ delay: 0.9, duration: 0.4 }}
+                  className="px-4"
                 >
-                  <motion.div
-                    animate={{ opacity: [0.5, 1, 0.5] }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                    className="text-[10px] font-bold"
-                    style={{ color: meta.color }}
-                  >
-                    곧 시작할게...
-                  </motion.div>
+                  <div className="relative h-[3px] rounded-full overflow-hidden" style={{ background: `${meta.accent}22` }}>
+                    <motion.div
+                      initial={{ width: '100%' }}
+                      animate={{ width: '0%' }}
+                      transition={{ duration: AUTO_ENTER_MS / 1000, ease: 'linear' }}
+                      className="absolute left-0 top-0 bottom-0 rounded-full"
+                      style={{ background: meta.color, boxShadow: `0 0 8px ${meta.accent}` }}
+                    />
+                  </div>
+                </motion.div>
+
+                {/* 하단 CTA + 여유 멘트 */}
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 1.0 }}
+                  className="px-4 py-3 flex items-center justify-between gap-2"
+                >
+                  <div className="text-[10.5px] font-semibold" style={{ color: meta.color, opacity: 0.85 }}>
+                    ⏱ 준비 되면 탭해
+                  </div>
                   <button
                     onClick={() => {
                       setPhase('entering');
                       onDecide(decision.mode as ModeId, decision.opener, decision.reasoning);
                     }}
-                    className="px-3 py-1.5 rounded-full text-[11px] font-bold text-white active:scale-95 transition-transform"
-                    style={{ background: meta.color, boxShadow: `0 2px 10px ${meta.accent}` }}
+                    className="px-4 py-2 rounded-full text-[12px] font-bold text-white active:scale-95 transition-transform"
+                    style={{ background: meta.color, boxShadow: `0 2px 12px ${meta.accent}` }}
                   >
                     바로 시작 →
                   </button>
