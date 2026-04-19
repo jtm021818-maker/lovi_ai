@@ -593,7 +593,6 @@ function VNScene({
                 >
                   <LunaSprite
                     size={spriteSize}
-                    fullBody
                     circle={false}
                     speed="normal"
                   />
