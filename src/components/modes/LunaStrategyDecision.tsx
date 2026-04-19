@@ -20,6 +20,38 @@ import type { ModeId } from '@/engines/bridge-modes/types';
 
 type StrategyMode = 'idea' | 'draft' | 'panel' | 'roleplay';
 
+/** 🆕 v82.14: Luna Animated Sprite Component (4x2 Grid) */
+const LunaSprite = ({ className, size = 40, style }: { className?: string; size?: number; style?: React.CSSProperties }) => {
+  return (
+    <div
+      className={`relative overflow-hidden ${className}`}
+      style={{ width: size, height: size, borderRadius: '50%', ...style }}
+    >
+      <motion.div
+        style={{
+          width: '100%',
+          height: '100%',
+          backgroundImage: 'url(/splite/luna_sprite_1.png)',
+          backgroundSize: '400% 200%',
+          backgroundRepeat: 'no-repeat',
+        }}
+        animate={{
+          backgroundPosition: [
+            '0% 0%', '33.333% 0%', '66.666% 0%', '100% 0%',
+            '0% 100%', '33.333% 100%', '66.666% 100%', '100% 100%'
+          ]
+        }}
+        transition={{
+          duration: 1.2,
+          repeat: Infinity,
+          ease: 'steps(8, end)',
+        }}
+      />
+    </div>
+  );
+};
+
+
 interface StrategyDecision {
   mode: StrategyMode;
   reasoning: string;
@@ -171,9 +203,7 @@ export default function LunaStrategyDecision({
               transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
               className="relative shrink-0 mt-1"
             >
-              <div className="w-10 h-10 rounded-full bg-[#F4EFE6] border border-[#EACbb3] overflow-hidden">
-                <img src="/luna_fox_transparent.png" alt="루나" className="w-full h-full object-cover" />
-              </div>
+              <LunaSprite className="border border-[#EACbb3]" />
               {/* 생각 버블 이모지 */}
               <motion.div
                 animate={{ opacity: [0.3, 1, 0.3], y: [0, -2, 0] }}
@@ -258,9 +288,7 @@ export default function LunaStrategyDecision({
               transition={{ duration: 0.6, ease: 'easeOut' }}
               className="relative shrink-0 mt-1"
             >
-              <div className="w-10 h-10 rounded-full bg-[#F4EFE6] border-2 overflow-hidden" style={{ borderColor: meta.accent }}>
-                <img src="/luna_fox_transparent.png" alt="루나" className="w-full h-full object-cover" />
-              </div>
+              <LunaSprite className="border-2" size={40} style={{ borderColor: meta.accent }} />
               {/* 결정 배지 */}
               <motion.div
                 initial={{ scale: 0, rotate: -180 }}
