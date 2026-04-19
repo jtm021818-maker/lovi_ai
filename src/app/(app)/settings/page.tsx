@@ -12,6 +12,8 @@ import type { PersonaMode } from '@/types/persona.types';
 // 🆕 v41: 친밀도 카드
 import IntimacyCard from '@/components/intimacy/IntimacyCard';
 import type { IntimacyDerivedInfo } from '@/engines/intimacy';
+// 🆕 v82.20: Luna 설정 페이지 스프라이트 (7×7 49프레임)
+import LunaSprite from '@/components/common/LunaSprite';
 
 // ============================================================
 // Types & Constants
@@ -287,14 +289,25 @@ export default function SettingsPage() {
               exit={{ opacity: 0, scale: 0.8 }}
               transition={{ duration: 0.4 }}
             >
-              <Image
-                src={profile?.persona_mode === 'tarot' ? '/ui/sangdam_taromiao.png' : '/luna_fox_transparent.png'}
-                alt={profile?.persona_mode === 'tarot' ? 'TarotNyang' : 'Luna'}
-                width={260}
-                height={260}
-                className="settings-mascot-img"
-                priority
-              />
+              {profile?.persona_mode === 'tarot' ? (
+                <Image
+                  src="/ui/sangdam_taromiao.png"
+                  alt="TarotNyang"
+                  width={260}
+                  height={260}
+                  className="settings-mascot-img"
+                  priority
+                />
+              ) : (
+                /* 🆕 v82.20: Luna 7×7 49프레임 애니 스프라이트 */
+                <LunaSprite
+                  preset="setting"
+                  size={260}
+                  circle={false}
+                  speed="normal"
+                  className="settings-mascot-img"
+                />
+              )}
             </motion.div>
           </AnimatePresence>
           {/* 별/꽃 장식 */}
