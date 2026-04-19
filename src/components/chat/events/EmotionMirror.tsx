@@ -8,6 +8,7 @@ import type { SuggestionMeta } from '@/types/engine.types';
 import { useTypewriter } from '@/hooks/useTypewriter';
 import TheaterOpening from './TheaterOpening';
 import CinematicTransition from './CinematicTransition';
+import LunaSprite from '@/components/common/LunaSprite';
 
 // 🆕 v82.8: 루나극장 진입 — 3초 글로우 + 말풍선 모핑 확장
 //   `true`  → CinematicTransition (3s pre-glow → bubble morph → film frame → explosion)
@@ -582,22 +583,21 @@ function VNScene({
           >
             <AnimatePresence mode="wait">
               {(phase === 'message' || phase === 'choice') ? (
-                /* 메시지/선택지: igmg.png 루나 등장 */
+                /* 🆕 v82.17: 메시지/선택지 — 애니메이션 되는 LunaSprite 로 교체 (8프레임 순환) */
                 <motion.div
                   key="special-luna"
                   initial={{ scale: 0.5, opacity: 0, y: 60 }}
                   animate={{ scale: 1, opacity: 1, y: 0 }}
                   exit={{ scale: 0.8, opacity: 0, y: 30 }}
                   transition={{ duration: 0.6, ease: [0.34, 1.56, 0.64, 1] }}
-                  style={{
-                    width: spriteSize,
-                    height: spriteSize * (384 / 344),
-                    backgroundImage: 'url(/char_img/igmg.png)',
-                    backgroundSize: 'contain',
-                    backgroundPosition: 'center bottom',
-                    backgroundRepeat: 'no-repeat',
-                  }}
-                />
+                >
+                  <LunaSprite
+                    size={spriteSize}
+                    fullBody
+                    circle={false}
+                    speed="normal"
+                  />
+                </motion.div>
               ) : (
                 /* playing/reveal: 현재 화자 스프라이트 (솔로/듀오 모두) */
                 <motion.div

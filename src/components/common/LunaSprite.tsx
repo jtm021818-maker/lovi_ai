@@ -33,6 +33,10 @@ interface LunaSpriteProps {
   circle?: boolean;
   /** head 만 보이게 crop (aspect 1:2 이므로 기본 true — 원형 + 위쪽 offset) */
   headCrop?: boolean;
+  /** 🆕 v82.17: 전신 모드 — height 를 size×2 로 렌더 (VN 극장/방 마스코트 등) */
+  fullBody?: boolean;
+  /** 커스텀 높이 (fullBody 보다 우선, 비율 자유) */
+  height?: number;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -44,6 +48,8 @@ export default function LunaSprite({
   paused = false,
   circle = true,
   headCrop = true,
+  fullBody = false,
+  height,
   className,
   style,
 }: LunaSpriteProps) {
@@ -58,11 +64,21 @@ export default function LunaSprite({
     return () => window.clearInterval(id);
   }, [ms, paused]);
 
-  // 1:2 aspect 프레임을 1:1 viewport 에 맞추려면 width 는 size, height 는 size*2
-  // 원형 + headCrop 이면 위쪽 (머리) 만 보이도록 element 는 size×size 로 자르고
-  // 내부 스프라이트 layer 는 size 너비 / (size×2) 높이
+  // 🆕 v82.17: 모드별 viewport 계산
+  //   fullBody:     size × size*2 (1:2 전신)
+  //   height 지정: size × height (자유 비율)
+  //   headCrop:     size × size + 내부 sprite 는 size × size*2 로 상단 crop
+  //   default(아무것도 X): size × size + 프레임 1:1 압축
+  const viewportW = size;
+  const viewportH = height ?? (fullBody ? size * 2 : size);
+
+  // 내부 스프라이트 프레임 크기
+  // headCrop 이면 프레임을 size × size*2 로 (1:2 원본 비율 유지) → 상단만 보임
+  // fullBody 이면 프레임 = viewport 그대로
+  // 나머지: 프레임 = viewport (비율 왜곡 OK)
   const spriteW = size;
-  const spriteH = headCrop ? size * 2 : size;
+  const spriteH = headCrop && !fullBody && !height ? size * 2 : viewportH;
+
   const col = frame % COLS;
   const row = Math.floor(frame / COLS);
 
@@ -70,8 +86,8 @@ export default function LunaSprite({
     <div
       className={className}
       style={{
-        width: size,
-        height: size,
+        width: viewportW,
+        height: viewportH,
         borderRadius: circle ? '50%' : 0,
         overflow: 'hidden',
         position: 'relative',
