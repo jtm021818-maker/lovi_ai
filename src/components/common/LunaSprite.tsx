@@ -22,6 +22,29 @@ import { useEffect, useState } from 'react';
 const COLS = 5;
 const ROWS = 5;
 const TOTAL_FRAMES = COLS * ROWS; // 25
+const SPRITE_URL = '/splite/luna_sprite_1.png';
+
+// 🆕 v82.19: 모듈 레벨 캐시 — 이미지 한 번 로드되면 이후 LunaSprite 인스턴스들은 즉시 보여줌
+let SPRITE_LOADED = false;
+let LOAD_PROMISE: Promise<void> | null = null;
+
+function ensureSpriteLoaded(): Promise<void> {
+  if (SPRITE_LOADED) return Promise.resolve();
+  if (LOAD_PROMISE) return LOAD_PROMISE;
+  LOAD_PROMISE = new Promise<void>((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      SPRITE_LOADED = true;
+      resolve();
+    };
+    img.onerror = () => {
+      SPRITE_LOADED = true; // 실패해도 플레이스홀더 해제
+      resolve();
+    };
+    img.src = SPRITE_URL;
+  });
+  return LOAD_PROMISE;
+}
 
 interface LunaSpriteProps {
   size?: number;
@@ -45,19 +68,24 @@ export default function LunaSprite({
   style,
 }: LunaSpriteProps) {
   const [frame, setFrame] = useState(0);
-  // 25프레임 × ms = loop 총 시간
-  // 기본 100ms × 25 = 2.5s
-  // slow 180ms × 25 = 4.5s
-  // fast 60ms × 25 = 1.5s
+  const [loaded, setLoaded] = useState(SPRITE_LOADED);
   const ms = frameMs ?? (speed === 'slow' ? 180 : speed === 'fast' ? 60 : 100);
 
+  // 🆕 v82.19: 이미지 로드 감지 — 로드 완료 후 페이드인
   useEffect(() => {
-    if (paused) return;
+    if (SPRITE_LOADED) { setLoaded(true); return; }
+    let cancelled = false;
+    ensureSpriteLoaded().then(() => { if (!cancelled) setLoaded(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (paused || !loaded) return;
     const id = window.setInterval(() => {
       setFrame((f) => (f + 1) % TOTAL_FRAMES);
     }, ms);
     return () => window.clearInterval(id);
-  }, [ms, paused]);
+  }, [ms, paused, loaded]);
 
   const col = frame % COLS;
   const row = Math.floor(frame / COLS);
@@ -79,18 +107,37 @@ export default function LunaSprite({
         ...style,
       }}
     >
+      {/* 🆕 v82.19: 로드 전 플레이스홀더 (부드러운 pulse) */}
+      {!loaded && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'linear-gradient(135deg, #fde1c4 0%, #f9a8d4 50%, #c4b5fd 100%)',
+            animation: 'lunaSpritePulse 1.2s ease-in-out infinite',
+          }}
+        />
+      )}
+      <style>{`
+        @keyframes lunaSpritePulse {
+          0%, 100% { opacity: 0.6; }
+          50% { opacity: 1; }
+        }
+      `}</style>
       <div
         style={{
           position: 'absolute',
           top: 0,
           left: 0,
-          width: frameSize * COLS,   // size × 5
-          height: frameSize * ROWS,  // size × 5
-          backgroundImage: 'url(/splite/luna_sprite_1.png)',
+          width: frameSize * COLS,
+          height: frameSize * ROWS,
+          backgroundImage: `url(${SPRITE_URL})`,
           backgroundSize: `${frameSize * COLS}px ${frameSize * ROWS}px`,
           backgroundRepeat: 'no-repeat',
           transform: `translate(-${col * frameSize}px, -${row * frameSize}px)`,
           pointerEvents: 'none',
+          opacity: loaded ? 1 : 0,
+          transition: 'opacity 0.3s ease-out',
         }}
       />
     </div>
