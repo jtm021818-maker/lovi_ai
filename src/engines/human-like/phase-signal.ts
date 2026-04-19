@@ -24,9 +24,10 @@ const SITUATION_CLEAR_LENIENT = /\[SITUATION_CLEAR:([^\]]+)\]\s*/;
 // 🆕 ACE v4: 루나 이야기 준비 태그 — [STORY_READY:opener|situation|innerThought|cliffhanger]
 // AI가 자기개방으로 "나도 비슷한 거 겪어봤거든" 이야기를 생성하면 출력
 const STORY_READY_REGEX = /\[STORY_READY:([^|\]]+)\|([^|\]]+)\|([^|\]]+)\|([^\]]+)\]\s*/;
-// 🆕 ACE v4: 루나 작전회의 준비 태그 — [STRATEGY_READY:opener|situation|draftHook|roleplayHook|panelHook]
-// AI가 MIRROR 끝에서 "자 이제 작전 짜자" 모드 진입할 때 출력
-const STRATEGY_READY_REGEX = /\[STRATEGY_READY:([^|\]]+)\|([^|\]]+)\|([^|\]]+)\|([^|\]]+)\|([^\]]+)\]\s*/;
+// 🆕 ACE v4: 루나 작전회의 준비 태그
+//   🆕 v82.11: 2필드 (opener|situation) 로 축소 — hook 3개 optional (하위 호환)
+//   전체 형식: [STRATEGY_READY:opener|situation] 또는 [STRATEGY_READY:opener|situation|draftHook|roleplayHook|panelHook]
+const STRATEGY_READY_REGEX = /\[STRATEGY_READY:([^|\]]+)\|([^|\]]+)(?:\|([^|\]]*))?(?:\|([^|\]]*))?(?:\|([^\]]*))?\]\s*/;
 
 // 🆕 v35: 모드별 SOLVE 태그
 // 💬 톤 선택: [TONE_SELECT:부드럽게|솔직하게|단호하게]
@@ -232,15 +233,16 @@ export function parsePhaseSignal(response: string): {
   }
 
   // 🆕 ACE v4: [STRATEGY_READY:...] 태그 감지 + 파싱 + 제거
+  //   🆕 v82.11: 2필드 기본 / hook 필드는 optional. Luna 가 UI 레벨에서 전략 자동 선택하므로 hook 내용 불필요.
   let strategyData: ParsedStrategyData | null = null;
   const strategyMatch = cleaned.match(STRATEGY_READY_REGEX);
   if (strategyMatch) {
     strategyData = {
-      opener: strategyMatch[1].trim(),
-      situationSummary: strategyMatch[2].trim(),
-      draftHook: strategyMatch[3].trim(),
-      roleplayHook: strategyMatch[4].trim(),
-      panelHook: strategyMatch[5].trim(),
+      opener: (strategyMatch[1] ?? '').trim(),
+      situationSummary: (strategyMatch[2] ?? '').trim(),
+      draftHook: (strategyMatch[3] ?? '').trim(),
+      roleplayHook: (strategyMatch[4] ?? '').trim(),
+      panelHook: (strategyMatch[5] ?? '').trim(),
     };
     cleaned = cleaned.replace(STRATEGY_READY_REGEX, '').trim();
   }

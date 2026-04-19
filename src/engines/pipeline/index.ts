@@ -2015,7 +2015,11 @@ ${researchResult.insight}
           // 🆕 ACE v4: AI가 [STRATEGY_READY:...] 태그를 출력했으면 → 루나의 작전회의 이벤트 발동
           // 🆕 v43: canFireEventType으로 이중 체크
           // 🆕 v78.4: BRIDGE(같이 준비) Phase 에서만 발동. 다른 Phase 에서 AI 가 태그 출력해도 무시.
-          if (hlrePost.strategyData && newPhaseV2 === 'BRIDGE' && canFireEventType('LUNA_STRATEGY')) {
+          // 🆕 v82.11: MIRROR 허용 — STRATEGY_READY 태그 자체가 BRIDGE 전환 신호.
+          //   Phase 재판단은 line 2154+ 에서 일어나서 여기선 newPhaseV2 가 아직 MIRROR 일 수 있음.
+          //   태그가 있으면 이번 턴에 BRIDGE 로 넘어갈 게 확정 → MIRROR 도 허용.
+          //   이전: 'BRIDGE' 만 허용 → 태그 파싱돼도 이벤트 X → 다음 턴 fallback (SOLVE 로 튀는 케이스 있었음)
+          if (hlrePost.strategyData && (newPhaseV2 === 'BRIDGE' || newPhaseV2 === 'MIRROR') && canFireEventType('LUNA_STRATEGY')) {
             const { opener: stratOpener, situationSummary, draftHook, roleplayHook, panelHook } = hlrePost.strategyData;
             eventsToFire.push(createLunaStrategy(stratOpener, situationSummary, draftHook, roleplayHook, panelHook));
             updatedCompletedEvents.push('LUNA_STRATEGY');

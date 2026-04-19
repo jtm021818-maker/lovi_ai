@@ -91,6 +91,12 @@ export default function MessageBubble({ message, isTyping, onSpeak, isSpeaking, 
     .replace(/\[FX[^\]\n]*/gi, '')
     // 🆕 v81: OPERATION_COMPLETE 태그 안전망
     .replace(/\[OPERATION_COMPLETE[^\]]*\]/gi, '')
+    // 🆕 v82.11: Phase 전환 / 이벤트 트리거 메타 태그 방어 (서버 필터 실패 / DB 캐시 대비)
+    //   STRATEGY_READY, MIND_READ_READY, STORY_READY, ACTION_PLAN, WARM_WRAP,
+    //   TAROT_READY, PATTERN_MIRROR_READY, THINKING_DEEP, PHASE_SIGNAL, SITUATION_CLEAR,
+    //   TONE_SELECT, DRAFT_CARD, ROLEPLAY_FEEDBACK, PANEL_REPORT, IDEA_REFINE,
+    //   REQUEST_REANALYSIS, LEFT_BRAIN_HINT, RP_IN, RP_OUT
+    .replace(/\[(?:STRATEGY_READY|MIND_READ_READY|STORY_READY|ACTION_PLAN|WARM_WRAP|TAROT_READY|PATTERN_MIRROR_READY|THINKING_DEEP|PHASE_SIGNAL|SITUATION_CLEAR|TONE_SELECT|DRAFT_CARD|ROLEPLAY_FEEDBACK|PANEL_REPORT|IDEA_REFINE|REQUEST_REANALYSIS|LEFT_BRAIN_HINT|RP_IN|RP_OUT)(?::[^\]]*)?\]/gi, '')
     // 🆕 v42: 빈 대괄호 [] 제거 (선택지 제거 후 남은 잔해)
     .replace(/\[\s*\]/g, '')
     // 🆕 v82.10: 정정 메시지 prefix 제거 — 뱃지로 대체 렌더
