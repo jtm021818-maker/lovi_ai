@@ -10,7 +10,7 @@
  * React state + 픽셀 기반 transform 으로 안정적 애니메이션.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 // ─── Preset 정의 ──────────────────────────────────────
 export const SPRITE_PRESETS = {
@@ -55,6 +55,8 @@ interface LunaSpriteProps {
   src?: string;
   cols?: number;
   rows?: number;
+  /** 프레임 종횡비 (height / width) — 1 = 정사각형(기본), >1 = 세로 긴 프레임 */
+  frameAspect?: number;
   speed?: 'slow' | 'normal' | 'fast';
   /** 프레임 ms (speed 보다 우선) */
   frameMs?: number;
@@ -71,6 +73,7 @@ export default function LunaSprite({
   src,
   cols,
   rows,
+  frameAspect = 1,
   speed = 'normal',
   frameMs,
   paused = false,
@@ -87,10 +90,11 @@ export default function LunaSprite({
 
   const [frame, setFrame] = useState(0);
   const [loaded, setLoaded] = useState(LOADED[finalUrl] ?? false);
+  const [inView, setInView] = useState(true);
+  const [tabVisible, setTabVisible] = useState(true);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  // 프레임 ms: 프리셋마다 총 loop 시간 약 2.5초 근처로 맞춤
-  // 25프레임 × 100ms = 2.5s
-  // 49프레임 × 50ms = 2.45s
+  // 프레임 ms: 프리셋마다 총 loop 시간 약 2.5초 근처
   const defaultMs = totalFrames >= 40 ? 55 : 100;
   const ms = frameMs ?? (
     speed === 'slow' ? defaultMs * 1.6 :
@@ -106,25 +110,58 @@ export default function LunaSprite({
     return () => { cancelled = true; };
   }, [finalUrl]);
 
-  // 프레임 순환
+  // 🆕 v82.21: 탭 숨김 감지 (다른 브라우저 탭 / 앱 백그라운드 시 정지)
   useEffect(() => {
-    if (paused || !loaded) return;
-    const id = window.setInterval(() => {
-      setFrame((f) => (f + 1) % totalFrames);
-    }, ms);
-    return () => window.clearInterval(id);
-  }, [ms, paused, loaded, totalFrames]);
+    if (typeof document === 'undefined') return;
+    const onVisibility = () => setTabVisible(document.visibilityState === 'visible');
+    onVisibility();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+
+  // 🆕 v82.21: IntersectionObserver — 스크롤로 화면 밖이면 정지
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) setInView(entry.isIntersecting);
+      },
+      { threshold: 0.01 },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  // 🆕 v82.21: requestAnimationFrame 기반 timing (setInterval 대비 정확 + 탭 숨김 시 자동 throttle)
+  //   - paused / 미로드 / 오프스크린 / 탭 숨김 중이면 루프 정지 (배터리 절약)
+  useEffect(() => {
+    if (paused || !loaded || !inView || !tabVisible) return;
+    let rafId = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      if (now - last >= ms) {
+        setFrame((f) => (f + 1) % totalFrames);
+        last = now;
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [ms, paused, loaded, totalFrames, inView, tabVisible]);
 
   const col = frame % finalCols;
   const row = Math.floor(frame / finalCols);
-  const frameSize = size; // 정사각형 viewport 가정
+  const frameW = size;
+  const frameH = size * frameAspect;
 
   return (
     <div
+      ref={containerRef}
       className={className}
       style={{
-        width: size,
-        height: size,
+        width: frameW,
+        height: frameH,
         borderRadius: circle ? '50%' : 0,
         overflow: 'hidden',
         position: 'relative',
@@ -155,12 +192,12 @@ export default function LunaSprite({
           position: 'absolute',
           top: 0,
           left: 0,
-          width: frameSize * finalCols,
-          height: frameSize * finalRows,
+          width: frameW * finalCols,
+          height: frameH * finalRows,
           backgroundImage: `url(${finalUrl})`,
-          backgroundSize: `${frameSize * finalCols}px ${frameSize * finalRows}px`,
+          backgroundSize: `${frameW * finalCols}px ${frameH * finalRows}px`,
           backgroundRepeat: 'no-repeat',
-          transform: `translate(-${col * frameSize}px, -${row * frameSize}px)`,
+          transform: `translate(-${col * frameW}px, -${row * frameH}px)`,
           pointerEvents: 'none',
           opacity: loaded ? 1 : 0,
           transition: 'opacity 0.3s ease-out',

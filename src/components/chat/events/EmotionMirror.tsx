@@ -88,6 +88,20 @@ const SPRITE_ROWS = 2;
 // 프레임 인덱스 (0-7): 0=기본, 1=슬픔, 2=화남, 3=생각, 4=놀람, 5=웃음, 6=걱정, 7=당당
 type SpriteFrame = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
+/**
+ * 여자역할 전용 애니메이션 오버라이드 (v82.x):
+ *   1 (슬픔) → luna_sprite_movie_1.png (7×7, 49프레임)
+ *   5 (웃음) → luna_sprite_movie_2.png (7×7, 49프레임)
+ * 원본 해상도 1350×2400 → 프레임 aspect 2400/1350 ≈ 1.778 (세로 긴 프레임)
+ */
+const FEMALE_MOVIE_SPRITE: Partial<Record<SpriteFrame, string>> = {
+  1: '/splite/luna_sprite_movie_1.png',
+  5: '/splite/luna_sprite_movie_2.png',
+};
+const MOVIE_SPRITE_COLS = 7;
+const MOVIE_SPRITE_ROWS = 7;
+const MOVIE_SPRITE_FRAME_ASPECT = 2400 / 1350 / (MOVIE_SPRITE_ROWS / MOVIE_SPRITE_COLS); // = (2400/7)/(1350/7) ≈ 1.778
+
 /** 감정/상황에 맞는 스프라이트 프레임 선택 */
 function pickSpriteFrame(emotion: string, isReveal: boolean): SpriteFrame {
   if (isReveal) return 3; // 생각/깨달음
@@ -593,6 +607,33 @@ function VNScene({
                 >
                   <LunaSprite
                     size={spriteSize}
+                    circle={false}
+                    speed="normal"
+                  />
+                </motion.div>
+              ) : (activeDuoSheet === femaleSheet && FEMALE_MOVIE_SPRITE[currentFrame]) ? (
+                /* 🆕 여자역할 슬픔(1)/웃음(5) — 49프레임 애니메이션 스프라이트로 교체 */
+                <motion.div
+                  key={`movie-${duoSpeakerKey}-${currentFrame}`}
+                  initial={{ opacity: 0, scale: 0.88, x: currentLineGender === 'male' ? -30 : 30 }}
+                  animate={{ opacity: 1, scale: 1, x: 0 }}
+                  exit={{ opacity: 0, scale: 0.88, x: currentLineGender === 'male' ? 30 : -30 }}
+                  transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+                  style={{
+                    width: spriteSize,
+                    height: spriteSize * (384 / 344),
+                    display: 'flex',
+                    alignItems: 'flex-end',
+                    justifyContent: 'center',
+                    filter: 'brightness(1.05) saturate(1.1)',
+                  }}
+                >
+                  <LunaSprite
+                    size={spriteSize * (384 / 344) / MOVIE_SPRITE_FRAME_ASPECT}
+                    src={FEMALE_MOVIE_SPRITE[currentFrame]!}
+                    cols={MOVIE_SPRITE_COLS}
+                    rows={MOVIE_SPRITE_ROWS}
+                    frameAspect={MOVIE_SPRITE_FRAME_ASPECT}
                     circle={false}
                     speed="normal"
                   />
