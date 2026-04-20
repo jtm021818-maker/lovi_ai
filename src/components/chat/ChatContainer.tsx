@@ -22,6 +22,9 @@ import MindReading from './events/MindReading';
 import InsightCard from './events/InsightCard';
 import EmotionMirror from './events/EmotionMirror';
 import LunaStory from './events/LunaStory';
+// 🆕 v84: 루나 자율 판단형 인터넷 검색 이벤트
+import SongRecommendation from './events/SongRecommendation';
+import DateSpotRecommendation from './events/DateSpotRecommendation';
 import LunaStrategy from './events/LunaStrategy';
 // 🆕 v81: BRIDGE 몰입 모드
 import ModeSelector from '@/components/modes/ModeSelector';
@@ -483,6 +486,13 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
       case 'TAROT_DRAW': return <TarotDraw key={`event-${idx}`} data={event.data as any} onChoice={(val) => handleSuggestionSelect(val, { source: 'suggestion', context: { tarotEvent: 'TAROT_DRAW' } })} />;
       case 'TAROT_AXIS_COLLECT': return <TarotAxisCollect key={`event-${idx}`} data={event.data as unknown as TarotAxisCollectData} onChoice={(val) => handleSuggestionSelect(val, { source: 'suggestion', context: { tarotEvent: 'TAROT_AXIS_COLLECT', spreadType: val } })} disabled={isLoading} />;
       case 'TAROT_INSIGHT': return <TarotInsight key={`event-${idx}`} data={event.data as unknown as TarotInsightData} disabled={isLoading} />;
+      // 🆕 v84: 루나 자율 판단형 인터넷 검색 이벤트 (전 Phase)
+      case 'SONG_SEARCHING':
+      case 'SONG_RECOMMENDATION':
+        return <SongRecommendation key={`event-${idx}`} event={event} disabled={isLoading} />;
+      case 'DATE_SPOT_SEARCHING':
+      case 'DATE_SPOT_RECOMMENDATION':
+        return <DateSpotRecommendation key={`event-${idx}`} event={event} disabled={isLoading} />;
       default: return null;
     }
   };

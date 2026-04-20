@@ -439,6 +439,31 @@ export function useChat(sessionId: string): UseChatReturn {
 
               case 'phase_event': {
                 const newEvent = event.data as unknown as PhaseEvent;
+
+                // 🆕 v84: SEARCHING → RECOMMENDATION 덮어쓰기 (같은 자리 대체)
+                const SEARCHING_PAIR: Record<string, string> = {
+                  'SONG_RECOMMENDATION': 'SONG_SEARCHING',
+                  'DATE_SPOT_RECOMMENDATION': 'DATE_SPOT_SEARCHING',
+                };
+                const searchingType = SEARCHING_PAIR[newEvent.type];
+                if (searchingType) {
+                  firedEventTypesRef.current.add(newEvent.type);
+                  console.log(`[useChat] 🔄 ${searchingType} → ${newEvent.type} 덮어쓰기`);
+                  setPhaseEvents((prev) => {
+                    const sIdx = prev.findIndex((e) => e.type === searchingType);
+                    if (sIdx >= 0) {
+                      const next = [...prev];
+                      next[sIdx] = newEvent;
+                      return next;
+                    }
+                    return [...prev, newEvent];
+                  });
+                  const pIdx = pendingEventsBuffer.findIndex((e) => e.type === searchingType);
+                  if (pIdx >= 0) pendingEventsBuffer[pIdx] = newEvent;
+                  else pendingEventsBuffer.push(newEvent);
+                  break;
+                }
+
                 // 🆕 v20: ref 기반 중복 방지 (React 배칭 이슈 완전 차단)
                 if (firedEventTypesRef.current.has(newEvent.type)) {
                   console.log(`[useChat] ⚠️ 중복 이벤트 무시 (ref): ${newEvent.type}`);

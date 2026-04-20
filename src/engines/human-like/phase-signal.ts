@@ -62,10 +62,32 @@ const LUNA_THOUGHT_REGEX = /\[LUNA_THOUGHT:([^\]]+)\]\s*/;
 //   next_step: (선택) 다음 단계 힌트
 const OPERATION_COMPLETE_REGEX = /\[OPERATION_COMPLETE:([a-z_]+)\|([^|\]]+)(?:\|([^\]]+))?\]\s*/i;
 
+// 🆕 v84: 🎵 노래 추천 — [SONG_READY:mood|context|preference]
+//   루나가 맥락 판단으로 인터넷 검색 기반 노래 추천을 발동하고 싶을 때.
+//   3번째 필드(preference) 는 선택.
+const SONG_READY_REGEX = /\[SONG_READY:([^|\]]+)\|([^|\]]+)(?:\|([^\]]*))?\]\s*/;
+
+// 🆕 v84: 📍 데이트 장소 — [DATE_SPOT_READY:area|vibe|requirements]
+const DATE_SPOT_READY_REGEX = /\[DATE_SPOT_READY:([^|\]]+)\|([^|\]]+)(?:\|([^\]]*))?\]\s*/;
+
 export interface ParsedOperationComplete {
   mode: string;
   summary: string;
   nextStep?: string;
+}
+
+// 🆕 v84: 노래 추천 태그 파싱 데이터
+export interface ParsedSongReadyData {
+  mood: string;
+  context: string;
+  preference?: string;
+}
+
+// 🆕 v84: 데이트 장소 추천 태그 파싱 데이터
+export interface ParsedDateSpotReadyData {
+  area: string;
+  vibe: string;
+  requirements?: string;
 }
 
 /** 🆕 ACE v4: 루나 이야기 데이터 (AI 응답에서 파싱) */
@@ -185,6 +207,9 @@ export function parsePhaseSignal(response: string): {
   coreProblem: string | null;
   // 🆕 v81: BRIDGE 몰입 모드 완료 태그
   operationComplete: ParsedOperationComplete | null;
+  // 🆕 v84: 인터넷 검색 발동 태그 (루나 자율 판단)
+  songReady: ParsedSongReadyData | null;
+  dateSpotReady: ParsedDateSpotReadyData | null;
 } {
   let cleaned = response;
 
@@ -380,6 +405,34 @@ export function parsePhaseSignal(response: string): {
   // 방어적 정리 — 잘린 태그 제거
   cleaned = cleaned.replace(/\[OPERATION_COMPLETE[^\]]*\]/gi, '').trim();
 
+  // 🆕 v84: 🎵 [SONG_READY:mood|context|preference] — 노래 추천 요청
+  let songReady: ParsedSongReadyData | null = null;
+  const songMatch = cleaned.match(SONG_READY_REGEX);
+  if (songMatch) {
+    songReady = {
+      mood: songMatch[1].trim(),
+      context: songMatch[2].trim(),
+      preference: songMatch[3]?.trim() || undefined,
+    };
+    cleaned = cleaned.replace(SONG_READY_REGEX, '').trim();
+    console.log(`[PhaseSignal] 🎵 노래 추천 요청: mood="${songReady.mood}" context="${songReady.context}"`);
+  }
+  cleaned = cleaned.replace(/\[SONG_READY[^\]]*\]/gi, '').trim();
+
+  // 🆕 v84: 📍 [DATE_SPOT_READY:area|vibe|requirements] — 데이트 장소 추천 요청
+  let dateSpotReady: ParsedDateSpotReadyData | null = null;
+  const dateSpotMatch = cleaned.match(DATE_SPOT_READY_REGEX);
+  if (dateSpotMatch) {
+    dateSpotReady = {
+      area: dateSpotMatch[1].trim(),
+      vibe: dateSpotMatch[2].trim(),
+      requirements: dateSpotMatch[3]?.trim() || undefined,
+    };
+    cleaned = cleaned.replace(DATE_SPOT_READY_REGEX, '').trim();
+    console.log(`[PhaseSignal] 📍 데이트 장소 추천 요청: area="${dateSpotReady.area}" vibe="${dateSpotReady.vibe}"`);
+  }
+  cleaned = cleaned.replace(/\[DATE_SPOT_READY[^\]]*\]/gi, '').trim();
+
   const match = cleaned.match(SIGNAL_REGEX);
   if (!match) return {
     cleanResponse: cleaned,
@@ -402,6 +455,8 @@ export function parsePhaseSignal(response: string): {
     situationSummary,
     coreProblem,
     operationComplete,
+    songReady,
+    dateSpotReady,
   };
 
   return {
@@ -425,6 +480,8 @@ export function parsePhaseSignal(response: string): {
     situationSummary,
     coreProblem,
     operationComplete,
+    songReady,
+    dateSpotReady,
   };
 }
 

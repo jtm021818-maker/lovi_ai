@@ -84,6 +84,9 @@ function friendlyEventName(kind: EventKind): string {
     WARM_WRAP: '따뜻한 마무리',
     EMOTION_MIRROR: '감정 거울 카드',
     PATTERN_MIRROR: '반복 패턴 짚기',
+    // 🆕 v84
+    SONG_RECOMMENDATION: '노래 추천',
+    DATE_SPOT_RECOMMENDATION: '데이트 장소 추천',
   };
   return map[kind] ?? String(kind);
 }

@@ -160,7 +160,14 @@ export type PhaseEventType =
   // 🆕 v39: BRIDGE→SOLVE→EMPOWER 재설계 이벤트
   // ──────────────────────────────
   | 'ACTION_PLAN'           // 🎯 오늘의 작전 — SOLVE 마지막 (실행 계획 확정)
-  | 'WARM_WRAP';            // 💜 오늘의 마무리 — EMPOWER (다독이기 + 재방문 약속)
+  | 'WARM_WRAP'             // 💜 오늘의 마무리 — EMPOWER (다독이기 + 재방문 약속)
+  // ──────────────────────────────
+  // 🆕 v84: 루나 자율 판단형 인터넷 검색 이벤트 (전 Phase)
+  // ──────────────────────────────
+  | 'SONG_SEARCHING'           // 🎵 v84: 노래 검색 진행 중
+  | 'SONG_RECOMMENDATION'      // 🎵 v84: 노래 추천 결과 (Gemini grounded)
+  | 'DATE_SPOT_SEARCHING'      // 📍 v84: 데이트 장소 검색 진행 중
+  | 'DATE_SPOT_RECOMMENDATION';// 📍 v84: 데이트 장소 추천 결과 (Gemini grounded)
 
 /** Phase 이벤트 데이터 */
 export interface PhaseEvent {
@@ -410,6 +417,81 @@ export interface WarmWrapData {
     emoji: string;
     value: 'thanks' | 'revisit';
   }>;
+}
+
+// ──────────────────────────────────────
+// 🆕 v84: 인터넷 검색 이벤트 데이터 (Gemini grounded)
+// ──────────────────────────────────────
+
+/** 🎵 v84: 노래 추천 카드 — 개별 곡 */
+export interface SongCard {
+  title: string;
+  artist: string;
+  /** 왜 이 곡 (한 줄, ~40자) */
+  reason: string;
+  year?: string;
+  /** YouTube 검색 딥링크 */
+  searchLink: string;
+}
+
+/** 🎵 v84: 노래 추천 이벤트 데이터 */
+export interface SongRecommendationData {
+  /** 루나 친구 말투 오프너 (~30자) */
+  openerMsg: string;
+  /** 상황 요약 (루나 표현) */
+  mood: string;
+  /** 3곡 */
+  songs: SongCard[];
+  /** 마무리 한마디 (~30자) */
+  lunaComment: string;
+  /** 참고 URL들 (grounding sources) */
+  sources?: string[];
+  /** 실제 실행된 검색어들 (디버그/출처 표시) */
+  searchQueries?: string[];
+  /** Google Search ToS — 필수 렌더링 HTML */
+  renderedContent?: string;
+}
+
+/** 🎵 v84: 노래 검색 진행 중 상태 (UI 연출용) */
+export interface SongSearchingData {
+  /** 검색 컨텍스트 (분위기 한 줄) */
+  mood: string;
+}
+
+/** 📍 v84: 데이트 장소 — 개별 스팟 */
+export interface DateSpot {
+  name: string;
+  /** "카페" | "전시관" | "바" 등 */
+  type: string;
+  address?: string;
+  /** 한 줄 분위기 */
+  vibe: string;
+  /** 리뷰에서 공통 언급 특징 2~3줄 */
+  reviewSummary: string;
+  /** 가격대 힌트 */
+  priceHint?: string;
+  /** 네이버 지도 검색 딥링크 */
+  mapLink: string;
+  /** 리뷰/블로그 원문 URL */
+  sourceUri?: string;
+}
+
+/** 📍 v84: 데이트 장소 추천 이벤트 데이터 */
+export interface DateSpotRecommendationData {
+  openerMsg: string;
+  area: string;
+  vibe: string;
+  spots: DateSpot[];
+  lunaComment: string;
+  sources?: string[];
+  searchQueries?: string[];
+  renderedContent?: string;
+}
+
+/** 📍 v84: 데이트 장소 검색 진행 중 상태 */
+export interface DateSpotSearchingData {
+  area: string;
+  vibe: string;
 }
 
 /** 🆕 v35: 작전 모드 타입 — SOLVE 단계의 특화 모드 */

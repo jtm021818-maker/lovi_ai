@@ -36,6 +36,11 @@ import {
   ActionPlanData,
   WarmWrapData,
   StrategyMode,
+  // 🆕 v84: 루나 자율 판단형 인터넷 검색 이벤트
+  SongRecommendationData,
+  SongSearchingData,
+  DateSpotRecommendationData,
+  DateSpotSearchingData,
 } from '@/types/engine.types';
 import { drawCards, getSingleSpread, getThreeCardSpread, getLoveSpread, getUnrequitedSpread, getReconnectionSpread, getPaceSpread, getAvoidantSpread, getYesNoSpread } from '@/engines/tarot';
 // spread-recommender는 pipeline에서 자동 선택용으로 사용
@@ -1391,5 +1396,77 @@ export function createWarmWrap(
     type: 'WARM_WRAP' as PhaseEventType,
     phase: 'EMPOWER',
     data: data as unknown as Record<string, unknown>,
+  };
+}
+
+// ============================================
+// 🆕 v84: 루나 자율 판단 인터넷 검색 이벤트 (전 Phase)
+// ============================================
+
+/**
+ * 🎵 SONG_SEARCHING — 노래 검색 진행 중 플레이스홀더 이벤트
+ *
+ * Luna 가 [SONG_READY] 태그를 내면 pipeline 이 즉시 이 이벤트를 뿌려서 UI 진입.
+ * 실제 grounded 결과가 오면 같은 자리에 SONG_RECOMMENDATION 으로 대체됨.
+ *
+ * @param mood 검색 컨텍스트 (분위기 한 줄, UI 연출용)
+ * @param currentPhase 현재 Phase — 이벤트 phase 필드에 기록
+ */
+export function createSongSearching(
+  mood: string,
+  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+): PhaseEvent {
+  const data: SongSearchingData = { mood };
+  return {
+    type: 'SONG_SEARCHING' as PhaseEventType,
+    phase: currentPhase,
+    data: data as unknown as Record<string, unknown>,
+  };
+}
+
+/**
+ * 🎵 SONG_RECOMMENDATION — 노래 추천 완성 카드 이벤트
+ *
+ * @param payload Gemini grounded search 결과 (SongRecommendationData)
+ * @param currentPhase 현재 Phase
+ */
+export function createSongRecommendation(
+  payload: SongRecommendationData,
+  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+): PhaseEvent {
+  return {
+    type: 'SONG_RECOMMENDATION' as PhaseEventType,
+    phase: currentPhase,
+    data: payload as unknown as Record<string, unknown>,
+  };
+}
+
+/**
+ * 📍 DATE_SPOT_SEARCHING — 장소 검색 진행 중 플레이스홀더 이벤트
+ */
+export function createDateSpotSearching(
+  area: string,
+  vibe: string,
+  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+): PhaseEvent {
+  const data: DateSpotSearchingData = { area, vibe };
+  return {
+    type: 'DATE_SPOT_SEARCHING' as PhaseEventType,
+    phase: currentPhase,
+    data: data as unknown as Record<string, unknown>,
+  };
+}
+
+/**
+ * 📍 DATE_SPOT_RECOMMENDATION — 장소 추천 완성 카드 이벤트
+ */
+export function createDateSpotRecommendation(
+  payload: DateSpotRecommendationData,
+  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+): PhaseEvent {
+  return {
+    type: 'DATE_SPOT_RECOMMENDATION' as PhaseEventType,
+    phase: currentPhase,
+    data: payload as unknown as Record<string, unknown>,
   };
 }

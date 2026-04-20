@@ -384,6 +384,9 @@ export function formatHandoffForPrompt(handoff: LeftToRightHandoff): string {
       ACTION_PLAN: '[ACTION_PLAN:type|title|coreAction|sharedResult|planB|timing|cheer]',
       WARM_WRAP: '[WARM_WRAP:strengthFound|emotionShift|nextStep|lunaMessage]',
       PATTERN_MIRROR: '[PATTERN_MIRROR_READY]',
+      // 🆕 v84: 루나 자율 판단형 인터넷 검색 이벤트
+      SONG_RECOMMENDATION: '[SONG_READY:mood|context|preference]',
+      DATE_SPOT_RECOMMENDATION: '[DATE_SPOT_READY:area|vibe|requirements]',
     };
     const tag = rec.suggested ? (tagMap[rec.suggested] ?? null) : null;
     lines.push(`💡 **${rec.suggested}** 이벤트 어울릴 것 같아 (네 확신 ${(rec.confidence * 10).toFixed(0)}/10)`);

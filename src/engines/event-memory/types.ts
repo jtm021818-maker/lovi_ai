@@ -12,7 +12,10 @@ export type EventKind =
   | 'ACTION_PLAN'
   | 'WARM_WRAP'
   | 'EMOTION_MIRROR'
-  | 'PATTERN_MIRROR';
+  | 'PATTERN_MIRROR'
+  // 🆕 v84: 루나 자율 판단형 인터넷 검색 이벤트
+  | 'SONG_RECOMMENDATION'
+  | 'DATE_SPOT_RECOMMENDATION';
 
 export interface EventMemory {
   id?: string;

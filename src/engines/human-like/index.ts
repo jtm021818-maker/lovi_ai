@@ -303,6 +303,9 @@ export class HumanLikeEngine {
     coreProblem: string | null;
     // 🆕 v81: 몰입 모드 완료 태그
     operationComplete: import('./phase-signal').ParsedOperationComplete | null;
+    // 🆕 v84: 루나 자율 판단형 인터넷 검색 발동 태그
+    songReady: import('./phase-signal').ParsedSongReadyData | null;
+    dateSpotReady: import('./phase-signal').ParsedDateSpotReadyData | null;
   }> {
     // Phase 시그널 파싱 (모든 태그 한 번에 추출 + 제거)
     const parsed = parsePhaseSignal(response);
@@ -310,7 +313,13 @@ export class HumanLikeEngine {
       toneSelectData, draftCards, rpIn, rpOut, roleplayFeedback, panelReport, ideaRefine,
       actionPlan, warmWrap, thinkingDeepKeyword,
       situationRead, lunaThought, situationSummary, coreProblem,
-      operationComplete } = parsed;
+      operationComplete, songReady, dateSpotReady } = parsed;
+    if (songReady) {
+      console.log(`[ACE] 🎵 노래 추천 요청 감지: mood="${songReady.mood}"`);
+    }
+    if (dateSpotReady) {
+      console.log(`[ACE] 📍 데이트 장소 추천 요청 감지: area="${dateSpotReady.area}"`);
+    }
     if (operationComplete) {
       console.log(`[ACE] 🎬 작전 완료: mode=${operationComplete.mode} | "${operationComplete.summary}"`);
     }
@@ -418,6 +427,8 @@ export class HumanLikeEngine {
       situationSummary,
       coreProblem,
       operationComplete,
+      songReady,
+      dateSpotReady,
     };
   }
 

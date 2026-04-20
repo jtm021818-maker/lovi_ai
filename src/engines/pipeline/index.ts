@@ -40,7 +40,11 @@ import { analyzeAcc, ACC_CONFIG } from '@/engines/acc';
 
 // 📱 v55: KBE (Kakao Behavior Engine) — 카톡 행동 LLM 판단
 import { runKBE, KBE_CONFIG } from '@/engines/kbe';
-import { createEmotionThermometer, createMindReading, createSituationSummary, createEmotionMirror, createPatternMirror, createSolutionPreview, createSolutionCard, createMessageDraft, createGrowthReport, createSessionSummary, createHomeworkCard, createTarotAxisCollect, createTarotDraw, createTarotInsight, createTarotSessionSummary, createTarotHomework, createLunaStory, createLunaStrategy, createToneSelect, createDraftWorkshop, createRoleplayFeedback, createPanelReport, createIdeaRefine, createActionPlan, createWarmWrap } from '@/engines/phase-manager/events';
+import { createEmotionThermometer, createMindReading, createSituationSummary, createEmotionMirror, createPatternMirror, createSolutionPreview, createSolutionCard, createMessageDraft, createGrowthReport, createSessionSummary, createHomeworkCard, createTarotAxisCollect, createTarotDraw, createTarotInsight, createTarotSessionSummary, createTarotHomework, createLunaStory, createLunaStrategy, createToneSelect, createDraftWorkshop, createRoleplayFeedback, createPanelReport, createIdeaRefine, createActionPlan, createWarmWrap, createSongSearching, createSongRecommendation, createDateSpotSearching, createDateSpotRecommendation } from '@/engines/phase-manager/events';
+// 🆕 v84: 루나 자율 판단형 인터넷 검색 모듈
+import { runSongSearch } from '@/lib/ai/song-search';
+import { runDateSpotSearch } from '@/lib/ai/date-spot-search';
+import type { ParsedSongReadyData, ParsedDateSpotReadyData } from '@/engines/human-like/phase-signal';
 import { generateDynamicTarotInsight } from '@/engines/tarot/interpretation-engine';
 import { matchTarotSolutions, getTarotSolutionPrompt } from '@/engines/solution-dictionary/tarot-solutions';
 import { mapEmotionToCardEnergy, getEnergyPromptHint } from '@/engines/tarot/emotion-card-mapper';
@@ -573,6 +577,9 @@ export class CounselingPipeline {
 
     // 🆕 v8: 구간별 이벤트 트리거 + v10 쿨다운
     const eventsToFire: PhaseEvent[] = [];
+    // 🆕 v84: 루나 자율 판단 인터넷 검색 — SEARCHING 이벤트 발행 후 루프 이후에 비동기 검색 실행
+    let pendingSongSearch: ParsedSongReadyData | null = null;
+    let pendingDateSpotSearch: ParsedDateSpotReadyData | null = null;
     const updatedCompletedEvents = [...(completedEvents ?? [])];
     let updatedLastEventTurn = lastEventTurn;  // 🆕 v10: 이벤트 발생 시 업데이트
 
@@ -2073,6 +2080,25 @@ ${researchResult.insight}
             console.log(`[Pipeline] 🤔 IDEA_REFINE 발동`);
           }
 
+          // 🆕 v84: 🎵 노래 추천 — [SONG_READY:mood|context|preference]
+          //   루나 자율 판단 → SONG_SEARCHING 이벤트 즉시 발동 + 실제 grounded 검색은 루프 이후 async yield
+          if (hlrePost.songReady && canFireEvent() && !updatedCompletedEvents.includes('SONG_SEARCHING') && !updatedCompletedEvents.includes('SONG_RECOMMENDATION')) {
+            eventsToFire.push(createSongSearching(hlrePost.songReady.mood, newPhaseV2));
+            updatedCompletedEvents.push('SONG_SEARCHING');
+            updatedLastEventTurn = turnCount;
+            pendingSongSearch = hlrePost.songReady;
+            console.log(`[Pipeline] 🎵 SONG_SEARCHING 발동: "${hlrePost.songReady.mood}"`);
+          }
+
+          // 🆕 v84: 📍 데이트 장소 — [DATE_SPOT_READY:area|vibe|requirements]
+          if (hlrePost.dateSpotReady && canFireEvent() && !updatedCompletedEvents.includes('DATE_SPOT_SEARCHING') && !updatedCompletedEvents.includes('DATE_SPOT_RECOMMENDATION')) {
+            eventsToFire.push(createDateSpotSearching(hlrePost.dateSpotReady.area, hlrePost.dateSpotReady.vibe, newPhaseV2));
+            updatedCompletedEvents.push('DATE_SPOT_SEARCHING');
+            updatedLastEventTurn = turnCount;
+            pendingDateSpotSearch = hlrePost.dateSpotReady;
+            console.log(`[Pipeline] 📍 DATE_SPOT_SEARCHING 발동: "${hlrePost.dateSpotReady.area}/${hlrePost.dateSpotReady.vibe}"`);
+          }
+
           // 🆕 v39: 🎯 SOLVE 마무리 — [ACTION_PLAN:...] → ACTION_PLAN 이벤트
           // SOLVE S3 시뮬레이션 후 "오늘의 작전" 카드 발동 → SOLVE→EMPOWER 전환 게이트
           // 🆕 v78.4: SOLVE(실행 계획) Phase 에서만 발동. MIRROR 에서 AI 가 섣불리 태그 달아도 무시.
@@ -2222,6 +2248,40 @@ ${researchResult.insight}
         }
         yield { type: 'phase_event', data: event };
         console.log(`[Pipeline] 🎮 이벤트 발생: ${event.type} (${newPhaseV2})`);
+      }
+
+      // 🆕 v84: 🎵 루나 자율 노래 추천 — SEARCHING 이벤트 UI 진입 후 grounded Gemini 실행 → RECOMMENDATION 이벤트 yield
+      if (pendingSongSearch) {
+        try {
+          const songResult = await runSongSearch({
+            mood: pendingSongSearch.mood,
+            context: pendingSongSearch.context,
+            preference: pendingSongSearch.preference,
+          });
+          const songEvent = createSongRecommendation(songResult, newPhaseV2);
+          yield { type: 'phase_event', data: songEvent };
+          updatedCompletedEvents.push('SONG_RECOMMENDATION');
+          console.log(`[Pipeline] 🎵 SONG_RECOMMENDATION yield: ${songResult.songs.length}곡`);
+        } catch (err) {
+          console.error(`[Pipeline] 🎵 노래 검색 실패:`, err);
+        }
+      }
+
+      // 🆕 v84: 📍 루나 자율 데이트 장소 추천 — 동일 패턴
+      if (pendingDateSpotSearch) {
+        try {
+          const spotResult = await runDateSpotSearch({
+            area: pendingDateSpotSearch.area,
+            vibe: pendingDateSpotSearch.vibe,
+            requirements: pendingDateSpotSearch.requirements,
+          });
+          const spotEvent = createDateSpotRecommendation(spotResult, newPhaseV2);
+          yield { type: 'phase_event', data: spotEvent };
+          updatedCompletedEvents.push('DATE_SPOT_RECOMMENDATION');
+          console.log(`[Pipeline] 📍 DATE_SPOT_RECOMMENDATION yield: ${spotResult.spots.length}곳`);
+        } catch (err) {
+          console.error(`[Pipeline] 📍 장소 검색 실패:`, err);
+        }
       }
 
       // 🆕 선택지 파싱 — 게이트 통과 시에만 처리
