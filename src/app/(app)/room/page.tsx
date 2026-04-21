@@ -26,6 +26,10 @@ import AmbientFireflies from '@/components/room/AmbientFireflies';
 import Drawer3D from '@/components/room/Drawer3D';
 import SpiritSlot from '@/components/room/SpiritSlot';
 import EditFab from '@/components/room/EditFab';
+// 🆕 v85.3: 정령 도감
+import DexFab from '@/components/room/DexFab';
+import DexModal from '@/components/dex/DexModal';
+import { SPIRITS } from '@/data/spirits';
 
 /**
  * 🆕 v83.1: Spirit personality-based idle motion.
@@ -77,6 +81,7 @@ export default function RoomPage() {
   const [interactionBubble, setInteractionBubble] = useState<{ pairKey: string; a: string; b: string } | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
+  const [showDex, setShowDex] = useState(false);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -213,8 +218,15 @@ export default function RoomPage() {
             </p>
           </div>
 
-          {/* 편집 FAB */}
-          <EditFab editMode={editMode} onToggle={() => setEditMode((e) => !e)} />
+          {/* FAB 2종: 편집 + 도감 */}
+          <div className="flex items-center gap-2">
+            <DexFab
+              onOpen={() => setShowDex(true)}
+              ownedCount={ownedSpirits.length}
+              totalCount={SPIRITS.length}
+            />
+            <EditFab editMode={editMode} onToggle={() => setEditMode((e) => !e)} />
+          </div>
         </div>
 
         {/* 방 — 호두나무 프레임 + 황동 라이너 */}
@@ -399,6 +411,13 @@ export default function RoomPage() {
           )}
         </Drawer3D>
       </div>
+
+      {/* 🆕 v85.3: 정령 도감 모달 */}
+      <DexModal
+        isOpen={showDex}
+        onClose={() => setShowDex(false)}
+        owned={ownedSpirits}
+      />
     </div>
   );
 }
