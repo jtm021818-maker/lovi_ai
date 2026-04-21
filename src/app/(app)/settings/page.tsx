@@ -14,6 +14,9 @@ import IntimacyCard from '@/components/intimacy/IntimacyCard';
 import type { IntimacyDerivedInfo } from '@/engines/intimacy';
 // 🆕 v82.20: Luna 설정 페이지 스프라이트 (7×7 49프레임)
 import LunaSprite from '@/components/common/LunaSprite';
+// 🆕 v85.5: 필드 편집 bottom-sheet (인라인 편집 UI 깨짐 해결)
+import EditNicknameSheet from '@/components/settings/EditNicknameSheet';
+import EditGenderSheet from '@/components/settings/EditGenderSheet';
 
 // ============================================================
 // Types & Constants
@@ -353,61 +356,23 @@ export default function SettingsPage() {
           </div>
         </motion.div>
 
-        {/* ③ 이름 / 상담 상황 / 가입일 — 3열 */}
+        {/* ③ 이름 / 성별 / 가입일 — 3열
+            🆕 v85.5: 인라인 편집 제거 → pill 탭 시 bottom-sheet 모달로 편집 */}
         <div className="settings-profile-row">
           <div className="settings-profile-col">
             <p className="settings-profile-label">이름</p>
-            {editingNick ? (
-              <div className="settings-profile-edit">
-                <input
-                  value={nickInput}
-                  onChange={e => setNickInput(e.target.value)}
-                  maxLength={20}
-                  className="settings-profile-input"
-                  autoFocus
-                  placeholder="루나와 타로냥이 부를 이름"
-                />
-                <button
-                  onClick={() => { updateProfile({ nickname: nickInput }); setEditingNick(false); }}
-                  className="settings-profile-save"
-                >✓</button>
-              </div>
-            ) : (
-              <button onClick={() => setEditingNick(true)} className="settings-profile-pill">
-                {profile?.nickname || '익명'} <span>›</span>
-              </button>
-            )}
+            <button onClick={() => setEditingNick(true)} className="settings-profile-pill">
+              {profile?.nickname || '익명'} <span>›</span>
+            </button>
           </div>
           <div className="settings-profile-col">
             <p className="settings-profile-label">성별</p>
-            {editingGender ? (
-              <div className="settings-profile-edit">
-                <select
-                  value={genderInput}
-                  onChange={(e) => setGenderInput(e.target.value)}
-                  className="settings-profile-input"
-                  style={{ appearance: 'none', paddingRight: '20px', cursor: 'pointer' }}
-                >
-                  <option value="male">남성</option>
-                  <option value="female">여성</option>
-                  <option value="other">선택 안 함</option>
-                </select>
-                <button
-                  onClick={() => { updateProfile({ onboarding_situation: genderInput }); setEditingGender(false); }}
-                  className="settings-profile-save"
-                >✓</button>
-              </div>
-            ) : (
-              <button onClick={() => setEditingGender(true)} className="settings-profile-pill">
-                {profile?.onboarding_situation === 'male' ? '남성' :
-                 profile?.onboarding_situation === 'female' ? '여성' :
-                 profile?.onboarding_situation === 'other' ? '선택 안 함' :
-                 '미설정'} <span>›</span>
-              </button>
-            )}
-            <p className="settings-profile-sublabel" style={{ fontSize: '9px', color: '#9ca3af', marginTop: '2px', textAlign: 'center' }}>
-              입력한 성별 정보
-            </p>
+            <button onClick={() => setEditingGender(true)} className="settings-profile-pill">
+              {profile?.onboarding_situation === 'male' ? '남성' :
+               profile?.onboarding_situation === 'female' ? '여성' :
+               profile?.onboarding_situation === 'other' ? '선택 안 함' :
+               '미설정'} <span>›</span>
+            </button>
           </div>
           <div className="settings-profile-col">
             <p className="settings-profile-label">가입일</p>
@@ -776,6 +741,28 @@ export default function SettingsPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 🆕 v85.5: 필드 편집 bottom-sheet */}
+      <EditNicknameSheet
+        open={editingNick}
+        current={profile?.nickname || ''}
+        saving={saving}
+        onClose={() => setEditingNick(false)}
+        onSave={async (nickname) => {
+          setNickInput(nickname);
+          await updateProfile({ nickname });
+        }}
+      />
+      <EditGenderSheet
+        open={editingGender}
+        current={profile?.onboarding_situation || 'other'}
+        saving={saving}
+        onClose={() => setEditingGender(false)}
+        onSave={async (gender) => {
+          setGenderInput(gender);
+          await updateProfile({ onboarding_situation: gender });
+        }}
+      />
     </div>
   );
 }
