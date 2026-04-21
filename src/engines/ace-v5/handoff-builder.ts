@@ -387,6 +387,11 @@ export function formatHandoffForPrompt(handoff: LeftToRightHandoff): string {
       // 🆕 v84: 루나 자율 판단형 인터넷 검색 이벤트
       SONG_RECOMMENDATION: '[SONG_READY:mood|context|preference]',
       DATE_SPOT_RECOMMENDATION: '[DATE_SPOT_READY:area|vibe|requirements]',
+      // 🆕 v85: 2026 연애 검색 트렌드 확장 4종
+      GIFT_RECOMMENDATION: '[GIFT_READY:relation|occasion|budget|vibe]',
+      ACTIVITY_RECOMMENDATION: '[ACTIVITY_READY:area|category|vibe|level]',
+      ANNIVERSARY_RECOMMENDATION: '[ANNIVERSARY_READY:milestone|relation|budget|style]',
+      MOVIE_RECOMMENDATION: '[MOVIE_READY:mood|context|preference]',
     };
     const tag = rec.suggested ? (tagMap[rec.suggested] ?? null) : null;
     lines.push(`💡 **${rec.suggested}** 이벤트 어울릴 것 같아 (네 확신 ${(rec.confidence * 10).toFixed(0)}/10)`);

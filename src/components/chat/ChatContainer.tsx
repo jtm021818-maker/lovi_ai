@@ -25,6 +25,11 @@ import LunaStory from './events/LunaStory';
 // 🆕 v84: 루나 자율 판단형 인터넷 검색 이벤트
 import SongRecommendation from './events/SongRecommendation';
 import DateSpotRecommendation from './events/DateSpotRecommendation';
+// 🆕 v85: 2026 연애 검색 트렌드 확장 4종
+import GiftRecommendation from './events/GiftRecommendation';
+import ActivityRecommendation from './events/ActivityRecommendation';
+import AnniversaryRecommendation from './events/AnniversaryRecommendation';
+import MovieRecommendation from './events/MovieRecommendation';
 import LunaStrategy from './events/LunaStrategy';
 // 🆕 v81: BRIDGE 몰입 모드
 import ModeSelector from '@/components/modes/ModeSelector';
@@ -493,6 +498,19 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
       case 'DATE_SPOT_SEARCHING':
       case 'DATE_SPOT_RECOMMENDATION':
         return <DateSpotRecommendation key={`event-${idx}`} event={event} disabled={isLoading} />;
+      // 🆕 v85: 2026 연애 검색 트렌드 확장 4종
+      case 'GIFT_SEARCHING':
+      case 'GIFT_RECOMMENDATION':
+        return <GiftRecommendation key={`event-${idx}`} event={event} disabled={isLoading} />;
+      case 'ACTIVITY_SEARCHING':
+      case 'ACTIVITY_RECOMMENDATION':
+        return <ActivityRecommendation key={`event-${idx}`} event={event} disabled={isLoading} />;
+      case 'ANNIVERSARY_SEARCHING':
+      case 'ANNIVERSARY_RECOMMENDATION':
+        return <AnniversaryRecommendation key={`event-${idx}`} event={event} disabled={isLoading} />;
+      case 'MOVIE_SEARCHING':
+      case 'MOVIE_RECOMMENDATION':
+        return <MovieRecommendation key={`event-${idx}`} event={event} disabled={isLoading} />;
       default: return null;
     }
   };

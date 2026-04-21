@@ -13,6 +13,7 @@
 
 import { GoogleGenAI } from '@google/genai';
 import { braveWebSearch, formatBraveResultsForPrompt, type BraveWebResult } from './brave-search';
+import { LUNA_SYNTHESIS_PREAMBLE, scrubForbiddenPhrasing } from './luna-tone';
 import type { SongRecommendationData, SongCard } from '@/types/engine.types';
 
 const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
@@ -43,33 +44,33 @@ function buildBraveQuery(p: SongSearchParams): string {
   return `${p.mood} 노래 추천${prefPart} 2025 2026`;
 }
 
-/** Gemini 합성 프롬프트 */
+/** Gemini 합성 프롬프트 — v85: 루나 "언니가 골라준" 톤 */
 function buildSynthesisPrompt(p: SongSearchParams, snippets: string): string {
-  return `너는 한국 음악 큐레이터다. 아래 검색 결과를 참고해서 상황에 가장 어울리는 노래 3곡을 골라 JSON 만 출력해.
+  return `${LUNA_SYNTHESIS_PREAMBLE}
 
-[요청 맥락]
+[이번 요청 맥락]
 mood: ${p.mood}
 context: ${p.context}
 preference: ${p.preference ?? '제한 없음'}
 
-[Brave 검색 스니펫]
+[Brave 검색 스니펫 — 한국 음악 블로그/리뷰]
 ${snippets}
 
 [출력 규칙 — 반드시 이 JSON 형식만, 코드블록 금지]
 {
-  "openerMsg": "루나가 친구한테 툭 건네는 한 줄 (~30자, 반말)",
+  "openerMsg": "루나가 친구한테 툭 건네는 한 줄 (~30자, 반말, 검색 얘기 X)",
   "mood": "상황 요약 한 줄",
   "songs": [
     {
       "title": "정확한 곡명",
       "artist": "아티스트명",
-      "reason": "이 곡을 고른 이유 한 줄 (~40자, 반말)",
+      "reason": "왜 '지금 이 사람에게' 이 곡이 맞는지 감정 언어 한 줄 (~40자, 반말). 장르/스펙 나열 금지.",
       "year": "발매연도(YYYY) 또는 null",
       "searchLink": "https://www.youtube.com/results?search_query=URL인코딩된_제목+아티스트"
     },
     ...정확히 3곡
   ],
-  "lunaComment": "마무리 한 줄 (~30자, 반말)"
+  "lunaComment": "마무리 한 줄 (~30자, 반말) — '내가 직접 골랐다'는 뉘앙스"
 }
 
 ⚠️ 규칙
@@ -169,7 +170,7 @@ async function _runSongSearchImpl(params: SongSearchParams, key: string): Promis
     const songs: SongCard[] = (parsed.songs as any[]).slice(0, 3).map((s) => ({
       title: String(s.title ?? '').trim() || '제목 미상',
       artist: String(s.artist ?? '').trim() || '아티스트 미상',
-      reason: String(s.reason ?? '').trim() || '',
+      reason: scrubForbiddenPhrasing(String(s.reason ?? '').trim()) || '',
       year: s.year && s.year !== 'null' ? String(s.year) : undefined,
       searchLink: String(s.searchLink ?? buildYoutubeFallback(s.title, s.artist)),
     }));
@@ -178,10 +179,10 @@ async function _runSongSearchImpl(params: SongSearchParams, key: string): Promis
     const sources = braveResults.slice(0, 5).map((r) => r.url);
 
     const result: SongRecommendationData = {
-      openerMsg: String(parsed.openerMsg ?? '이거 들어봐').trim(),
+      openerMsg: scrubForbiddenPhrasing(String(parsed.openerMsg ?? '이거 들어봐').trim()),
       mood: String(parsed.mood ?? params.mood).trim(),
       songs,
-      lunaComment: String(parsed.lunaComment ?? '오늘 이거 같이 듣자').trim(),
+      lunaComment: scrubForbiddenPhrasing(String(parsed.lunaComment ?? '오늘 이거 같이 듣자').trim()),
       sources: sources.length > 0 ? sources : undefined,
       searchQueries: [braveQuery],
       // renderedContent — Brave 는 Google ToS 요구사항 없음 → 생략

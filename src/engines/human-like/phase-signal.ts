@@ -70,6 +70,21 @@ const SONG_READY_REGEX = /\[SONG_READY:([^|\]]+)\|([^|\]]+)(?:\|([^\]]*))?\]\s*/
 // 🆕 v84: 📍 데이트 장소 — [DATE_SPOT_READY:area|vibe|requirements]
 const DATE_SPOT_READY_REGEX = /\[DATE_SPOT_READY:([^|\]]+)\|([^|\]]+)(?:\|([^\]]*))?\]\s*/;
 
+// 🆕 v85: 🎁 선물 — [GIFT_READY:relation|occasion|budget|vibe]
+//   4번째 필드(vibe) 는 선택.
+const GIFT_READY_REGEX = /\[GIFT_READY:([^|\]]+)\|([^|\]]+)\|([^|\]]+)(?:\|([^\]]*))?\]\s*/;
+
+// 🆕 v85: 🎪 체험 데이트 — [ACTIVITY_READY:area|category|vibe|level]
+//   4번째 필드(level) 는 선택.
+const ACTIVITY_READY_REGEX = /\[ACTIVITY_READY:([^|\]]+)\|([^|\]]+)\|([^|\]]+)(?:\|([^\]]*))?\]\s*/;
+
+// 🆕 v85: 💌 기념일 이벤트 — [ANNIVERSARY_READY:milestone|relation|budget|style]
+const ANNIVERSARY_READY_REGEX = /\[ANNIVERSARY_READY:([^|\]]+)\|([^|\]]+)\|([^|\]]+)\|([^\]]+)\]\s*/;
+
+// 🆕 v85: 🎬 영화/드라마 — [MOVIE_READY:mood|context|preference]
+//   3번째 필드(preference) 는 선택. (노래와 동일 축)
+const MOVIE_READY_REGEX = /\[MOVIE_READY:([^|\]]+)\|([^|\]]+)(?:\|([^\]]*))?\]\s*/;
+
 export interface ParsedOperationComplete {
   mode: string;
   summary: string;
@@ -88,6 +103,37 @@ export interface ParsedDateSpotReadyData {
   area: string;
   vibe: string;
   requirements?: string;
+}
+
+// 🆕 v85: 🎁 선물 추천 태그 파싱 데이터
+export interface ParsedGiftReadyData {
+  relation: string;
+  occasion: string;
+  budget: string;
+  vibe?: string;
+}
+
+// 🆕 v85: 🎪 체험 데이트 추천 태그 파싱 데이터
+export interface ParsedActivityReadyData {
+  area: string;
+  category: string;
+  vibe: string;
+  level?: string;
+}
+
+// 🆕 v85: 💌 기념일 이벤트 아이디어 태그 파싱 데이터
+export interface ParsedAnniversaryReadyData {
+  milestone: string;
+  relation: string;
+  budget: string;
+  style: string;
+}
+
+// 🆕 v85: 🎬 영화/드라마 추천 태그 파싱 데이터
+export interface ParsedMovieReadyData {
+  mood: string;
+  context: string;
+  preference?: string;
 }
 
 /** 🆕 ACE v4: 루나 이야기 데이터 (AI 응답에서 파싱) */
@@ -210,6 +256,11 @@ export function parsePhaseSignal(response: string): {
   // 🆕 v84: 인터넷 검색 발동 태그 (루나 자율 판단)
   songReady: ParsedSongReadyData | null;
   dateSpotReady: ParsedDateSpotReadyData | null;
+  // 🆕 v85: 2026 연애 검색 트렌드 확장 4종
+  giftReady: ParsedGiftReadyData | null;
+  activityReady: ParsedActivityReadyData | null;
+  anniversaryReady: ParsedAnniversaryReadyData | null;
+  movieReady: ParsedMovieReadyData | null;
 } {
   let cleaned = response;
 
@@ -433,6 +484,65 @@ export function parsePhaseSignal(response: string): {
   }
   cleaned = cleaned.replace(/\[DATE_SPOT_READY[^\]]*\]/gi, '').trim();
 
+  // 🆕 v85: 🎁 [GIFT_READY:relation|occasion|budget|vibe] — 선물 추천 요청
+  let giftReady: ParsedGiftReadyData | null = null;
+  const giftMatch = cleaned.match(GIFT_READY_REGEX);
+  if (giftMatch) {
+    giftReady = {
+      relation: giftMatch[1].trim(),
+      occasion: giftMatch[2].trim(),
+      budget: giftMatch[3].trim(),
+      vibe: giftMatch[4]?.trim() || undefined,
+    };
+    cleaned = cleaned.replace(GIFT_READY_REGEX, '').trim();
+    console.log(`[PhaseSignal] 🎁 선물 추천 요청: occasion="${giftReady.occasion}" budget="${giftReady.budget}"`);
+  }
+  cleaned = cleaned.replace(/\[GIFT_READY[^\]]*\]/gi, '').trim();
+
+  // 🆕 v85: 🎪 [ACTIVITY_READY:area|category|vibe|level] — 체험 데이트 요청
+  let activityReady: ParsedActivityReadyData | null = null;
+  const activityMatch = cleaned.match(ACTIVITY_READY_REGEX);
+  if (activityMatch) {
+    activityReady = {
+      area: activityMatch[1].trim(),
+      category: activityMatch[2].trim(),
+      vibe: activityMatch[3].trim(),
+      level: activityMatch[4]?.trim() || undefined,
+    };
+    cleaned = cleaned.replace(ACTIVITY_READY_REGEX, '').trim();
+    console.log(`[PhaseSignal] 🎪 체험 데이트 요청: area="${activityReady.area}" category="${activityReady.category}"`);
+  }
+  cleaned = cleaned.replace(/\[ACTIVITY_READY[^\]]*\]/gi, '').trim();
+
+  // 🆕 v85: 💌 [ANNIVERSARY_READY:milestone|relation|budget|style] — 기념일 이벤트 아이디어 요청
+  let anniversaryReady: ParsedAnniversaryReadyData | null = null;
+  const anniversaryMatch = cleaned.match(ANNIVERSARY_READY_REGEX);
+  if (anniversaryMatch) {
+    anniversaryReady = {
+      milestone: anniversaryMatch[1].trim(),
+      relation: anniversaryMatch[2].trim(),
+      budget: anniversaryMatch[3].trim(),
+      style: anniversaryMatch[4].trim(),
+    };
+    cleaned = cleaned.replace(ANNIVERSARY_READY_REGEX, '').trim();
+    console.log(`[PhaseSignal] 💌 기념일 이벤트 요청: milestone="${anniversaryReady.milestone}" style="${anniversaryReady.style}"`);
+  }
+  cleaned = cleaned.replace(/\[ANNIVERSARY_READY[^\]]*\]/gi, '').trim();
+
+  // 🆕 v85: 🎬 [MOVIE_READY:mood|context|preference] — 영화/드라마 추천 요청
+  let movieReady: ParsedMovieReadyData | null = null;
+  const movieMatch = cleaned.match(MOVIE_READY_REGEX);
+  if (movieMatch) {
+    movieReady = {
+      mood: movieMatch[1].trim(),
+      context: movieMatch[2].trim(),
+      preference: movieMatch[3]?.trim() || undefined,
+    };
+    cleaned = cleaned.replace(MOVIE_READY_REGEX, '').trim();
+    console.log(`[PhaseSignal] 🎬 영화/드라마 추천 요청: mood="${movieReady.mood}"`);
+  }
+  cleaned = cleaned.replace(/\[MOVIE_READY[^\]]*\]/gi, '').trim();
+
   const match = cleaned.match(SIGNAL_REGEX);
   if (!match) return {
     cleanResponse: cleaned,
@@ -457,6 +567,10 @@ export function parsePhaseSignal(response: string): {
     operationComplete,
     songReady,
     dateSpotReady,
+    giftReady,
+    activityReady,
+    anniversaryReady,
+    movieReady,
   };
 
   return {
@@ -482,6 +596,10 @@ export function parsePhaseSignal(response: string): {
     operationComplete,
     songReady,
     dateSpotReady,
+    giftReady,
+    activityReady,
+    anniversaryReady,
+    movieReady,
   };
 }
 

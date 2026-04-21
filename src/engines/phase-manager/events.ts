@@ -41,6 +41,15 @@ import {
   SongSearchingData,
   DateSpotRecommendationData,
   DateSpotSearchingData,
+  // 🆕 v85: 2026 연애 검색 트렌드 확장 4종
+  GiftRecommendationData,
+  GiftSearchingData,
+  ActivityRecommendationData,
+  ActivitySearchingData,
+  AnniversaryRecommendationData,
+  AnniversarySearchingData,
+  MovieRecommendationData,
+  MovieSearchingData,
 } from '@/types/engine.types';
 import { drawCards, getSingleSpread, getThreeCardSpread, getLoveSpread, getUnrequitedSpread, getReconnectionSpread, getPaceSpread, getAvoidantSpread, getYesNoSpread } from '@/engines/tarot';
 // spread-recommender는 pipeline에서 자동 선택용으로 사용
@@ -1466,6 +1475,113 @@ export function createDateSpotRecommendation(
 ): PhaseEvent {
   return {
     type: 'DATE_SPOT_RECOMMENDATION' as PhaseEventType,
+    phase: currentPhase,
+    data: payload as unknown as Record<string, unknown>,
+  };
+}
+
+// ============================================
+// 🆕 v85: 2026 연애 검색 트렌드 확장 4종 이벤트 팩토리
+// ============================================
+
+/** 🎁 GIFT_SEARCHING — 선물 검색 진행 중 */
+export function createGiftSearching(
+  occasion: string,
+  relation: string,
+  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+): PhaseEvent {
+  const data: GiftSearchingData = { occasion, relation };
+  return {
+    type: 'GIFT_SEARCHING' as PhaseEventType,
+    phase: currentPhase,
+    data: data as unknown as Record<string, unknown>,
+  };
+}
+
+/** 🎁 GIFT_RECOMMENDATION — 선물 추천 완성 카드 */
+export function createGiftRecommendation(
+  payload: GiftRecommendationData,
+  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+): PhaseEvent {
+  return {
+    type: 'GIFT_RECOMMENDATION' as PhaseEventType,
+    phase: currentPhase,
+    data: payload as unknown as Record<string, unknown>,
+  };
+}
+
+/** 🎪 ACTIVITY_SEARCHING — 체험 데이트 검색 진행 중 */
+export function createActivitySearching(
+  area: string,
+  category: string,
+  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+): PhaseEvent {
+  const data: ActivitySearchingData = { area, category };
+  return {
+    type: 'ACTIVITY_SEARCHING' as PhaseEventType,
+    phase: currentPhase,
+    data: data as unknown as Record<string, unknown>,
+  };
+}
+
+/** 🎪 ACTIVITY_RECOMMENDATION — 체험 데이트 추천 카드 */
+export function createActivityRecommendation(
+  payload: ActivityRecommendationData,
+  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+): PhaseEvent {
+  return {
+    type: 'ACTIVITY_RECOMMENDATION' as PhaseEventType,
+    phase: currentPhase,
+    data: payload as unknown as Record<string, unknown>,
+  };
+}
+
+/** 💌 ANNIVERSARY_SEARCHING — 기념일 이벤트 검색 진행 중 */
+export function createAnniversarySearching(
+  milestone: string,
+  style: string,
+  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+): PhaseEvent {
+  const data: AnniversarySearchingData = { milestone, style };
+  return {
+    type: 'ANNIVERSARY_SEARCHING' as PhaseEventType,
+    phase: currentPhase,
+    data: data as unknown as Record<string, unknown>,
+  };
+}
+
+/** 💌 ANNIVERSARY_RECOMMENDATION — 기념일 이벤트 아이디어 카드 */
+export function createAnniversaryRecommendation(
+  payload: AnniversaryRecommendationData,
+  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+): PhaseEvent {
+  return {
+    type: 'ANNIVERSARY_RECOMMENDATION' as PhaseEventType,
+    phase: currentPhase,
+    data: payload as unknown as Record<string, unknown>,
+  };
+}
+
+/** 🎬 MOVIE_SEARCHING — 영화/드라마 검색 진행 중 */
+export function createMovieSearching(
+  mood: string,
+  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+): PhaseEvent {
+  const data: MovieSearchingData = { mood };
+  return {
+    type: 'MOVIE_SEARCHING' as PhaseEventType,
+    phase: currentPhase,
+    data: data as unknown as Record<string, unknown>,
+  };
+}
+
+/** 🎬 MOVIE_RECOMMENDATION — 영화/드라마 추천 카드 */
+export function createMovieRecommendation(
+  payload: MovieRecommendationData,
+  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+): PhaseEvent {
+  return {
+    type: 'MOVIE_RECOMMENDATION' as PhaseEventType,
     phase: currentPhase,
     data: payload as unknown as Record<string, unknown>,
   };

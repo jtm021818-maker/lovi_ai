@@ -165,9 +165,20 @@ export type PhaseEventType =
   // 🆕 v84: 루나 자율 판단형 인터넷 검색 이벤트 (전 Phase)
   // ──────────────────────────────
   | 'SONG_SEARCHING'           // 🎵 v84: 노래 검색 진행 중
-  | 'SONG_RECOMMENDATION'      // 🎵 v84: 노래 추천 결과 (Gemini grounded)
+  | 'SONG_RECOMMENDATION'      // 🎵 v84: 노래 추천 결과 (Brave+Gemini)
   | 'DATE_SPOT_SEARCHING'      // 📍 v84: 데이트 장소 검색 진행 중
-  | 'DATE_SPOT_RECOMMENDATION';// 📍 v84: 데이트 장소 추천 결과 (Gemini grounded)
+  | 'DATE_SPOT_RECOMMENDATION' // 📍 v84: 데이트 장소 추천 결과 (Brave+Gemini)
+  // ──────────────────────────────
+  // 🆕 v85: 2026 연애 검색 트렌드 기반 확장 이벤트 4종
+  // ──────────────────────────────
+  | 'GIFT_SEARCHING'           // 🎁 v85: 선물 검색 진행 중
+  | 'GIFT_RECOMMENDATION'      // 🎁 v85: 선물 추천 결과
+  | 'ACTIVITY_SEARCHING'       // 🎪 v85: 체험 데이트 검색 진행 중
+  | 'ACTIVITY_RECOMMENDATION'  // 🎪 v85: 체험 데이트 추천 결과
+  | 'ANNIVERSARY_SEARCHING'    // 💌 v85: 기념일 이벤트 아이디어 검색 진행 중
+  | 'ANNIVERSARY_RECOMMENDATION' // 💌 v85: 기념일 이벤트 아이디어 결과
+  | 'MOVIE_SEARCHING'          // 🎬 v85: 영화/드라마 검색 진행 중
+  | 'MOVIE_RECOMMENDATION';    // 🎬 v85: 영화/드라마/OTT 추천 결과
 
 /** Phase 이벤트 데이터 */
 export interface PhaseEvent {
@@ -492,6 +503,157 @@ export interface DateSpotRecommendationData {
 export interface DateSpotSearchingData {
   area: string;
   vibe: string;
+}
+
+// ──────────────────────────────────────
+// 🆕 v85: 2026 연애 검색 트렌드 확장 이벤트 데이터
+// (Brave+Gemini 합성, 루나 "언니가 직접 골라준" 톤)
+// ──────────────────────────────────────
+
+/** 🎁 v85: 선물 추천 카드 — 개별 선물 */
+export interface GiftCard {
+  /** 선물 이름 (예: "각인 실버 펜던트", "포토북") */
+  name: string;
+  /** 카테고리 (주얼리 / 포토북 / 경험권 / 각인 / DIY / 소품 / 뷰티 등) */
+  category: string;
+  /** 가격대 (예: "3~5만원", "10만원대") */
+  priceRange: string;
+  /** 이 선물을 루나가 고른 이유 — 스펙 X, 감정 언어 (~40자) */
+  reason: string;
+  /** 쇼핑몰 검색 딥링크 (29CM / 아이디어스 / 쿠팡 / 무신사 등) */
+  searchLink: string;
+  /** 2026 트렌드 배지 (선택) — "각인트렌드", "경험형", "MZ 인기" 등 */
+  trendBadge?: string;
+}
+
+/** 🎁 v85: 선물 추천 이벤트 데이터 */
+export interface GiftRecommendationData {
+  /** 루나 오프너 (~30자, 반말) */
+  openerMsg: string;
+  /** 관계 단계 (썸/연애초반/1년+) */
+  relation: string;
+  /** 사유 (생일/100일/발렌타인/화이트데이 등) */
+  occasion: string;
+  /** 예산대 */
+  budget: string;
+  /** 3개 */
+  gifts: GiftCard[];
+  /** 마무리 한마디 */
+  lunaComment: string;
+  sources?: string[];
+  searchQueries?: string[];
+}
+
+/** 🎁 v85: 선물 검색 진행 중 상태 */
+export interface GiftSearchingData {
+  occasion: string;
+  relation: string;
+}
+
+/** 🎪 v85: 체험 데이트 — 개별 액티비티 */
+export interface Activity {
+  name: string;
+  /** 카테고리 (방탈출 / 공방 / 원데이클래스 / 도예 / 와인 / 전시 / 실내암장 등) */
+  category: string;
+  address?: string;
+  /** 한 줄 분위기 */
+  vibe: string;
+  /** 리뷰/경험담 요약 (감정 언어) */
+  reviewSummary: string;
+  /** 가격대 힌트 */
+  priceHint?: string;
+  /** 소요 시간 */
+  duration?: string;
+  /** 네이버 지도 검색 딥링크 */
+  mapLink: string;
+  /** 원문 URL */
+  sourceUri?: string;
+}
+
+/** 🎪 v85: 체험 데이트 추천 이벤트 데이터 */
+export interface ActivityRecommendationData {
+  openerMsg: string;
+  area: string;
+  category: string;
+  activities: Activity[];
+  lunaComment: string;
+  sources?: string[];
+  searchQueries?: string[];
+}
+
+/** 🎪 v85: 체험 데이트 검색 진행 중 상태 */
+export interface ActivitySearchingData {
+  area: string;
+  category: string;
+}
+
+/** 💌 v85: 기념일 이벤트 아이디어 — 개별 플랜 */
+export interface AnniversaryIdea {
+  /** 타이틀 (예: "편지 + 미니 영상 깜짝 이벤트") */
+  title: string;
+  /** 실행 단계 3~4개 (번호 없이 문장형) */
+  steps: string[];
+  /** 준비물 (옵션) */
+  materials?: string[];
+  /** 예상 비용/시간 (예: "3만원 + 2시간", "무료") */
+  estimatedCost?: string;
+  /** 루나 한마디 (왜 이게 좋은지, 감정 포인트) */
+  lunaTip: string;
+  /** 난이도 배지 (선택) — "쉬움", "중간", "공들임" */
+  difficulty?: string;
+}
+
+/** 💌 v85: 기념일 이벤트 추천 이벤트 데이터 */
+export interface AnniversaryRecommendationData {
+  openerMsg: string;
+  /** 기념일 종류 (100일/1주년/생일/프로포즈 등) */
+  milestone: string;
+  /** 대상 (여친/남친/예비) */
+  relation: string;
+  /** 스타일 (감동/유쾌/조용히/스펙터클) */
+  style: string;
+  ideas: AnniversaryIdea[];
+  lunaComment: string;
+  sources?: string[];
+  searchQueries?: string[];
+}
+
+/** 💌 v85: 기념일 이벤트 검색 진행 중 상태 */
+export interface AnniversarySearchingData {
+  milestone: string;
+  style: string;
+}
+
+/** 🎬 v85: 영화/드라마 추천 카드 */
+export interface MovieCard {
+  title: string;
+  /** "영화" | "드라마" | "시리즈" | "애니" */
+  type: string;
+  /** 발매/방영 연도 */
+  year?: string;
+  /** 장르 */
+  genre?: string;
+  /** 플랫폼 (넷플릭스 / 티빙 / 디즈니+ / 웨이브 / 왓챠 / 쿠팡플레이) */
+  platform: string;
+  /** 왜 이걸 고른 이유 (감정 언어, ~40자) */
+  reason: string;
+  /** 검색 딥링크 (넷플릭스 검색 등) */
+  searchLink: string;
+}
+
+/** 🎬 v85: 영화/드라마 추천 이벤트 데이터 */
+export interface MovieRecommendationData {
+  openerMsg: string;
+  mood: string;
+  movies: MovieCard[];
+  lunaComment: string;
+  sources?: string[];
+  searchQueries?: string[];
+}
+
+/** 🎬 v85: 영화/드라마 검색 진행 중 상태 */
+export interface MovieSearchingData {
+  mood: string;
 }
 
 /** 🆕 v35: 작전 모드 타입 — SOLVE 단계의 특화 모드 */

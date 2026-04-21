@@ -306,6 +306,11 @@ export class HumanLikeEngine {
     // 🆕 v84: 루나 자율 판단형 인터넷 검색 발동 태그
     songReady: import('./phase-signal').ParsedSongReadyData | null;
     dateSpotReady: import('./phase-signal').ParsedDateSpotReadyData | null;
+    // 🆕 v85: 2026 연애 검색 트렌드 확장 4종
+    giftReady: import('./phase-signal').ParsedGiftReadyData | null;
+    activityReady: import('./phase-signal').ParsedActivityReadyData | null;
+    anniversaryReady: import('./phase-signal').ParsedAnniversaryReadyData | null;
+    movieReady: import('./phase-signal').ParsedMovieReadyData | null;
   }> {
     // Phase 시그널 파싱 (모든 태그 한 번에 추출 + 제거)
     const parsed = parsePhaseSignal(response);
@@ -313,7 +318,8 @@ export class HumanLikeEngine {
       toneSelectData, draftCards, rpIn, rpOut, roleplayFeedback, panelReport, ideaRefine,
       actionPlan, warmWrap, thinkingDeepKeyword,
       situationRead, lunaThought, situationSummary, coreProblem,
-      operationComplete, songReady, dateSpotReady } = parsed;
+      operationComplete, songReady, dateSpotReady,
+      giftReady, activityReady, anniversaryReady, movieReady } = parsed;
     if (songReady) {
       console.log(`[ACE] 🎵 노래 추천 요청 감지: mood="${songReady.mood}"`);
     }
@@ -429,6 +435,10 @@ export class HumanLikeEngine {
       operationComplete,
       songReady,
       dateSpotReady,
+      giftReady,
+      activityReady,
+      anniversaryReady,
+      movieReady,
     };
   }
 

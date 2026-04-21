@@ -40,11 +40,16 @@ import { analyzeAcc, ACC_CONFIG } from '@/engines/acc';
 
 // 📱 v55: KBE (Kakao Behavior Engine) — 카톡 행동 LLM 판단
 import { runKBE, KBE_CONFIG } from '@/engines/kbe';
-import { createEmotionThermometer, createMindReading, createSituationSummary, createEmotionMirror, createPatternMirror, createSolutionPreview, createSolutionCard, createMessageDraft, createGrowthReport, createSessionSummary, createHomeworkCard, createTarotAxisCollect, createTarotDraw, createTarotInsight, createTarotSessionSummary, createTarotHomework, createLunaStory, createLunaStrategy, createToneSelect, createDraftWorkshop, createRoleplayFeedback, createPanelReport, createIdeaRefine, createActionPlan, createWarmWrap, createSongSearching, createSongRecommendation, createDateSpotSearching, createDateSpotRecommendation } from '@/engines/phase-manager/events';
+import { createEmotionThermometer, createMindReading, createSituationSummary, createEmotionMirror, createPatternMirror, createSolutionPreview, createSolutionCard, createMessageDraft, createGrowthReport, createSessionSummary, createHomeworkCard, createTarotAxisCollect, createTarotDraw, createTarotInsight, createTarotSessionSummary, createTarotHomework, createLunaStory, createLunaStrategy, createToneSelect, createDraftWorkshop, createRoleplayFeedback, createPanelReport, createIdeaRefine, createActionPlan, createWarmWrap, createSongSearching, createSongRecommendation, createDateSpotSearching, createDateSpotRecommendation, createGiftSearching, createGiftRecommendation, createActivitySearching, createActivityRecommendation, createAnniversarySearching, createAnniversaryRecommendation, createMovieSearching, createMovieRecommendation } from '@/engines/phase-manager/events';
 // 🆕 v84: 루나 자율 판단형 인터넷 검색 모듈
 import { runSongSearch } from '@/lib/ai/song-search';
 import { runDateSpotSearch } from '@/lib/ai/date-spot-search';
-import type { ParsedSongReadyData, ParsedDateSpotReadyData } from '@/engines/human-like/phase-signal';
+// 🆕 v85: 2026 연애 검색 트렌드 확장 4종
+import { runGiftSearch } from '@/lib/ai/gift-search';
+import { runActivitySearch } from '@/lib/ai/activity-search';
+import { runAnniversarySearch } from '@/lib/ai/anniversary-search';
+import { runMovieSearch } from '@/lib/ai/movie-search';
+import type { ParsedSongReadyData, ParsedDateSpotReadyData, ParsedGiftReadyData, ParsedActivityReadyData, ParsedAnniversaryReadyData, ParsedMovieReadyData } from '@/engines/human-like/phase-signal';
 import { generateDynamicTarotInsight } from '@/engines/tarot/interpretation-engine';
 import { matchTarotSolutions, getTarotSolutionPrompt } from '@/engines/solution-dictionary/tarot-solutions';
 import { mapEmotionToCardEnergy, getEnergyPromptHint } from '@/engines/tarot/emotion-card-mapper';
@@ -580,6 +585,11 @@ export class CounselingPipeline {
     // 🆕 v84: 루나 자율 판단 인터넷 검색 — SEARCHING 이벤트 발행 후 루프 이후에 비동기 검색 실행
     let pendingSongSearch: ParsedSongReadyData | null = null;
     let pendingDateSpotSearch: ParsedDateSpotReadyData | null = null;
+    // 🆕 v85: 2026 연애 검색 트렌드 확장 4종
+    let pendingGiftSearch: ParsedGiftReadyData | null = null;
+    let pendingActivitySearch: ParsedActivityReadyData | null = null;
+    let pendingAnniversarySearch: ParsedAnniversaryReadyData | null = null;
+    let pendingMovieSearch: ParsedMovieReadyData | null = null;
     const updatedCompletedEvents = [...(completedEvents ?? [])];
     let updatedLastEventTurn = lastEventTurn;  // 🆕 v10: 이벤트 발생 시 업데이트
 
@@ -2099,6 +2109,42 @@ ${researchResult.insight}
             console.log(`[Pipeline] 📍 DATE_SPOT_SEARCHING 발동: "${hlrePost.dateSpotReady.area}/${hlrePost.dateSpotReady.vibe}"`);
           }
 
+          // 🆕 v85: 🎁 선물 — [GIFT_READY:relation|occasion|budget|vibe]
+          if (hlrePost.giftReady && canFireEvent() && !updatedCompletedEvents.includes('GIFT_SEARCHING') && !updatedCompletedEvents.includes('GIFT_RECOMMENDATION')) {
+            eventsToFire.push(createGiftSearching(hlrePost.giftReady.occasion, hlrePost.giftReady.relation, newPhaseV2));
+            updatedCompletedEvents.push('GIFT_SEARCHING');
+            updatedLastEventTurn = turnCount;
+            pendingGiftSearch = hlrePost.giftReady;
+            console.log(`[Pipeline] 🎁 GIFT_SEARCHING 발동: "${hlrePost.giftReady.occasion}/${hlrePost.giftReady.budget}"`);
+          }
+
+          // 🆕 v85: 🎪 체험 데이트 — [ACTIVITY_READY:area|category|vibe|level]
+          if (hlrePost.activityReady && canFireEvent() && !updatedCompletedEvents.includes('ACTIVITY_SEARCHING') && !updatedCompletedEvents.includes('ACTIVITY_RECOMMENDATION')) {
+            eventsToFire.push(createActivitySearching(hlrePost.activityReady.area, hlrePost.activityReady.category, newPhaseV2));
+            updatedCompletedEvents.push('ACTIVITY_SEARCHING');
+            updatedLastEventTurn = turnCount;
+            pendingActivitySearch = hlrePost.activityReady;
+            console.log(`[Pipeline] 🎪 ACTIVITY_SEARCHING 발동: "${hlrePost.activityReady.area}/${hlrePost.activityReady.category}"`);
+          }
+
+          // 🆕 v85: 💌 기념일 이벤트 — [ANNIVERSARY_READY:milestone|relation|budget|style]
+          if (hlrePost.anniversaryReady && canFireEvent() && !updatedCompletedEvents.includes('ANNIVERSARY_SEARCHING') && !updatedCompletedEvents.includes('ANNIVERSARY_RECOMMENDATION')) {
+            eventsToFire.push(createAnniversarySearching(hlrePost.anniversaryReady.milestone, hlrePost.anniversaryReady.style, newPhaseV2));
+            updatedCompletedEvents.push('ANNIVERSARY_SEARCHING');
+            updatedLastEventTurn = turnCount;
+            pendingAnniversarySearch = hlrePost.anniversaryReady;
+            console.log(`[Pipeline] 💌 ANNIVERSARY_SEARCHING 발동: "${hlrePost.anniversaryReady.milestone}/${hlrePost.anniversaryReady.style}"`);
+          }
+
+          // 🆕 v85: 🎬 영화/드라마 — [MOVIE_READY:mood|context|preference]
+          if (hlrePost.movieReady && canFireEvent() && !updatedCompletedEvents.includes('MOVIE_SEARCHING') && !updatedCompletedEvents.includes('MOVIE_RECOMMENDATION')) {
+            eventsToFire.push(createMovieSearching(hlrePost.movieReady.mood, newPhaseV2));
+            updatedCompletedEvents.push('MOVIE_SEARCHING');
+            updatedLastEventTurn = turnCount;
+            pendingMovieSearch = hlrePost.movieReady;
+            console.log(`[Pipeline] 🎬 MOVIE_SEARCHING 발동: "${hlrePost.movieReady.mood}"`);
+          }
+
           // 🆕 v39: 🎯 SOLVE 마무리 — [ACTION_PLAN:...] → ACTION_PLAN 이벤트
           // SOLVE S3 시뮬레이션 후 "오늘의 작전" 카드 발동 → SOLVE→EMPOWER 전환 게이트
           // 🆕 v78.4: SOLVE(실행 계획) Phase 에서만 발동. MIRROR 에서 AI 가 섣불리 태그 달아도 무시.
@@ -2281,6 +2327,77 @@ ${researchResult.insight}
           console.log(`[Pipeline] 📍 DATE_SPOT_RECOMMENDATION yield: ${spotResult.spots.length}곳`);
         } catch (err) {
           console.error(`[Pipeline] 📍 장소 검색 실패:`, err);
+        }
+      }
+
+      // 🆕 v85: 🎁 루나 자율 선물 추천 — 동일 패턴
+      if (pendingGiftSearch) {
+        try {
+          const giftResult = await runGiftSearch({
+            relation: pendingGiftSearch.relation,
+            occasion: pendingGiftSearch.occasion,
+            budget: pendingGiftSearch.budget,
+            vibe: pendingGiftSearch.vibe,
+          });
+          const giftEvent = createGiftRecommendation(giftResult, newPhaseV2);
+          yield { type: 'phase_event', data: giftEvent };
+          updatedCompletedEvents.push('GIFT_RECOMMENDATION');
+          console.log(`[Pipeline] 🎁 GIFT_RECOMMENDATION yield: ${giftResult.gifts.length}개`);
+        } catch (err) {
+          console.error(`[Pipeline] 🎁 선물 검색 실패:`, err);
+        }
+      }
+
+      // 🆕 v85: 🎪 체험 데이트 추천
+      if (pendingActivitySearch) {
+        try {
+          const actResult = await runActivitySearch({
+            area: pendingActivitySearch.area,
+            category: pendingActivitySearch.category,
+            vibe: pendingActivitySearch.vibe,
+            level: pendingActivitySearch.level,
+          });
+          const actEvent = createActivityRecommendation(actResult, newPhaseV2);
+          yield { type: 'phase_event', data: actEvent };
+          updatedCompletedEvents.push('ACTIVITY_RECOMMENDATION');
+          console.log(`[Pipeline] 🎪 ACTIVITY_RECOMMENDATION yield: ${actResult.activities.length}개`);
+        } catch (err) {
+          console.error(`[Pipeline] 🎪 체험 검색 실패:`, err);
+        }
+      }
+
+      // 🆕 v85: 💌 기념일 이벤트 아이디어
+      if (pendingAnniversarySearch) {
+        try {
+          const anvResult = await runAnniversarySearch({
+            milestone: pendingAnniversarySearch.milestone,
+            relation: pendingAnniversarySearch.relation,
+            budget: pendingAnniversarySearch.budget,
+            style: pendingAnniversarySearch.style,
+          });
+          const anvEvent = createAnniversaryRecommendation(anvResult, newPhaseV2);
+          yield { type: 'phase_event', data: anvEvent };
+          updatedCompletedEvents.push('ANNIVERSARY_RECOMMENDATION');
+          console.log(`[Pipeline] 💌 ANNIVERSARY_RECOMMENDATION yield: ${anvResult.ideas.length}개`);
+        } catch (err) {
+          console.error(`[Pipeline] 💌 기념일 검색 실패:`, err);
+        }
+      }
+
+      // 🆕 v85: 🎬 영화/드라마/OTT 추천
+      if (pendingMovieSearch) {
+        try {
+          const movieResult = await runMovieSearch({
+            mood: pendingMovieSearch.mood,
+            context: pendingMovieSearch.context,
+            preference: pendingMovieSearch.preference,
+          });
+          const movieEvent = createMovieRecommendation(movieResult, newPhaseV2);
+          yield { type: 'phase_event', data: movieEvent };
+          updatedCompletedEvents.push('MOVIE_RECOMMENDATION');
+          console.log(`[Pipeline] 🎬 MOVIE_RECOMMENDATION yield: ${movieResult.movies.length}개`);
+        } catch (err) {
+          console.error(`[Pipeline] 🎬 영화 검색 실패:`, err);
         }
       }
 

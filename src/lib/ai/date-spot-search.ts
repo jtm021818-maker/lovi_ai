@@ -13,6 +13,7 @@
 
 import { GoogleGenAI } from '@google/genai';
 import { braveWebSearch, formatBraveResultsForPrompt, type BraveWebResult } from './brave-search';
+import { LUNA_SYNTHESIS_PREAMBLE, scrubForbiddenPhrasing } from './luna-tone';
 import type { DateSpotRecommendationData, DateSpot } from '@/types/engine.types';
 
 const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
@@ -44,9 +45,9 @@ function buildBraveQuery(p: DateSpotSearchParams): string {
 }
 
 function buildSynthesisPrompt(p: DateSpotSearchParams, snippets: string): string {
-  return `너는 한국 데이트 장소 큐레이터다. 아래 Brave 검색 결과를 참고해 실제 영업 중인 장소 2~3곳을 JSON 으로만 출력해.
+  return `${LUNA_SYNTHESIS_PREAMBLE}
 
-[요청 조건]
+[이번 요청 맥락]
 area: ${p.area}
 vibe: ${p.vibe}
 requirements: ${p.requirements ?? '제한 없음'}
@@ -56,7 +57,7 @@ ${snippets}
 
 [출력 규칙 — 반드시 이 JSON 형식만, 코드블록/설명 금지]
 {
-  "openerMsg": "루나가 친구한테 툭 던지는 한 줄 (~30자, 반말)",
+  "openerMsg": "루나가 친구한테 툭 던지는 한 줄 (~30자, 반말, 검색 얘기 X)",
   "area": "${p.area}",
   "vibe": "${p.vibe}",
   "spots": [
@@ -64,14 +65,14 @@ ${snippets}
       "name": "정확한 장소명",
       "type": "카페 | 식당 | 전시관 | 바 | 공원 등",
       "address": "간단 주소 (구/동 수준) — 모르면 null",
-      "vibe": "한 줄 분위기 묘사",
-      "reviewSummary": "리뷰에서 공통적으로 언급되는 특징 2~3줄 (줄바꿈 없이 한 문단)",
+      "vibe": "한 줄 분위기 묘사 (감정 언어)",
+      "reviewSummary": "실제 커플/방문자들이 '어떤 순간'을 좋아했는지 2~3줄 (줄바꿈 없이 한 문단, 평점/스펙 금지, 감정 중심)",
       "priceHint": "1인 가격대 (예: 1~2만원) — 모르면 null",
       "mapLink": "https://map.naver.com/v5/search/URL인코딩된_장소명",
       "sourceUri": "스니펫 중 참고한 URL 중 하나 — 없으면 null"
     }
   ],
-  "lunaComment": "마무리 한 줄 (~30자, 반말)"
+  "lunaComment": "마무리 한 줄 (~30자, 반말) — '내가 골라둔 곳' 뉘앙스"
 }
 
 ⚠️ 규칙
@@ -178,8 +179,8 @@ async function _runDateSpotSearchImpl(params: DateSpotSearchParams, key: string)
       name: String(s.name ?? '').trim() || '장소 미상',
       type: String(s.type ?? '').trim() || '장소',
       address: cleanNullable(s.address),
-      vibe: String(s.vibe ?? '').trim() || '',
-      reviewSummary: String(s.reviewSummary ?? '').trim().replace(/\n+/g, ' '),
+      vibe: scrubForbiddenPhrasing(String(s.vibe ?? '').trim()) || '',
+      reviewSummary: scrubForbiddenPhrasing(String(s.reviewSummary ?? '').trim().replace(/\n+/g, ' ')),
       priceHint: cleanNullable(s.priceHint),
       mapLink: String(s.mapLink ?? buildNaverMapFallback(s.name)),
       sourceUri: cleanNullable(s.sourceUri),
@@ -188,11 +189,11 @@ async function _runDateSpotSearchImpl(params: DateSpotSearchParams, key: string)
     const sources = braveResults.slice(0, 5).map((r) => r.url);
 
     const result: DateSpotRecommendationData = {
-      openerMsg: String(parsed.openerMsg ?? '여기 괜찮은데 봐봐').trim(),
+      openerMsg: scrubForbiddenPhrasing(String(parsed.openerMsg ?? '여기 괜찮은데 봐봐').trim()),
       area: String(parsed.area ?? params.area).trim(),
       vibe: String(parsed.vibe ?? params.vibe).trim(),
       spots,
-      lunaComment: String(parsed.lunaComment ?? '혼자 가도 좋아').trim(),
+      lunaComment: scrubForbiddenPhrasing(String(parsed.lunaComment ?? '혼자 가도 좋아').trim()),
       sources: sources.length > 0 ? sources : undefined,
       searchQueries: [braveQuery],
       // renderedContent — Brave 는 ToS 의무 없음 → 생략
