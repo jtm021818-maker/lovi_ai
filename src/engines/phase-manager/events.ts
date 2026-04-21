@@ -50,6 +50,10 @@ import {
   AnniversarySearchingData,
   MovieRecommendationData,
   MovieSearchingData,
+  // 🆕 v85.6: 같이 찾기
+  BrowseSessionData,
+  BrowseSearchingData,
+  BrowseFinalData,
 } from '@/types/engine.types';
 import { drawCards, getSingleSpread, getThreeCardSpread, getLoveSpread, getUnrequitedSpread, getReconnectionSpread, getPaceSpread, getAvoidantSpread, getYesNoSpread } from '@/engines/tarot';
 // spread-recommender는 pipeline에서 자동 선택용으로 사용
@@ -311,7 +315,7 @@ export function createLunaStrategy(
   const safeRoleplayHook = roleplayHook || '내가 걔 역할 해줄게, 한번 연습해봐';
   const safePanelHook = panelHook || '객관적으로 한번 정리해줄까?';
 
-  // 3가지 액션 카드 — 클릭하면 뭘 하는지 명확하게
+  // 🆕 v85.6: 4가지 액션 카드 (browse_together 추가)
   const actions: LunaStrategyAction[] = [
     {
       type: 'message_draft',
@@ -336,6 +340,14 @@ export function createLunaStrategy(
       description: safePanelHook,
       preview: '한 발 떨어져서 너의 상황 정리 + 평가',
       lunaComment: '너무 가까워서 안 보일 때 이거. 객관적 시각으로',
+    },
+    {
+      type: 'browse_together',
+      emoji: '🔍',
+      title: '같이 찾아보기',
+      description: '장소·선물·영화… 뭐든 같이 구경하며 골라보자',
+      preview: '8개 뽑아서 하나씩 같이 볼게',
+      lunaComment: '뭘 살지/어디 갈지 막막할 때 이거가 제일 재밌어',
     },
   ];
 
@@ -1585,6 +1597,48 @@ export function createMovieRecommendation(
 ): PhaseEvent {
   return {
     type: 'MOVIE_RECOMMENDATION' as PhaseEventType,
+    phase: currentPhase,
+    data: payload as unknown as Record<string, unknown>,
+  };
+}
+
+// ============================================
+// 🆕 v85.6: 같이 찾기 (BROWSE_TOGETHER) — 멀티턴 탐색 전략
+// ============================================
+
+/** 🔍 BROWSE_SEARCHING — 검색 진행 중 */
+export function createBrowseSearching(
+  topic: BrowseSearchingData['topic'],
+  topicLabel: string,
+  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+): PhaseEvent {
+  const data: BrowseSearchingData = { topic, topicLabel };
+  return {
+    type: 'BROWSE_SEARCHING' as PhaseEventType,
+    phase: currentPhase,
+    data: data as unknown as Record<string, unknown>,
+  };
+}
+
+/** 🔍 BROWSE_SESSION — 브라우징 세션 (후보 8개 포함) */
+export function createBrowseSession(
+  payload: BrowseSessionData,
+  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+): PhaseEvent {
+  return {
+    type: 'BROWSE_SESSION' as PhaseEventType,
+    phase: currentPhase,
+    data: payload as unknown as Record<string, unknown>,
+  };
+}
+
+/** 🔍 BROWSE_FINAL — 최종 결정 카드 */
+export function createBrowseFinal(
+  payload: BrowseFinalData,
+  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+): PhaseEvent {
+  return {
+    type: 'BROWSE_FINAL' as PhaseEventType,
     phase: currentPhase,
     data: payload as unknown as Record<string, unknown>,
   };

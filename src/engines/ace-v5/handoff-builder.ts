@@ -392,6 +392,8 @@ export function formatHandoffForPrompt(handoff: LeftToRightHandoff): string {
       ACTIVITY_RECOMMENDATION: '[ACTIVITY_READY:area|category|vibe|level]',
       ANNIVERSARY_RECOMMENDATION: '[ANNIVERSARY_READY:milestone|relation|budget|style]',
       MOVIE_RECOMMENDATION: '[MOVIE_READY:mood|context|preference]',
+      // 🆕 v85.6: 같이 찾기 (멀티턴 탐색)
+      BROWSE_SESSION: '[BROWSE_READY:topic|query|context|budget]',
     };
     const tag = rec.suggested ? (tagMap[rec.suggested] ?? null) : null;
     lines.push(`💡 **${rec.suggested}** 이벤트 어울릴 것 같아 (네 확신 ${(rec.confidence * 10).toFixed(0)}/10)`);

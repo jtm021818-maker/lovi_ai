@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export type LunaSearchingTopic =
-  | 'song' | 'date-spot' | 'gift' | 'activity' | 'anniversary' | 'movie';
+  | 'song' | 'date-spot' | 'gift' | 'activity' | 'anniversary' | 'movie' | 'browse';
 
 interface Palette {
   emoji: string;
@@ -108,6 +108,18 @@ const PALETTES: Record<LunaSearchingTopic, Palette> = {
     stepClass: 'text-indigo-900/85',
     accent: 'bg-indigo-400',
     footer: '오늘 밤 너한테 맞는 거 찾는 중',
+  },
+  'browse': {
+    emoji: '🔍',
+    background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 40%, #fbcfe8 100%)',
+    border: 'rgba(236,72,153,0.28)',
+    shadow: 'rgba(236,72,153,0.18)',
+    iconBg: 'linear-gradient(135deg, #f59e0b 0%, #ec4899 100%)',
+    labelClass: 'text-amber-800',
+    subClass: 'text-amber-700/80',
+    stepClass: 'text-amber-900/85',
+    accent: 'bg-amber-400',
+    footer: '같이 볼 거 8개 뽑는 중',
   },
 };
 

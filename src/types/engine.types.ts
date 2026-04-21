@@ -178,7 +178,13 @@ export type PhaseEventType =
   | 'ANNIVERSARY_SEARCHING'    // 💌 v85: 기념일 이벤트 아이디어 검색 진행 중
   | 'ANNIVERSARY_RECOMMENDATION' // 💌 v85: 기념일 이벤트 아이디어 결과
   | 'MOVIE_SEARCHING'          // 🎬 v85: 영화/드라마 검색 진행 중
-  | 'MOVIE_RECOMMENDATION';    // 🎬 v85: 영화/드라마/OTT 추천 결과
+  | 'MOVIE_RECOMMENDATION'     // 🎬 v85: 영화/드라마/OTT 추천 결과
+  // ──────────────────────────────
+  // 🆕 v85.6: 같이 찾기 — 멀티턴 탐색 전략
+  // ──────────────────────────────
+  | 'BROWSE_SEARCHING'         // 🔍 v85.6: 같이 찾기 검색 진행 중
+  | 'BROWSE_SESSION'           // 🔍 v85.6: 후보들 브라우징 세션 (1개씩 카드 제시)
+  | 'BROWSE_FINAL';            // 🔍 v85.6: 최종 결정 요약 카드
 
 /** Phase 이벤트 데이터 */
 export interface PhaseEvent {
@@ -270,10 +276,11 @@ export interface LunaStoryData {
  * 각 액션은 SOLVE Phase에서 다른 모드로 동작.
  */
 export type LunaStrategyType =
-  | 'message_draft'  // 💬 메시지 초안 같이 짜기 (A/B/C 버전)
-  | 'roleplay'       // 🎭 상황 롤플레이 (루나가 상대 역할)
-  | 'panel'          // 🍿 연참 모드 (객관적 시각 + 재미있는 평가)
-  | 'custom';        // 🤔 다른 거 생각 중 (유저 본인 아이디어)
+  | 'message_draft'   // 💬 메시지 초안 같이 짜기 (A/B/C 버전)
+  | 'roleplay'        // 🎭 상황 롤플레이 (루나가 상대 역할)
+  | 'panel'           // 🍿 연참 모드 (객관적 시각 + 재미있는 평가)
+  | 'browse_together' // 🔍 v85.6: 같이 찾기 (장소/선물/영화/활동 후보 1개씩 브라우징)
+  | 'custom';         // 🤔 다른 거 생각 중 (유저 본인 아이디어 — v85.1+ 미노출)
 
 export interface LunaStrategyAction {
   type: LunaStrategyType;
@@ -656,8 +663,85 @@ export interface MovieSearchingData {
   mood: string;
 }
 
-/** 🆕 v35: 작전 모드 타입 — SOLVE 단계의 특화 모드 */
-export type StrategyMode = 'message_draft' | 'roleplay' | 'panel' | 'custom';
+// ──────────────────────────────────────
+// 🆕 v85.6: 같이 찾기 (Browse Together) — 멀티턴 탐색 전략
+// ──────────────────────────────────────
+
+/** 루나가 후보에 매기는 스탠스 */
+export type LunaStance = 'love' | 'good' | 'mixed' | 'meh';
+
+/** 🔍 v85.6: 개별 후보 카드 */
+export interface BrowseCandidate {
+  /** 고유 id (candidate 식별 + 반응 트래킹용) */
+  id: string;
+  /** 카드 제목 (예: 장소명, 상품명, 영화 제목) */
+  title: string;
+  /** 서브 카테고리 (예: '카페', '주얼리', '도예공방') */
+  category?: string;
+  /** 이모지 (썸네일 대체) */
+  emoji?: string;
+  /** 테마 컬러 (카드 액센트) */
+  themeColor?: string;
+  /** 한 줄 요약 */
+  oneLine: string;
+  /** 긴 설명 (선택 — "더 얘기해" 클릭 시 노출) */
+  detail?: string;
+  /** 가격/비용 힌트 */
+  priceHint?: string;
+  /** 원 자료 URL (블로그/리뷰) */
+  sourceUrl?: string;
+  /** 지도/쇼핑 딥링크 */
+  deepLink?: string;
+  /** 루나의 이 후보에 대한 의견 */
+  lunaTake: {
+    stance: LunaStance;
+    reason: string;
+  };
+}
+
+/** 🔍 v85.6: 같이 찾기 세션 데이터 (이벤트 데이터로 UI 에 통째 전달) */
+export interface BrowseSessionData {
+  /** 세션 고유 id (같은 세션 내 반응 집계용) */
+  sessionId: string;
+  /** 탐색 주제 내부 코드 */
+  topic: 'gift' | 'date-spot' | 'activity' | 'movie' | 'anniversary' | 'general';
+  /** 화면용 주제 라벨 (예: "여친 생일 선물", "성수 조용한 카페") */
+  topicLabel: string;
+  /** 유저 원 질문 요약 (헤더 표시용) */
+  userAsk: string;
+  /** 루나 인트로 멘트 */
+  openerMsg: string;
+  /** 후보 배열 (8~10개) */
+  candidates: BrowseCandidate[];
+  /** 루나 마무리 (모든 후보 훑은 뒤 노출용 한 줄) */
+  lunaClosing?: string;
+  /** 참고 출처 URL */
+  sources?: string[];
+  /** 실행된 Brave 쿼리 */
+  searchQueries?: string[];
+}
+
+/** 🔍 v85.6: 검색 진행 중 상태 */
+export interface BrowseSearchingData {
+  topicLabel: string;
+  topic: BrowseSessionData['topic'];
+}
+
+/** 🔍 v85.6: 최종 결정 요약 카드 */
+export interface BrowseFinalData {
+  sessionId: string;
+  topicLabel: string;
+  /** 유저가 고른 최종 후보 (1개) */
+  chosen: BrowseCandidate;
+  /** shortlist 에 남아있던 후보들 (회고용) */
+  shortlist: BrowseCandidate[];
+  /** 루나 축하/정리 멘트 */
+  lunaWrap: string;
+}
+
+/** 🆕 v35: 작전 모드 타입 — SOLVE 단계의 특화 모드
+ *  v85.6: browse_together 추가 */
+export type StrategyMode = 'message_draft' | 'roleplay' | 'panel' | 'browse_together' | 'custom';
 
 /** 🆕 v35: 세션 내 작전 상태 (모드 진입 후 SOLVE 단계 추적) */
 export interface SessionStrategyState {

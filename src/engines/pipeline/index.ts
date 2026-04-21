@@ -40,7 +40,7 @@ import { analyzeAcc, ACC_CONFIG } from '@/engines/acc';
 
 // 📱 v55: KBE (Kakao Behavior Engine) — 카톡 행동 LLM 판단
 import { runKBE, KBE_CONFIG } from '@/engines/kbe';
-import { createEmotionThermometer, createMindReading, createSituationSummary, createEmotionMirror, createPatternMirror, createSolutionPreview, createSolutionCard, createMessageDraft, createGrowthReport, createSessionSummary, createHomeworkCard, createTarotAxisCollect, createTarotDraw, createTarotInsight, createTarotSessionSummary, createTarotHomework, createLunaStory, createLunaStrategy, createToneSelect, createDraftWorkshop, createRoleplayFeedback, createPanelReport, createIdeaRefine, createActionPlan, createWarmWrap, createSongSearching, createSongRecommendation, createDateSpotSearching, createDateSpotRecommendation, createGiftSearching, createGiftRecommendation, createActivitySearching, createActivityRecommendation, createAnniversarySearching, createAnniversaryRecommendation, createMovieSearching, createMovieRecommendation } from '@/engines/phase-manager/events';
+import { createEmotionThermometer, createMindReading, createSituationSummary, createEmotionMirror, createPatternMirror, createSolutionPreview, createSolutionCard, createMessageDraft, createGrowthReport, createSessionSummary, createHomeworkCard, createTarotAxisCollect, createTarotDraw, createTarotInsight, createTarotSessionSummary, createTarotHomework, createLunaStory, createLunaStrategy, createToneSelect, createDraftWorkshop, createRoleplayFeedback, createPanelReport, createIdeaRefine, createActionPlan, createWarmWrap, createSongSearching, createSongRecommendation, createDateSpotSearching, createDateSpotRecommendation, createGiftSearching, createGiftRecommendation, createActivitySearching, createActivityRecommendation, createAnniversarySearching, createAnniversaryRecommendation, createMovieSearching, createMovieRecommendation, createBrowseSearching, createBrowseSession } from '@/engines/phase-manager/events';
 // 🆕 v84: 루나 자율 판단형 인터넷 검색 모듈
 import { runSongSearch } from '@/lib/ai/song-search';
 import { runDateSpotSearch } from '@/lib/ai/date-spot-search';
@@ -49,7 +49,9 @@ import { runGiftSearch } from '@/lib/ai/gift-search';
 import { runActivitySearch } from '@/lib/ai/activity-search';
 import { runAnniversarySearch } from '@/lib/ai/anniversary-search';
 import { runMovieSearch } from '@/lib/ai/movie-search';
-import type { ParsedSongReadyData, ParsedDateSpotReadyData, ParsedGiftReadyData, ParsedActivityReadyData, ParsedAnniversaryReadyData, ParsedMovieReadyData } from '@/engines/human-like/phase-signal';
+// 🆕 v85.6: 같이 찾기 (멀티턴 탐색)
+import { runBrowseTogetherSearch } from '@/lib/ai/browse-together-search';
+import type { ParsedSongReadyData, ParsedDateSpotReadyData, ParsedGiftReadyData, ParsedActivityReadyData, ParsedAnniversaryReadyData, ParsedMovieReadyData, ParsedBrowseReadyData } from '@/engines/human-like/phase-signal';
 import { generateDynamicTarotInsight } from '@/engines/tarot/interpretation-engine';
 import { matchTarotSolutions, getTarotSolutionPrompt } from '@/engines/solution-dictionary/tarot-solutions';
 import { mapEmotionToCardEnergy, getEnergyPromptHint } from '@/engines/tarot/emotion-card-mapper';
@@ -591,6 +593,8 @@ export class CounselingPipeline {
     let pendingActivitySearch: ParsedActivityReadyData | null = null;
     let pendingAnniversarySearch: ParsedAnniversaryReadyData | null = null;
     let pendingMovieSearch: ParsedMovieReadyData | null = null;
+    // 🆕 v85.6: 같이 찾기
+    let pendingBrowseSearch: ParsedBrowseReadyData | null = null;
     const updatedCompletedEvents = [...(completedEvents ?? [])];
     let updatedLastEventTurn = lastEventTurn;  // 🆕 v10: 이벤트 발생 시 업데이트
 
@@ -2146,6 +2150,16 @@ ${researchResult.insight}
             console.log(`[Pipeline] 🎬 MOVIE_SEARCHING 발동: "${hlrePost.movieReady.mood}"`);
           }
 
+          // 🆕 v85.6: 🔍 같이 찾기 — [BROWSE_READY:topic|query|context|budget]
+          // 모든 Phase 에서 자율 발동 가능. 한 세션에 1회 제한.
+          if (hlrePost.browseReady && canFireEvent() && !updatedCompletedEvents.includes('BROWSE_SEARCHING') && !updatedCompletedEvents.includes('BROWSE_SESSION')) {
+            eventsToFire.push(createBrowseSearching(hlrePost.browseReady.topic, hlrePost.browseReady.query, newPhaseV2));
+            updatedCompletedEvents.push('BROWSE_SEARCHING');
+            updatedLastEventTurn = turnCount;
+            pendingBrowseSearch = hlrePost.browseReady;
+            console.log(`[Pipeline] 🔍 BROWSE_SEARCHING 발동: topic=${hlrePost.browseReady.topic} "${hlrePost.browseReady.query}"`);
+          }
+
           // 🆕 v39: 🎯 SOLVE 마무리 — [ACTION_PLAN:...] → ACTION_PLAN 이벤트
           // SOLVE S3 시뮬레이션 후 "오늘의 작전" 카드 발동 → SOLVE→EMPOWER 전환 게이트
           // 🆕 v78.4: SOLVE(실행 계획) Phase 에서만 발동. MIRROR 에서 AI 가 섣불리 태그 달아도 무시.
@@ -2399,6 +2413,24 @@ ${researchResult.insight}
           console.log(`[Pipeline] 🎬 MOVIE_RECOMMENDATION yield: ${movieResult.movies.length}개`);
         } catch (err) {
           console.error(`[Pipeline] 🎬 영화 검색 실패:`, err);
+        }
+      }
+
+      // 🆕 v85.6: 🔍 같이 찾기 — 8개 후보 수집 후 세션 이벤트 yield
+      if (pendingBrowseSearch) {
+        try {
+          const browseResult = await runBrowseTogetherSearch({
+            topic: pendingBrowseSearch.topic,
+            query: pendingBrowseSearch.query,
+            context: pendingBrowseSearch.context,
+            budget: pendingBrowseSearch.budget,
+          });
+          const browseEvent = createBrowseSession(browseResult, newPhaseV2);
+          yield { type: 'phase_event', data: browseEvent };
+          updatedCompletedEvents.push('BROWSE_SESSION');
+          console.log(`[Pipeline] 🔍 BROWSE_SESSION yield: ${browseResult.candidates.length}개 후보`);
+        } catch (err) {
+          console.error(`[Pipeline] 🔍 같이 찾기 검색 실패:`, err);
         }
       }
 

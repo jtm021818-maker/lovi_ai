@@ -23,7 +23,8 @@ import type { PhaseEvent, SuggestionMeta } from '@/types/engine.types';
  * - Behavioral Rehearsal (CBT): 롤플레이로 실전 전 연습
  */
 
-type StrategyType = 'message_draft' | 'roleplay' | 'panel' | 'custom';
+// 🆕 v85.6: browse_together 추가 (같이 찾기 전략)
+type StrategyType = 'message_draft' | 'roleplay' | 'panel' | 'browse_together' | 'custom';
 
 interface StrategyAction {
   type: StrategyType;
@@ -78,6 +79,15 @@ export default function LunaStrategy({ event, onSelect, disabled }: LunaStrategy
       preview: '강점/주의점 + 응원 한 마디',
       lunaComment: '너무 가까워서 안 보일 때',
     },
+    // 🆕 v85.6: 같이 찾기
+    {
+      type: 'browse_together',
+      emoji: '🔍',
+      title: '같이 찾아보기',
+      description: '장소·선물·영화… 뭐든 같이 구경하며 골라보자',
+      preview: '8개 뽑아서 하나씩 같이 볼게',
+      lunaComment: '뭘 살지/어디 갈지 막막할 때',
+    },
   ];
   // v85.1: customLabel/customEmoji 제거 — "다른 거 생각 중" 옵션 미노출
   //        (IDEA_REFINE 은 이제 작전회의 밖에서 루나 자율 발동)
@@ -99,6 +109,10 @@ export default function LunaStrategy({ event, onSelect, disabled }: LunaStrategy
           break;
         case 'panel':
           text = '🍿 객관적으로 한번 정리해줘';
+          break;
+        case 'browse_together':
+          // v85.6: 같이 찾기 — 루나가 다음 턴에 [BROWSE_READY:...] 태그 발동
+          text = '🔍 같이 둘러보면서 찾아볼래';
           break;
         default:
           text = '음 다른 거 생각해볼게';

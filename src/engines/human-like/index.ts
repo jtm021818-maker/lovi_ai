@@ -311,6 +311,8 @@ export class HumanLikeEngine {
     activityReady: import('./phase-signal').ParsedActivityReadyData | null;
     anniversaryReady: import('./phase-signal').ParsedAnniversaryReadyData | null;
     movieReady: import('./phase-signal').ParsedMovieReadyData | null;
+    // 🆕 v85.6: 같이 찾기
+    browseReady: import('./phase-signal').ParsedBrowseReadyData | null;
   }> {
     // Phase 시그널 파싱 (모든 태그 한 번에 추출 + 제거)
     const parsed = parsePhaseSignal(response);
@@ -319,7 +321,7 @@ export class HumanLikeEngine {
       actionPlan, warmWrap, thinkingDeepKeyword,
       situationRead, lunaThought, situationSummary, coreProblem,
       operationComplete, songReady, dateSpotReady,
-      giftReady, activityReady, anniversaryReady, movieReady } = parsed;
+      giftReady, activityReady, anniversaryReady, movieReady, browseReady } = parsed;
     if (songReady) {
       console.log(`[ACE] 🎵 노래 추천 요청 감지: mood="${songReady.mood}"`);
     }
@@ -439,6 +441,7 @@ export class HumanLikeEngine {
       activityReady,
       anniversaryReady,
       movieReady,
+      browseReady,
     };
   }
 

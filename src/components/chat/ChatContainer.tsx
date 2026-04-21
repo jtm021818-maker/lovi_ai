@@ -30,6 +30,8 @@ import GiftRecommendation from './events/GiftRecommendation';
 import ActivityRecommendation from './events/ActivityRecommendation';
 import AnniversaryRecommendation from './events/AnniversaryRecommendation';
 import MovieRecommendation from './events/MovieRecommendation';
+// 🆕 v85.6: 같이 찾기 (멀티턴 탐색 전략)
+import BrowseTogether from './events/BrowseTogether';
 import LunaStrategy from './events/LunaStrategy';
 // 🆕 v81: BRIDGE 몰입 모드
 import ModeSelector from '@/components/modes/ModeSelector';
@@ -511,6 +513,18 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
       case 'MOVIE_SEARCHING':
       case 'MOVIE_RECOMMENDATION':
         return <MovieRecommendation key={`event-${idx}`} event={event} disabled={isLoading} />;
+      // 🆕 v85.6: 같이 찾기 (멀티턴 탐색)
+      case 'BROWSE_SEARCHING':
+      case 'BROWSE_SESSION':
+      case 'BROWSE_FINAL':
+        return (
+          <BrowseTogether
+            key={`event-${idx}`}
+            event={event}
+            disabled={isLoading}
+            onSelect={(text, meta) => handleSuggestionSelect(text, meta)}
+          />
+        );
       default: return null;
     }
   };

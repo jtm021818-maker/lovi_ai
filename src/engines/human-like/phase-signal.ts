@@ -85,6 +85,14 @@ const ANNIVERSARY_READY_REGEX = /\[ANNIVERSARY_READY:([^|\]]+)\|([^|\]]+)\|([^|\
 //   3번째 필드(preference) 는 선택. (노래와 동일 축)
 const MOVIE_READY_REGEX = /\[MOVIE_READY:([^|\]]+)\|([^|\]]+)(?:\|([^\]]*))?\]\s*/;
 
+// 🆕 v85.6: 🔍 같이 찾기 — [BROWSE_READY:topic|query|context|budget]
+//   topic: gift | date-spot | activity | movie | anniversary | general
+//   query: 유저가 원하는 핵심 요약 (예: "여친 생일 선물 취향 감성")
+//   context: 상황 힌트 (예: "10만원대", "성수 근처")  — 선택
+//   budget: 예산/범위  — 선택
+//   모든 Phase 에서 자율 발동 가능.
+const BROWSE_READY_REGEX = /\[BROWSE_READY:([^|\]]+)\|([^|\]]+)(?:\|([^|\]]*))?(?:\|([^\]]*))?\]\s*/;
+
 export interface ParsedOperationComplete {
   mode: string;
   summary: string;
@@ -134,6 +142,14 @@ export interface ParsedMovieReadyData {
   mood: string;
   context: string;
   preference?: string;
+}
+
+// 🆕 v85.6: 🔍 같이 찾기 태그 파싱 데이터
+export interface ParsedBrowseReadyData {
+  topic: 'gift' | 'date-spot' | 'activity' | 'movie' | 'anniversary' | 'general';
+  query: string;
+  context?: string;
+  budget?: string;
 }
 
 /** 🆕 ACE v4: 루나 이야기 데이터 (AI 응답에서 파싱) */
@@ -261,6 +277,8 @@ export function parsePhaseSignal(response: string): {
   activityReady: ParsedActivityReadyData | null;
   anniversaryReady: ParsedAnniversaryReadyData | null;
   movieReady: ParsedMovieReadyData | null;
+  // 🆕 v85.6: 같이 찾기
+  browseReady: ParsedBrowseReadyData | null;
 } {
   let cleaned = response;
 
@@ -543,6 +561,26 @@ export function parsePhaseSignal(response: string): {
   }
   cleaned = cleaned.replace(/\[MOVIE_READY[^\]]*\]/gi, '').trim();
 
+  // 🆕 v85.6: 🔍 [BROWSE_READY:topic|query|context|budget] — 같이 찾기 요청
+  let browseReady: ParsedBrowseReadyData | null = null;
+  const browseMatch = cleaned.match(BROWSE_READY_REGEX);
+  if (browseMatch) {
+    const rawTopic = (browseMatch[1] ?? '').trim().toLowerCase();
+    const allowedTopics = ['gift', 'date-spot', 'activity', 'movie', 'anniversary', 'general'] as const;
+    const topic = (allowedTopics as readonly string[]).includes(rawTopic)
+      ? (rawTopic as ParsedBrowseReadyData['topic'])
+      : 'general';
+    browseReady = {
+      topic,
+      query: (browseMatch[2] ?? '').trim(),
+      context: browseMatch[3]?.trim() || undefined,
+      budget: browseMatch[4]?.trim() || undefined,
+    };
+    cleaned = cleaned.replace(BROWSE_READY_REGEX, '').trim();
+    console.log(`[PhaseSignal] 🔍 같이 찾기 요청: topic=${browseReady.topic} query="${browseReady.query}"`);
+  }
+  cleaned = cleaned.replace(/\[BROWSE_READY[^\]]*\]/gi, '').trim();
+
   const match = cleaned.match(SIGNAL_REGEX);
   if (!match) return {
     cleanResponse: cleaned,
@@ -571,6 +609,7 @@ export function parsePhaseSignal(response: string): {
     activityReady,
     anniversaryReady,
     movieReady,
+    browseReady,
   };
 
   return {
@@ -600,6 +639,7 @@ export function parsePhaseSignal(response: string): {
     activityReady,
     anniversaryReady,
     movieReady,
+    browseReady,
   };
 }
 
