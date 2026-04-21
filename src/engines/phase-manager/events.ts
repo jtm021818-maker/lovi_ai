@@ -339,13 +339,16 @@ export function createLunaStrategy(
     },
   ];
 
+  // v85.1: customOption 제거 — "아이디어 다듬기"는 작전회의 옵션이 아니라
+  //        루나가 대화 맥락 보고 자율 발동하는 [IDEA_REFINE] 이벤트로 승격됨.
+  //        LunaStrategy UI 에서는 3개 액션 (message_draft/roleplay/panel) 만 노출.
   const data: LunaStrategyData = {
     opener: safeOpener,
     situationSummary: safeSituation,
     actions,
     customOption: {
-      label: '다른 거 생각 중',
-      emoji: '🤔',
+      label: '',
+      emoji: '',
     },
   };
 

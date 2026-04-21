@@ -120,8 +120,9 @@ function computeLunaThinking(
     }
     case 'BRIDGE': {
       // 🆕 v38: BRIDGE = 같이 준비 (모드별 실행)
-      // 모드 완료 이벤트(DRAFT_WORKSHOP/ROLEPLAY_FEEDBACK/PANEL_REPORT/IDEA_REFINE)로 진행률 계산
-      const modeCompleteEvents = ['DRAFT_WORKSHOP', 'ROLEPLAY_FEEDBACK', 'PANEL_REPORT', 'IDEA_REFINE'];
+      // 모드 완료 이벤트(DRAFT_WORKSHOP/ROLEPLAY_FEEDBACK/PANEL_REPORT)로 진행률 계산
+      // v85.1: IDEA_REFINE 은 전 Phase 자율 이벤트로 승격 → BRIDGE 모드 완료 신호에서 제외.
+      const modeCompleteEvents = ['DRAFT_WORKSHOP', 'ROLEPLAY_FEEDBACK', 'PANEL_REPORT'];
       const modeCompleted = modeCompleteEvents.some(e => completedEvents.includes(e));
 
       let level = Math.min(40, turnsInPhase * 20);

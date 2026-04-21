@@ -79,8 +79,8 @@ export default function LunaStrategy({ event, onSelect, disabled }: LunaStrategy
       lunaComment: '너무 가까워서 안 보일 때',
     },
   ];
-  const customLabel = data.customOption?.label || '다른 거 생각 중';
-  const customEmoji = data.customOption?.emoji || '🤔';
+  // v85.1: customLabel/customEmoji 제거 — "다른 거 생각 중" 옵션 미노출
+  //        (IDEA_REFINE 은 이제 작전회의 밖에서 루나 자율 발동)
 
   // 액션 클릭 핸들러
   const handleAction = (action: StrategyAction) => {
@@ -115,21 +115,7 @@ export default function LunaStrategy({ event, onSelect, disabled }: LunaStrategy
     }, 600);
   };
 
-  // 커스텀 옵션 클릭
-  const handleCustom = () => {
-    setSelectedType('custom');
-    setPhase('selected');
-    setTimeout(() => {
-      setPhase('done');
-      onSelect('음 나는 다른 생각이 있어', {
-        source: 'luna_strategy',
-        context: {
-          strategyType: 'custom',
-          situationSummary,
-        },
-      });
-    }, 600);
-  };
+  // v85.1: handleCustom 제거 — "다른 거 생각 중" 버튼 사라지면서 사용처 없음
 
   // 완료 상태
   if (phase === 'done') {
@@ -297,27 +283,9 @@ export default function LunaStrategy({ event, onSelect, disabled }: LunaStrategy
             );
           })}
 
-          {/* 4번째 옵션: 다른 거 생각 중 */}
-          <motion.button
-            initial={{ opacity: 0, x: -10 }}
-            animate={{
-              opacity: phase === 'selected' && selectedType !== 'custom' ? 0.3 : 1,
-              x: 0,
-            }}
-            transition={{ delay: 0.7 + actions.length * 0.12 }}
-            whileHover={!disabled && phase === 'choosing' ? { scale: 1.01 } : {}}
-            whileTap={!disabled && phase === 'choosing' ? { scale: 0.98 } : {}}
-            onClick={() => phase === 'choosing' && handleCustom()}
-            disabled={disabled || phase !== 'choosing'}
-            className={`w-full py-2.5 px-4 rounded-2xl text-[12px] font-medium transition-all border ${
-              selectedType === 'custom'
-                ? 'bg-gradient-to-r from-gray-400 to-gray-500 text-white shadow-lg border-transparent'
-                : 'bg-gray-50/80 border-gray-200 text-gray-500 hover:bg-gray-100'
-            }`}
-          >
-            <span className="mr-1.5">{customEmoji}</span>
-            {customLabel}
-          </motion.button>
+          {/* v85.1: 4번째 옵션 "다른 거 생각 중"(custom/IDEA_REFINE) 제거됨.
+             아이디어 다듬기는 이제 작전회의 선택지가 아니라 루나가 전 Phase 에서
+             맥락 보고 자율 발동하는 [IDEA_REFINE] 이벤트. 3개 액션만 노출. */}
 
           <div className="text-center mt-2">
             <span className="text-[9px] text-orange-400/80">🔥 원하는 방법을 골라봐 — 클릭하면 바로 시작</span>
