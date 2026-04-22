@@ -16,10 +16,9 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { ModeId } from '@/engines/bridge-modes/types';
 import LunaSprite from '@/components/common/LunaSprite';
 
-type StrategyMode = 'browse_together' | 'draft' | 'panel' | 'roleplay';
+export type StrategyMode = 'browse_together' | 'draft' | 'panel' | 'roleplay';
 
 
 interface StrategyDecision {
@@ -36,7 +35,7 @@ interface LunaStrategyDecisionProps {
   /** 최근 대화 히스토리 (맥락 전달용) */
   recentHistory?: Array<{ role: 'user' | 'ai'; content: string }>;
   /** 결정된 모드로 자동 진입 */
-  onDecide: (mode: ModeId, enrichedOpener: string, reasoning: string) => void;
+  onDecide: (mode: StrategyMode, enrichedOpener: string, reasoning: string) => void;
   /** 유저가 "다른 방법 보여줘" 눌렀을 때 */
   onEscape: () => void;
 }
@@ -147,7 +146,7 @@ export default function LunaStrategyDecision({
     if (phase !== 'reveal' || !decision) return;
     const timer = setTimeout(() => {
       setPhase('entering');
-      onDecide(decision.mode as ModeId, decision.opener, decision.reasoning);
+      onDecide(decision.mode, decision.opener, decision.reasoning);
     }, AUTO_ENTER_MS);
     return () => clearTimeout(timer);
   }, [phase, decision, onDecide]);
@@ -362,7 +361,7 @@ export default function LunaStrategyDecision({
                   <button
                     onClick={() => {
                       setPhase('entering');
-                      onDecide(decision.mode as ModeId, decision.opener, decision.reasoning);
+                      onDecide(decision.mode, decision.opener, decision.reasoning);
                     }}
                     className="px-4 py-2 rounded-full text-[12px] font-bold text-white active:scale-95 transition-transform"
                     style={{ background: meta.color, boxShadow: `0 2px 12px ${meta.accent}` }}

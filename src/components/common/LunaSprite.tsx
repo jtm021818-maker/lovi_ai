@@ -197,6 +197,8 @@ export default function LunaSprite({
           backgroundImage: `url(${finalUrl})`,
           backgroundSize: `${frameW * finalCols}px ${frameH * finalRows}px`,
           backgroundRepeat: 'no-repeat',
+          imageRendering: 'crisp-edges', // Fallback for Firefox/standard
+          WebkitFontSmoothing: 'antialiased',
           transform: `translate(-${col * frameW}px, -${row * frameH}px)`,
           pointerEvents: 'none',
           opacity: loaded ? 1 : 0,

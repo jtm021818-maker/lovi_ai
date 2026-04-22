@@ -301,8 +301,14 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showDraftsVault, setShowDraftsVault] = useState(false);
 
-  async function handleModeEnter(mode: ModeId, strategyData: { opener?: string; situationSummary?: string }) {
+  async function handleModeEnter(mode: ModeId | 'browse_together', strategyData: { opener?: string; situationSummary?: string }) {
     const context = strategyData.situationSummary ?? '';
+    if (mode === 'browse_together') {
+      // 🆕 v85.6: 같이 찾기 — BRIDGE 모드가 아니라 유저 메시지로 Luna AI 가
+      // 다음 턴에 [BROWSE_READY:...] 태그를 발화하도록 트리거.
+      sendMessage('🔍 같이 둘러보면서 찾아볼래', { source: 'suggestion' });
+      return;
+    }
     if (mode === 'tone') {
       // 🆕 v81: LLM 으로 3톤 실시간 생성
       try {
