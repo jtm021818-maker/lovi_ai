@@ -35,7 +35,7 @@ export default function InsightCard({ event, onSelect, disabled }: InsightCardPr
       <div className="flex items-start gap-3 mb-4 relative z-10">
         <div className="w-9 h-9 flex-shrink-0 border-2 border-slate-700 overflow-hidden"
              style={{ borderRadius: '50% 40% 60% 50% / 60% 50% 40% 50%' }}>
-          <img src="/luna_fox_transparent.png" alt="루나" className="w-full h-full object-cover" />
+          <img src="/luna_fox_transparent.webp" alt="루나" className="w-full h-full object-cover" />
         </div>
         <div>
           <h4 className="font-extrabold text-[15px] text-slate-800 tracking-tight">

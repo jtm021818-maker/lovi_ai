@@ -84,7 +84,7 @@ export default function IntimacyCard({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <img
-            src={isTarot ? '/taronaong_kakao.png' : '/luna_fox_transparent.png'}
+            src={isTarot ? '/taronaong_kakao.webp' : '/luna_fox_transparent.webp'}
             alt={isTarot ? '타로냥' : '루나'}
             style={{
               width: 22,

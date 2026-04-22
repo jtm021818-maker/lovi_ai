@@ -124,7 +124,7 @@ export default function WarmWrap({ event, onSelect, disabled }: WarmWrapProps) {
               className="w-12 h-12 flex-shrink-0 border-2 border-purple-400 overflow-hidden bg-white shadow-md"
               style={{ borderRadius: '50% 40% 60% 50% / 60% 50% 40% 50%' }}
             >
-              <img src="/char_img/luna_1_event.png" alt="루나" className="w-full h-full object-cover" />
+              <img src="/char_img/luna_1_event.webp" alt="루나" className="w-full h-full object-cover" />
             </div>
             <motion.div
               animate={{ scale: [1, 1.2, 1], rotate: [0, 5, -5, 0] }}

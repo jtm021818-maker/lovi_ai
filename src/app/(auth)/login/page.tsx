@@ -68,11 +68,11 @@ export default function LoginPage() {
       
       {/* 
         [배경 이미지 영역] 
-        luna_login.png 등 대표님이 넣어두신 이미지가 화면에 꽉 차게 들어갑니다.
+        luna_login.webp 등 대표님이 넣어두신 이미지가 화면에 꽉 차게 들어갑니다.
       */}
       <div className="absolute inset-0 z-0 w-full h-full max-w-[500px] mx-auto">
         <Image
-          src="/luna_login.png" // 👈 지정해주신 백그라운드 이미지 파일명
+          src="/luna_login.webp" // 👈 지정해주신 백그라운드 이미지 파일명
           alt="Luna Login Background"
           fill
           className="object-cover object-top"

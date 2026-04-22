@@ -13,7 +13,7 @@ export default function WelcomePage() {
       */}
       <div className="absolute inset-0 z-0 w-full h-full">
         <Image
-          src="/stitch_luna_landing.png" // 👈 쓰실 통이미지 경로
+          src="/stitch_luna_landing.webp" // 👈 쓰실 통이미지 경로
           alt="Luna AI Coach"
           fill
           className="object-cover object-center"

@@ -389,7 +389,7 @@ function TurnBubble({ turn, scenario, badge }: { turn: HistoryTurn; scenario: Ro
           {idx === 0 ? (
             <div className="relative shrink-0">
               <div className="w-8 h-8 rounded-full bg-[#F4EFE6] border border-pink-300 overflow-hidden">
-                <img src="/luna_fox_transparent.png" alt="루나" className="w-full h-full object-cover" />
+                <img src="/luna_fox_transparent.webp" alt="루나" className="w-full h-full object-cover" />
               </div>
               <motion.div
                 layoutId="luna-role-badge"

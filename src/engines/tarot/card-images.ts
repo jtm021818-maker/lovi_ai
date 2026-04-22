@@ -2,12 +2,12 @@
  * 🃏 타로 카드 앞면 이미지 경로 매핑
  *
  * 이미지 파일 규칙:
- *   /public/tarot-cards/{suit}/{id}.jpg
+ *   /public/tarot-cards/{suit}/{id}.webp
  *
  * 예시:
- *   major_0  → /tarot-cards/major/major_0.jpg   (The Fool)
- *   cups_1   → /tarot-cards/cups/cups_1.jpg     (Ace of Cups)
- *   swords_knight → /tarot-cards/swords/swords_knight.jpg
+ *   major_0  → /tarot-cards/major/major_0.webp   (The Fool)
+ *   cups_1   → /tarot-cards/cups/cups_1.webp     (Ace of Cups)
+ *   swords_knight → /tarot-cards/swords/swords_knight.webp
  *
  * 이미지가 없으면 fallback(이모지 기반 렌더링) 사용
  */
@@ -15,7 +15,7 @@
 /** 카드 ID → 이미지 경로 변환 */
 export function getCardImagePath(cardId: string): string {
   const folder = getCardFolder(cardId);
-  return `/tarot-cards/${folder}/${cardId}.jpg`;
+  return `/tarot-cards/${folder}/${cardId}.webp`;
 }
 
 /** 카드 ID → 폴더명 추출 */

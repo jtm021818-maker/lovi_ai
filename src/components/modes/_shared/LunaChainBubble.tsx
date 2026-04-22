@@ -27,7 +27,7 @@ export default function LunaChainBubble({
   text,
   startDelay = 0,
   stagger = 0.45,
-  avatarSrc = '/luna_fox_transparent.png',
+  avatarSrc = '/luna_fox_transparent.webp',
   name = '루나',
   variant = 'luna',
 }: LunaChainBubbleProps) {

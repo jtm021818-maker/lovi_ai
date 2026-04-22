@@ -175,7 +175,7 @@ export default function EmotionThermometer({ event, onSelect, disabled }: Emotio
       <div className="flex items-start gap-3 mb-6 relative z-10">
         <div className="w-10 h-10 flex-shrink-0 border-2 border-slate-700 overflow-hidden"
              style={{ borderRadius: '50% 40% 60% 50% / 60% 50% 40% 50%' }}>
-          <img src="/luna_fox_transparent.png" alt="루나" className="w-full h-full object-cover" />
+          <img src="/luna_fox_transparent.webp" alt="루나" className="w-full h-full object-cover" />
         </div>
         <div className="bg-pink-100/60 px-4 py-3 border-2 border-slate-700"
              style={{ borderRadius: '15px 225px 15px 255px/255px 15px 225px 15px', transform: 'rotate(1deg)' }}>

@@ -28,7 +28,7 @@ export default function LunaSticker({ stickerId }: LunaStickerProps) {
       className="my-1"
     >
       <img
-        src={`/stickers/luna-${stickerId}.png`}
+        src={`/stickers/luna-${stickerId}.webp`}
         alt={`루나 ${stickerId}`}
         className="w-[120px] h-auto"
         draggable={false}

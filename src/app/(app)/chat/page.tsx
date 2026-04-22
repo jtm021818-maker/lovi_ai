@@ -349,7 +349,7 @@ export default function ChatListPage() {
 
       {/* 벚꽃 배경 이미지 */}
       <div className="fixed inset-0 -z-10">
-        <img src="/ui_list_bg.jpeg" className="w-full h-full object-cover" alt="" />
+        <img src="/ui_list_bg.webp" className="w-full h-full object-cover" alt="" />
       </div>
 
       {/* 네이티브 헤더 UI */}
@@ -404,9 +404,9 @@ export default function ChatListPage() {
               <AnimatePresence>
                 {groupSessions.map((session, i) => {
                   const cardSrcs = [
-                    "/ui/list_1_transparent.png",
-                    "/ui/list_2_transparent.png",
-                    "/ui/list_3_transparent.png",
+                    "/ui/list_1_transparent.webp",
+                    "/ui/list_2_transparent.webp",
+                    "/ui/list_3_transparent.webp",
                   ];
                   const imgSrc = cardSrcs[i % cardSrcs.length];
                   const uniformInsets = "top-[18%] left-[7%] right-[7%] bottom-[10%]";

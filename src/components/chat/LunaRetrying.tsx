@@ -90,7 +90,7 @@ export default function LunaRetrying({ retries, done = false }: LunaRetryingProp
                     style={{ boxShadow: '0 0 16px rgba(168,85,247,0.3)' }}
                   >
                     <img
-                      src="/char_img/luna_1_event.png"
+                      src="/char_img/luna_1_event.webp"
                       alt="루나"
                       className="w-full h-full object-cover"
                     />

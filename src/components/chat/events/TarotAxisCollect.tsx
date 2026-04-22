@@ -244,7 +244,7 @@ export default function TarotAxisCollect({ data, onChoice, disabled }: TarotAxis
             transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
           >
             <Image
-              src="/char_img/taronaang_1_Evt.png"
+              src="/char_img/taronaang_1_Evt.webp"
               width={130}
               height={130}
               alt="타로냥"
@@ -366,7 +366,7 @@ export default function TarotAxisCollect({ data, onChoice, disabled }: TarotAxis
                       position: 'relative',
                     }}
                   >
-                    {/* ─── 뒷면: card_back_img.png ─── */}
+                    {/* ─── 뒷면: card_back_img.webp ─── */}
                     <div
                       className="absolute inset-0 rounded-[12px] overflow-hidden shadow-lg"
                       style={{
@@ -381,7 +381,7 @@ export default function TarotAxisCollect({ data, onChoice, disabled }: TarotAxis
                       }}
                     >
                       <Image
-                        src="/ui/card_back_img.png"
+                        src="/ui/card_back_img.webp"
                         fill
                         sizes="95px"
                         alt="tarot card back"

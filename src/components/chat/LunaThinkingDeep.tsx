@@ -64,7 +64,7 @@ export default function LunaThinkingDeep({ phrases, done = false }: LunaThinking
                 style={{ borderRadius: '50% 40% 60% 50% / 60% 50% 40% 50%' }}
               >
                 <img
-                  src="/char_img/luna_1_event.png"
+                  src="/char_img/luna_1_event.webp"
                   alt="루나 고민 중"
                   className="w-full h-full object-cover"
                 />

@@ -99,7 +99,7 @@ export default function ToneMode({ initial, onComplete }: ToneModeProps) {
             className="flex items-end gap-2"
           >
             <div className="w-8 h-8 rounded-full bg-[#F4EFE6] border border-[#EACbb3] overflow-hidden shrink-0">
-              <img src="/luna_fox_transparent.png" alt="루나" className="w-full h-full object-cover" />
+              <img src="/luna_fox_transparent.webp" alt="루나" className="w-full h-full object-cover" />
             </div>
             <div className="px-3 py-2 rounded-2xl rounded-tl-sm bg-[#F4EFE6] border border-[#D5C2A5] text-[13px] text-[#4E342E]">
               오케이 그 톤으로 가자 ✨

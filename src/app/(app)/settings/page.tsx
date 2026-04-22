@@ -39,9 +39,9 @@ const SITUATION_OPTIONS = [
 ];
 
 const PERSONA_OPTIONS: { value: PersonaMode; label: string; icon: string; image: string; desc: string; bg: string }[] = [
-  { value: 'luna', label: '루나', icon: '🦊', image: '/ui/sangdam_luna.png', desc: '편한 친구처럼', bg: '#e8daf5' },
-  // { value: 'counselor', label: '상담사', icon: '👩‍⚕️', image: '/personas/counselor_cushion.png', desc: '전문적으로', bg: '#c5ddf5' },
-  { value: 'tarot', label: '타로냥', icon: '🔮', image: '/ui/sangdam_taromiao.png', desc: '카드로 읽는 마음', bg: '#1a1a3e' },
+  { value: 'luna', label: '루나', icon: '🦊', image: '/ui/sangdam_luna.webp', desc: '편한 친구처럼', bg: '#e8daf5' },
+  // { value: 'counselor', label: '상담사', icon: '👩‍⚕️', image: '/personas/counselor_cushion.webp', desc: '전문적으로', bg: '#c5ddf5' },
+  { value: 'tarot', label: '타로냥', icon: '🔮', image: '/ui/sangdam_taromiao.webp', desc: '카드로 읽는 마음', bg: '#1a1a3e' },
 ];
 
 // ============================================================
@@ -294,7 +294,7 @@ export default function SettingsPage() {
             >
               {profile?.persona_mode === 'tarot' ? (
                 <Image
-                  src="/ui/sangdam_taromiao.png"
+                  src="/ui/sangdam_taromiao.webp"
                   alt="TarotNyang"
                   width={260}
                   height={260}
@@ -513,7 +513,7 @@ export default function SettingsPage() {
                   }}
                 >
                   <img
-                    src="/luna_fox_transparent.png"
+                    src="/luna_fox_transparent.webp"
                     alt="루나"
                     style={{
                       width: 24,
@@ -551,7 +551,7 @@ export default function SettingsPage() {
                   }}
                 >
                   <img
-                    src="/taronaong_kakao.png"
+                    src="/taronaong_kakao.webp"
                     alt="타로냥"
                     style={{
                       width: 24,

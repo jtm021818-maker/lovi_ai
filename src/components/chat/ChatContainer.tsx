@@ -531,7 +531,7 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
 
   return (
     <div
-      className="flex flex-col h-full bg-[url('/kakao_bg.jpeg')] bg-cover bg-center bg-no-repeat bg-fixed font-sans"
+      className="flex flex-col h-full bg-[url('/kakao_bg.webp')] bg-cover bg-center bg-no-repeat bg-fixed font-sans"
     >
       {/* 프리미엄 헤더 (루나 상담실) + 시나리오 태그 */}
       <div className="bg-white/40 border-b border-white/30 z-10 sticky top-0 shadow-sm">
@@ -689,7 +689,7 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
               >
                 <div className="relative mr-2 flex-shrink-0 mt-1">
                   <div className="w-10 h-10 rounded-[16px] bg-[#F4EFE6] flex items-center justify-center overflow-hidden border border-[#EACbb3]">
-                    <img src="/char_img/taronaang_1_Evt.png" alt="타로냥" className="w-full h-full object-cover" />
+                    <img src="/char_img/taronaang_1_Evt.webp" alt="타로냥" className="w-full h-full object-cover" />
                   </div>
                 </div>
                 <div className="flex flex-col items-start max-w-[75%]">
@@ -726,7 +726,7 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
                 {/* Profile Image (Kakao style) */}
                 <div className="relative mr-2 flex-shrink-0 mt-1">
                   <div className="w-10 h-10 rounded-[16px] bg-[#F4EFE6] flex items-center justify-center overflow-hidden border border-[#EACbb3]">
-                    <img src="/luna_fox_transparent.png" alt="루나" className="w-full h-full object-cover" />
+                    <img src="/luna_fox_transparent.webp" alt="루나" className="w-full h-full object-cover" />
                   </div>
                 </div>
 

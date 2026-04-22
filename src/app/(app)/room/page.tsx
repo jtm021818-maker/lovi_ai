@@ -237,7 +237,7 @@ export default function RoomPage() {
             style={{
               width: ROOM_W,
               height: ROOM_H,
-              backgroundImage: 'url(/ui/room_bg.png)',
+              backgroundImage: 'url(/ui/room_bg.webp)',
               backgroundSize: '100% 100%',
               backgroundRepeat: 'no-repeat',
               backgroundColor: '#fac898',

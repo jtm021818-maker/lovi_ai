@@ -80,8 +80,8 @@ const DEFAULT_GRADIENT = 'linear-gradient(180deg, #1a1025 0%, #0f0a1a 50%, #1a0a
 
 /** 캐릭터 스프라이트 시트 (4열 x 2행 = 8프레임, 각 344x384) */
 const SPRITE_SHEET = {
-  female: '/char_img/event1_luna_girl.png',
-  male: '/char_img/event1_luna_man.png',
+  female: '/char_img/event1_luna_girl.webp',
+  male: '/char_img/event1_luna_man.webp',
 };
 const SPRITE_COLS = 4;
 const SPRITE_ROWS = 2;
@@ -90,13 +90,13 @@ type SpriteFrame = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 /**
  * 여자역할 전용 애니메이션 오버라이드 (v82.x):
- *   1 (슬픔) → luna_sprite_movie_1.png (7×7, 49프레임)
- *   5 (웃음) → luna_sprite_movie_2.png (7×7, 49프레임)
+ *   1 (슬픔) → luna_sprite_movie_1.webp (7×7, 49프레임)
+ *   5 (웃음) → luna_sprite_movie_2.webp (7×7, 49프레임)
  * 원본 해상도 1350×2400 → 프레임 aspect 2400/1350 ≈ 1.778 (세로 긴 프레임)
  */
 const FEMALE_MOVIE_SPRITE: Partial<Record<SpriteFrame, string>> = {
-  1: '/splite/luna_sprite_movie_1.png',
-  5: '/splite/luna_sprite_movie_2.png',
+  1: '/splite/luna_sprite_movie_1.webp',
+  5: '/splite/luna_sprite_movie_2.webp',
 };
 const MOVIE_SPRITE_COLS = 7;
 const MOVIE_SPRITE_ROWS = 7;
@@ -366,8 +366,8 @@ function VNScene({
   // 스프라이트 시트 결정 — [남자] → man, [여자] → girl 고정 매핑
   const gender = data.characterSetup?.userGender || 'female';
   const mainSheet = SPRITE_SHEET[gender] || SPRITE_SHEET.female;
-  const maleSheet = SPRITE_SHEET.male;   // event1_luna_man.png
-  const femaleSheet = SPRITE_SHEET.female; // event1_luna_girl.png
+  const maleSheet = SPRITE_SHEET.male;   // event1_luna_man.webp
+  const femaleSheet = SPRITE_SHEET.female; // event1_luna_girl.webp
 
   // 현재 대사의 파싱 결과 (speaker + 성별 확인용) — v61: characterSetup 으로 라벨 기반 정확 매핑
   const currentParsed = phase === 'playing' ? parseSceneLine(lines[lineIndex], data.characterSetup) : null;
@@ -1046,7 +1046,7 @@ function LegacyMirror({
       <div className="flex items-start gap-3 mb-5 relative z-10">
         <div className="w-10 h-10 flex-shrink-0 border-2 border-slate-700 overflow-hidden"
              style={{ borderRadius: '50% 40% 60% 50% / 60% 50% 40% 50%' }}>
-          <img src="/luna_fox_transparent.png" alt="루나" className="w-full h-full object-cover" />
+          <img src="/luna_fox_transparent.webp" alt="루나" className="w-full h-full object-cover" />
         </div>
         <div>
           <p className="text-[13px] font-bold text-slate-800">루나가 보기에... 🦊</p>

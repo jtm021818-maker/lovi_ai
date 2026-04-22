@@ -125,7 +125,7 @@ export default function TarotStartScreen({ onQuickStart }: TarotStartScreenProps
           style={{ width: 110, height: 110, borderColor: '#d4af37', boxShadow: '0 0 30px rgba(212,175,55,0.4), 0 0 60px rgba(107,70,193,0.3)' }}
         >
           <Image
-            src="/taronaong_kakao.png"
+            src="/taronaong_kakao.webp"
             alt="타로냥"
             width={110}
             height={110}

@@ -155,7 +155,7 @@ export default function MindReading({ event, onSelect, disabled }: MindReadingPr
           <div className="relative">
             <div className="w-10 h-10 flex-shrink-0 border-2 border-pink-200 overflow-hidden bg-white shadow-sm"
                  style={{ borderRadius: '50% 40% 60% 50% / 60% 50% 40% 50%' }}>
-              <img src="/char_img/luna_1_event.png" alt="루나" className="w-full h-full object-cover" />
+              <img src="/char_img/luna_1_event.webp" alt="루나" className="w-full h-full object-cover" />
             </div>
             <motion.div
               animate={{ opacity: [0.3, 1, 0.3] }}
@@ -248,7 +248,7 @@ export default function MindReading({ event, onSelect, disabled }: MindReadingPr
                     {data.stickerId && (
                       <div className="flex justify-center mb-3">
                         <img
-                          src={`/stickers/luna-${data.stickerId}.png`}
+                          src={`/stickers/luna-${data.stickerId}.webp`}
                           alt="루나"
                           className="w-[80px] h-auto"
                         />

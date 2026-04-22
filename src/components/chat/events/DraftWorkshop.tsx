@@ -139,7 +139,7 @@ export default function DraftWorkshop({ event, onSelect, disabled }: DraftWorksh
             className="w-10 h-10 flex-shrink-0 border-2 border-yellow-400 overflow-hidden bg-white shadow-md"
             style={{ borderRadius: '50% 40% 60% 50% / 60% 50% 40% 50%' }}
           >
-            <img src="/char_img/luna_1_event.png" alt="루나" className="w-full h-full object-cover" />
+            <img src="/char_img/luna_1_event.webp" alt="루나" className="w-full h-full object-cover" />
           </div>
           <div>
             <div className="text-[14px] font-bold text-yellow-700">💬 카톡 초안 워크샵</div>

@@ -104,7 +104,7 @@ export default function MessageBubble({ message, isTyping, onSpeak, isSpeaking, 
             transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
             className="w-10 h-10 rounded-full bg-transparent flex items-center justify-center shadow-sm border border-[#EACbb3] overflow-hidden"
           >
-            <img src={persona === 'tarot' ? '/taronaong_kakao.png' : '/luna_fox_transparent.png'} alt={persona === 'tarot' ? '타로냥' : '루나'} className="w-full h-full object-cover" />
+            <img src={persona === 'tarot' ? '/taronaong_kakao.webp' : '/luna_fox_transparent.webp'} alt={persona === 'tarot' ? '타로냥' : '루나'} className="w-full h-full object-cover" />
           </motion.div>
         </div>
       )}

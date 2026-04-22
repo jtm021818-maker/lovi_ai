@@ -4,8 +4,8 @@
  * 🦊 v82.20: Luna Sprite — 범용 스프라이트 컴포넌트
  *
  * 여러 스프라이트 시트 지원:
- *   - luna_sprite_1.png (5×5, 25프레임) — BRIDGE 아바타, 루나극장 choice
- *   - luna_sprite_setting_1.png (7×7, 49프레임) — 설정 페이지 상담 모드
+ *   - luna_sprite_1.webp (5×5, 25프레임) — BRIDGE 아바타, 루나극장 choice
+ *   - luna_sprite_setting_1.webp (7×7, 49프레임) — 설정 페이지 상담 모드
  *
  * React state + 픽셀 기반 transform 으로 안정적 애니메이션.
  */
@@ -15,12 +15,12 @@ import { useEffect, useRef, useState } from 'react';
 // ─── Preset 정의 ──────────────────────────────────────
 export const SPRITE_PRESETS = {
   avatar: {
-    url: '/splite/luna_sprite_1.png',
+    url: '/splite/luna_sprite_1.webp',
     cols: 5,
     rows: 5,
   },
   setting: {
-    url: '/splite/luna_sprite_setting_1.png',
+    url: '/splite/luna_sprite_setting_1.webp',
     cols: 7,
     rows: 7,
   },

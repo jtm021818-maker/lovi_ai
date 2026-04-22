@@ -370,7 +370,7 @@ export default function XRayPage() {
             }}
           >
             <Image
-              src="/char_img/taronaang_xray.png"
+              src="/char_img/taronaang_xray.webp"
               width={480}
               height={480}
               alt="분석냥"
