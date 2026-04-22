@@ -15,24 +15,17 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getSpirit } from '@/data/spirits';
-import { pickBondDialogue } from '@/data/bond-dialogues';
-import { getInteractions, pickRandomInteraction } from '@/data/interactions';
-import type { RoomState, PlacedSpirit } from '@/types/room.types';
-import type { UserSpirit, SpiritId, BondLv } from '@/types/spirit.types';
+import type { RoomState } from '@/types/room.types';
+import type { UserSpirit, SpiritId } from '@/types/spirit.types';
 
-// 신규 v85.2 구성요소
 import RoomFrame from '@/components/room/RoomFrame';
 import AmbientFireflies from '@/components/room/AmbientFireflies';
 import Drawer3D from '@/components/room/Drawer3D';
 import SpiritSlot from '@/components/room/SpiritSlot';
 import EditFab from '@/components/room/EditFab';
-// 🆕 v85.3: 정령 도감
 import DexFab from '@/components/room/DexFab';
 import DexModal from '@/components/dex/DexModal';
 import { SPIRITS } from '@/data/spirits';
-// 🆕 v85.4: 스프라이트 기반 배회 정령
-import WanderingSpirit from '@/components/spirit/WanderingSpirit';
-import { hasSpiritSprite } from '@/data/spirit-sprites';
 
 /**
  * 🆕 v83.1: Spirit personality-based idle motion.
@@ -80,8 +73,6 @@ export default function RoomPage() {
   const [ownedSpirits, setOwnedSpirits] = useState<UserSpirit[]>([]);
   const [room, setRoom] = useState<RoomState>({ placedSpirits: [], furniture: {}, theme: 'default' });
   const [loaded, setLoaded] = useState(false);
-  const [bubble, setBubble] = useState<{ x: number; y: number; text: string; fromSpirit: SpiritId } | null>(null);
-  const [interactionBubble, setInteractionBubble] = useState<{ pairKey: string; a: string; b: string } | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
   const [showDex, setShowDex] = useState(false);
@@ -111,37 +102,6 @@ export default function RoomPage() {
       }).catch(() => {});
     }, 300);
   }, []);
-
-  // Idle 상호작용 — 5분마다 랜덤 발동 (첫 5초 후 시작)
-  useEffect(() => {
-    if (!loaded) return;
-
-    const bondLvs: Record<string, number> = {};
-    for (const us of ownedSpirits) bondLvs[us.spiritId] = us.bondLv;
-
-    const placedIds = room.placedSpirits.map((p) => p.spiritId);
-    const interactions = getInteractions(placedIds, bondLvs);
-
-    if (interactions.length === 0) return;
-
-    const triggerInteraction = () => {
-      const picked = pickRandomInteraction(interactions);
-      if (picked) {
-        setInteractionBubble({ pairKey: picked.pairKey, a: picked.dialogue.a, b: picked.dialogue.b });
-        setTimeout(() => setInteractionBubble(null), 6000);
-      }
-    };
-    const t1 = setTimeout(triggerInteraction, 5000);
-    const t2 = setInterval(triggerInteraction, 5 * 60 * 1000);
-    return () => {
-      clearTimeout(t1);
-      clearInterval(t2);
-    };
-  }, [loaded, room.placedSpirits, ownedSpirits]);
-
-  function getBondLv(id: SpiritId): BondLv {
-    return ((ownedSpirits.find((u) => u.spiritId === id)?.bondLv ?? 1) as BondLv);
-  }
 
   function addSpirit(id: SpiritId) {
     if (room.placedSpirits.some((p) => p.spiritId === id)) return;
@@ -173,24 +133,6 @@ export default function RoomPage() {
     };
     setRoom(updated);
     persistRoom(updated);
-  }
-
-  function handleSpiritTap(p: PlacedSpirit) {
-    if (editMode) {
-      removeSpirit(p.spiritId);
-      return;
-    }
-    const lv = getBondLv(p.spiritId);
-    const line = pickBondDialogue(p.spiritId, lv);
-    if (line) {
-      setBubble({ x: p.x * ROOM_W, y: p.y * ROOM_H, text: line, fromSpirit: p.spiritId });
-      setTimeout(() => setBubble(null), 4500);
-    }
-    fetch(`/api/spirits/${p.spiritId}/bond`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amount: 2 }),
-    }).catch(() => {});
   }
 
   const placedIds = new Set(room.placedSpirits.map((p) => p.spiritId));
@@ -252,83 +194,60 @@ export default function RoomPage() {
 
           {/* 배치된 정령 */}
           <AnimatePresence>
-            {room.placedSpirits.map((p) => {
-              const sp = getSpirit(p.spiritId);
-              if (!sp) return null;
-
-              // v85.4: 스프라이트 등록된 정령 → 배회 컴포넌트
-              if (hasSpiritSprite(p.spiritId)) {
+            {room.placedSpirits
+              .filter((p, i, arr) => arr.findIndex((q) => q.spiritId === p.spiritId) === i)
+              .map((p) => {
+                const sp = getSpirit(p.spiritId);
+                if (!sp) return null;
+                const motion$ = getSpiritMotion(p.spiritId);
+                const idleAnim: any = editMode
+                  ? { scale: 1, opacity: 1 }
+                  : { scale: motion$.scale ?? 1, opacity: 1, y: motion$.y ?? 0, x: motion$.x ?? 0, rotate: motion$.rotate ?? 0 };
                 return (
-                  <WanderingSpirit
+                  <motion.div
                     key={p.spiritId}
-                    spirit={sp}
-                    roomWidth={ROOM_W}
-                    roomHeight={ROOM_H}
-                    initialX={p.x}
-                    initialY={p.y}
-                    editMode={editMode}
-                    showRemoveBadge={editMode}
-                    onTap={() => handleSpiritTap(p)}
-                    onDragEnd={(nx, ny) => moveSpirit(p.spiritId, nx, ny)}
-                  />
+                    drag={editMode}
+                    dragMomentum={false}
+                    dragConstraints={{ left: 0, top: 0, right: ROOM_W, bottom: ROOM_H }}
+                    onDragEnd={(_e, info) => {
+                      const nx = Math.max(0, Math.min(1, (p.x * ROOM_W + info.offset.x) / ROOM_W));
+                      const ny = Math.max(0, Math.min(1, (p.y * ROOM_H + info.offset.y) / ROOM_H));
+                      moveSpirit(p.spiritId, nx, ny);
+                    }}
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={idleAnim}
+                    exit={{ scale: 0, opacity: 0 }}
+                    transition={{
+                      y: { duration: motion$.duration, repeat: Infinity, ease: 'easeInOut' },
+                      x: { duration: motion$.duration, repeat: Infinity, ease: 'easeInOut' },
+                      rotate: { duration: motion$.duration, repeat: Infinity, ease: 'easeInOut' },
+                      scale: editMode
+                        ? { type: 'spring', stiffness: 300 }
+                        : { duration: motion$.duration, repeat: Infinity, ease: 'easeInOut' },
+                    }}
+                    onClick={() => editMode && removeSpirit(p.spiritId)}
+                    className="absolute select-none z-30"
+                    style={{
+                      left: p.x * ROOM_W - 18,
+                      top: p.y * ROOM_H - 18,
+                      width: 36,
+                      height: 36,
+                      fontSize: 28,
+                      textAlign: 'center',
+                      lineHeight: '36px',
+                      filter: `drop-shadow(0 2px 4px ${sp.themeColor}88)`,
+                      cursor: editMode ? 'pointer' : 'default',
+                    }}
+                  >
+                    {sp.emoji}
+                    {editMode && (
+                      <div className="absolute -top-1 -right-2 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center font-black shadow-md">
+                        ×
+                      </div>
+                    )}
+                  </motion.div>
                 );
-              }
-
-              // 기존: 이모지 fallback
-              const motion$ = getSpiritMotion(p.spiritId);
-              const idleAnim: any = editMode
-                ? { scale: 1, opacity: 1 }
-                : {
-                    scale: motion$.scale ?? 1,
-                    opacity: 1,
-                    y: motion$.y ?? 0,
-                    x: motion$.x ?? 0,
-                    rotate: motion$.rotate ?? 0,
-                  };
-              return (
-                <motion.div
-                  key={p.spiritId}
-                  drag={editMode}
-                  dragMomentum={false}
-                  dragConstraints={{ left: 0, top: 0, right: ROOM_W, bottom: ROOM_H }}
-                  onDragEnd={(_e, info) => {
-                    const nx = Math.max(0, Math.min(1, (p.x * ROOM_W + info.offset.x) / ROOM_W));
-                    const ny = Math.max(0, Math.min(1, (p.y * ROOM_H + info.offset.y) / ROOM_H));
-                    moveSpirit(p.spiritId, nx, ny);
-                  }}
-                  initial={{ scale: 0, opacity: 0 }}
-                  animate={idleAnim}
-                  exit={{ scale: 0, opacity: 0 }}
-                  transition={{
-                    y: { duration: motion$.duration, repeat: Infinity, ease: 'easeInOut' },
-                    x: { duration: motion$.duration, repeat: Infinity, ease: 'easeInOut' },
-                    rotate: { duration: motion$.duration, repeat: Infinity, ease: 'easeInOut' },
-                    scale: editMode
-                      ? { type: 'spring', stiffness: 300 }
-                      : { duration: motion$.duration, repeat: Infinity, ease: 'easeInOut' },
-                  }}
-                  onClick={() => handleSpiritTap(p)}
-                  className="absolute cursor-pointer select-none z-30"
-                  style={{
-                    left: p.x * ROOM_W - 18,
-                    top: p.y * ROOM_H - 18,
-                    width: 36,
-                    height: 36,
-                    fontSize: 28,
-                    textAlign: 'center',
-                    lineHeight: '36px',
-                    filter: `drop-shadow(0 2px 4px ${sp.themeColor}88)`,
-                  }}
-                >
-                  {sp.emoji}
-                  {editMode && (
-                    <div className="absolute -top-1 -right-2 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center font-black shadow-md">
-                      ×
-                    </div>
-                  )}
-                </motion.div>
-              );
-            })}
+              })}
           </AnimatePresence>
 
           {/* 빈 방 엠프티 스테이트 */}
@@ -347,52 +266,6 @@ export default function RoomPage() {
             </div>
           )}
 
-          {/* 대사 말풍선 */}
-          <AnimatePresence>
-            {bubble && (
-              <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.9 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0 }}
-                className="absolute z-40 px-3 py-1.5 rounded-2xl text-[11px] font-bold text-[#4E342E] max-w-[180px]"
-                style={{
-                  left: Math.max(20, Math.min(ROOM_W - 180, bubble.x - 90)),
-                  top: Math.max(20, bubble.y - 60),
-                  background: 'linear-gradient(180deg, #fffdf5 0%, #fff5e0 100%)',
-                  border: '1px solid rgba(212,175,55,0.5)',
-                  boxShadow: '0 6px 20px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.7)',
-                }}
-              >
-                {bubble.text}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* 상호작용 말풍선 */}
-          <AnimatePresence>
-            {interactionBubble && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="absolute top-3 left-3 right-3 z-40 p-2.5 rounded-2xl"
-                style={{
-                  background: 'linear-gradient(180deg, rgba(255,253,245,0.96) 0%, rgba(255,240,220,0.96) 100%)',
-                  backdropFilter: 'blur(6px)',
-                  border: '1px solid rgba(212,175,55,0.45)',
-                  boxShadow: '0 6px 20px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.7)',
-                }}
-              >
-                <div className="text-[9px] font-bold text-purple-500 mb-0.5 tracking-wider">
-                  💫 정령들끼리 대화
-                </div>
-                <div className="text-[10px] text-[#4E342E] leading-relaxed">
-                  <div>— {interactionBubble.a}</div>
-                  <div className="opacity-70 ml-3">— {interactionBubble.b}</div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </RoomFrame>
 
         {/* 배치 슬롯 카운터 */}

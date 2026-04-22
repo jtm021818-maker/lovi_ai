@@ -19,7 +19,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { ModeId } from '@/engines/bridge-modes/types';
 import LunaSprite from '@/components/common/LunaSprite';
 
-type StrategyMode = 'idea' | 'draft' | 'panel' | 'roleplay';
+type StrategyMode = 'browse_together' | 'draft' | 'panel' | 'roleplay';
 
 
 interface StrategyDecision {
@@ -43,12 +43,12 @@ interface LunaStrategyDecisionProps {
 
 // 모드 메타데이터 (아이콘/라벨/색감)
 const MODE_META: Record<StrategyMode, { emoji: string; label: string; color: string; bg: string; accent: string }> = {
-  idea: {
-    emoji: '💡',
-    label: '아이디어 다듬기',
-    color: '#7c3aed',
-    bg: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
-    accent: 'rgba(124,58,237,0.5)',
+  browse_together: {
+    emoji: '🔍',
+    label: '같이 찾아보기',
+    color: '#0284c7',
+    bg: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+    accent: 'rgba(2,132,199,0.5)',
   },
   draft: {
     emoji: '✏️',

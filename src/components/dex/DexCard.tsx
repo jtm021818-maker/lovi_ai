@@ -18,8 +18,6 @@
 import { motion } from 'framer-motion';
 import type { SpiritMaster, UserSpirit, SpiritRarity } from '@/types/spirit.types';
 import RarityBadge, { RARITY_META } from './RarityBadge';
-import SpiritSprite from '@/components/spirit/SpiritSprite';
-import { hasSpiritSprite } from '@/data/spirit-sprites';
 
 interface Props {
   spirit: SpiritMaster;
@@ -113,24 +111,14 @@ export default function DexCard({ spirit, owned, onClick, index }: Props) {
         {/* 이모지/스프라이트 (소지) / 실루엣 (미소지) */}
         <div className="relative z-10 flex flex-col items-center">
           {isOwned ? (
-            hasSpiritSprite(spirit.id) ? (
-              // 스프라이트 등록 정령 — idle 애니메이션 자동 재생
-              <motion.div
-                animate={spirit.rarity === 'L' || spirit.rarity === 'UR' ? { y: [0, -2, 0] } : {}}
-                transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
-              >
-                <SpiritSprite spirit={spirit} state="idle" size={44} />
-              </motion.div>
-            ) : (
-              <motion.div
-                className="text-[34px] leading-none select-none"
-                animate={spirit.rarity === 'L' || spirit.rarity === 'UR' ? { y: [0, -2, 0] } : {}}
-                transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
-                style={{ filter: `drop-shadow(0 2px 8px ${spirit.themeColor}99)` }}
-              >
-                {spirit.emoji}
-              </motion.div>
-            )
+            <motion.div
+              className="text-[34px] leading-none select-none"
+              animate={spirit.rarity === 'L' || spirit.rarity === 'UR' ? { y: [0, -2, 0] } : {}}
+              transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+              style={{ filter: `drop-shadow(0 2px 8px ${spirit.themeColor}99)` }}
+            >
+              {spirit.emoji}
+            </motion.div>
           ) : (
             <div
               className="text-[34px] leading-none"

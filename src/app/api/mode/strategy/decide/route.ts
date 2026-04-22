@@ -13,7 +13,7 @@
  *     recentHistory?: Array<{ role: 'user'|'ai', content: string }> }
  *
  * Response:
- *   { mode: 'idea'|'draft'|'panel'|'roleplay',
+ *   { mode: 'browse_together'|'draft'|'panel'|'roleplay',
  *     reasoning: string,
  *     opener: string,
  *     confidence: number }
@@ -24,15 +24,15 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { generateWithCascade, GEMINI_MODELS } from '@/lib/ai/provider-registry';
 import { safeParseLLMJson } from '@/lib/utils/safe-json';
 
-type StrategyMode = 'idea' | 'draft' | 'panel' | 'roleplay';
+type StrategyMode = 'browse_together' | 'draft' | 'panel' | 'roleplay';
 
 const STRATEGY_SYSTEM = `너는 29살 친한 언니 "루나". 친구(동생) 연애 고민 듣다가 "지금 너한텐 이게 제일 필요하겠다" 판단하고 작전을 **직접 고르는** 상황.
 
 ## 네가 고를 수 있는 4가지 작전
 
-### 💡 idea — 아이디어 다듬기
-**쓸 때**: 유저가 "이렇게 하면 될까?" 류 **자기 아이디어를 이미 갖고 있고**, 다듬기/판단만 필요한 상태.
-**신호**: "이러면 어떨까", "카페 가자고 할까", "이 메시지 보낼까" 같은 제안형 말.
+### 🔍 browse_together — 같이 찾아보기
+**쓸 때**: 데이트 장소, 선물, 영화, 액티비티 등 **구체적인 무언가를 골라야 하는 상황**.
+**신호**: "어디 가면 좋을까", "뭐 사줄까", "뭐 볼까", "뭐 하면 좋을까" 같이 탐색형 고민.
 
 ### ✏️ draft — 메시지 초안 짜기
 **쓸 때**: 유저가 **실제 상대한테 보낼 카톡/메시지** 를 고민 중. 바로 쓸 수 있는 문장 필요.
@@ -50,7 +50,7 @@ const STRATEGY_SYSTEM = `너는 29살 친한 언니 "루나". 친구(동생) 연
 1. **대화 맥락을 읽어서** 지금 유저한테 가장 실질적 도움 되는 1개 선택.
 2. 애매하면 **draft** 기본 (카톡 앱 특성상 실전 메시지 필요가 많음).
 3. 감정 격렬/양가감정 강하면 **panel**.
-4. 이미 유저가 아이디어 던졌으면 **idea**.
+4. 데이트 장소/선물/영화/액티비티 찾는 상황이면 **browse_together**.
 5. 실제 대면 만남 예정이면 **roleplay**.
 
 ## 말투 — Luna 언니 톤
@@ -84,9 +84,9 @@ const STRATEGY_SYSTEM = `너는 29살 친한 언니 "루나". 친구(동생) 연
 {"mode":"roleplay","reasoning":"너 실제로 만나서 말해야 하잖아. 내가 그 사람 역할 해볼게, 연습해보자","opener":"자 내가 그 사람 해볼게. 시작해봐","confidence":0.9}
 
 ### 입력 4
-상황: "내 생각엔 그냥 카페에서 만나서 분위기 좋게 얘기 시작하면 될 것 같은데 어때?"
+상황: "이번 주말에 데이트인데 어디 가면 좋을지 모르겠어"
 출력:
-{"mode":"idea","reasoning":"너 이미 아이디어 있잖아. 같이 다듬어보자","opener":"오케이 네 아이디어 같이 다듬어볼게","confidence":0.85}`;
+{"mode":"browse_together","reasoning":"뭐가 좋을지 같이 찾아보자. 8-10개 후보 뽑아줄게","opener":"자 같이 하나씩 둘러보자","confidence":0.85}`;
 
 function buildUserPrompt(situationSummary: string, history: Array<{ role: string; content: string }>): string {
   const historyBlock = history.length > 0
@@ -98,7 +98,7 @@ ${historyBlock}
 ## 상황 요약
 ${situationSummary}
 
-→ 위 맥락 보고 4개 작전 (idea/draft/panel/roleplay) 중 **하나** 골라. JSON 만.`;
+→ 위 맥락 보고 4개 작전 (browse_together/draft/panel/roleplay) 중 **하나** 골라. JSON 만.`;
 }
 
 export async function POST(req: NextRequest) {
@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
     );
 
     const parsed = safeParseLLMJson(result.text, null as any);
-    if (!parsed || !parsed.mode || !['idea', 'draft', 'panel', 'roleplay'].includes(parsed.mode)) {
+    if (!parsed || !parsed.mode || !['browse_together', 'draft', 'panel', 'roleplay'].includes(parsed.mode)) {
       console.warn('[StrategyDecide] 파싱 실패, draft 폴백:', (result.text ?? '').slice(0, 200));
       return NextResponse.json(fallback(situation));
     }
@@ -155,7 +155,7 @@ function fallback(situation: string): { mode: StrategyMode; reasoning: string; o
   let mode: StrategyMode = 'draft';
   if (/만나|대면|직접|오프라인/.test(s)) mode = 'roleplay';
   else if (/헤어질|결정|고민|갈지|할지 말지|이래도 되는지/.test(s)) mode = 'panel';
-  else if (/이렇게|이러면|할까 말까|이 생각/.test(s)) mode = 'idea';
+  else if (/어디|장소|선물|영화|뭐 할|액티비티|데이트 뭐/.test(s)) mode = 'browse_together';
   return {
     mode,
     reasoning: defaultReasoning(mode),
@@ -166,7 +166,7 @@ function fallback(situation: string): { mode: StrategyMode; reasoning: string; o
 
 function defaultReasoning(mode: StrategyMode): string {
   switch (mode) {
-    case 'idea':     return '너 이미 아이디어 있는 것 같아서 같이 다듬어보자';
+    case 'browse_together': return '지금 뭐가 좋을지 같이 찾아보자';
     case 'draft':    return '실제 보낼 말 같이 써보는 게 지금 제일 빠를 듯';
     case 'panel':    return '결정 자체가 안 서잖아. 여러 관점으로 봐보자';
     case 'roleplay': return '실제 상황 미리 연습해두면 마음 편할 거야';
@@ -175,7 +175,7 @@ function defaultReasoning(mode: StrategyMode): string {
 
 function defaultOpener(mode: StrategyMode): string {
   switch (mode) {
-    case 'idea':     return '오케이 네 아이디어 같이 다듬어보자';
+    case 'browse_together': return '자 같이 하나씩 둘러보자';
     case 'draft':    return '자 이제 실제 카톡 같이 써보자';
     case 'panel':    return '내가 몇 개 관점 가져왔어';
     case 'roleplay': return '자 내가 그 사람 해볼게';

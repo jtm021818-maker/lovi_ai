@@ -1,17 +1,27 @@
 'use client';
 
-/**
- * v85.4: SpiritSprite — 스프라이트 시트 기반 정령 렌더러
- *
- * 주어진 상태(idle/walk/etc)를 애니메이션으로 재생.
- * 이미지 로드 실패 시 이모지로 자동 fallback.
- */
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { SpiritMaster } from '@/types/spirit.types';
 import type { SpiritAnimState, SpiritSpriteSheet } from '@/types/spirit-sprite.types';
 import { getSpiritSprite } from '@/data/spirit-sprites';
 import { useSpriteAnimation } from '@/hooks/useSpriteAnimation';
+
+// 모듈 레벨 로드 캐시 (LunaSprite 동일 패턴)
+const LOADED: Record<string, boolean> = {};
+const LOAD_PROMISES: Partial<Record<string, Promise<void>>> = {};
+
+function ensureLoaded(url: string): Promise<void> {
+  if (LOADED[url]) return Promise.resolve();
+  if (LOAD_PROMISES[url]) return LOAD_PROMISES[url];
+  const p = new Promise<void>((resolve) => {
+    const img = new Image();
+    img.onload = () => { LOADED[url] = true; resolve(); };
+    img.onerror = () => { LOADED[url] = true; resolve(); };
+    img.src = url;
+  });
+  LOAD_PROMISES[url] = p;
+  return p;
+}
 
 interface Props {
   spirit: SpiritMaster;
@@ -22,7 +32,7 @@ interface Props {
   onStateComplete?: () => void;
   /** 직접 size 강제 (도감 카드/슬롯에서 사용). 없으면 sheet.displayScale * frame 크기 */
   size?: number;
-  /** 이모지 fallback 폰트 크기 (size 생략 시 적용 안됨) */
+  /** 이모지 fallback 폰트 크기 */
   emojiSize?: number;
   /** 재생 on/off */
   playing?: boolean;
@@ -40,9 +50,29 @@ export default function SpiritSprite({
   className,
 }: Props) {
   const sheet = getSpiritSprite(spirit.id);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const [loaded, setLoaded] = useState(sheet ? (LOADED[sheet.src] ?? false) : false);
 
-  if (!sheet || loadFailed) {
+  useEffect(() => {
+    if (!sheet) return;
+    if (LOADED[sheet.src]) { setLoaded(true); return; }
+    let cancelled = false;
+    ensureLoaded(sheet.src).then(() => { if (!cancelled) setLoaded(true); });
+    return () => { cancelled = true; };
+  }, [sheet]);
+
+  if (!sheet) {
+    return (
+      <EmojiFallback
+        emoji={spirit.emoji}
+        themeColor={spirit.themeColor}
+        size={size}
+        emojiSize={emojiSize}
+        className={className}
+      />
+    );
+  }
+
+  if (!loaded) {
     return (
       <EmojiFallback
         emoji={spirit.emoji}
@@ -62,7 +92,6 @@ export default function SpiritSprite({
       onStateComplete={onStateComplete}
       size={size}
       playing={playing}
-      onLoadError={() => setLoadFailed(true)}
       themeColor={spirit.themeColor}
       className={className}
     />
@@ -78,7 +107,6 @@ function SpriteRenderer({
   onStateComplete,
   size,
   playing,
-  onLoadError,
   themeColor,
   className,
 }: {
@@ -88,7 +116,6 @@ function SpriteRenderer({
   onStateComplete?: () => void;
   size?: number;
   playing: boolean;
-  onLoadError: () => void;
   themeColor: string;
   className?: string;
 }) {
@@ -99,47 +126,55 @@ function SpriteRenderer({
   const displayW = sheet.frameWidth * scale;
   const displayH = sheet.frameHeight * scale;
 
-  // startFrame + currentFrame → 절대 프레임 → (col, row) 계산
   const absFrame = cfg.startFrame + frame;
   const col = absFrame % sheet.totalCols;
   const row = Math.floor(absFrame / sheet.totalCols);
-  const bgX = -col * displayW;
-  const bgY = -row * displayH;
-  // 시트 전체 픽셀 크기 — 모든 state의 마지막 프레임 기준으로 총 행 수 계산
+
   const maxAbsFrame = Object.values(sheet.states).reduce(
     (max, s) => Math.max(max, s.startFrame + s.frames - 1),
     0,
   );
-  const sheetTotalRows = Math.ceil((maxAbsFrame + 1) / sheet.totalCols);
-  const sheetW = sheet.frameWidth * sheet.totalCols * scale;
-  const sheetH = sheet.frameHeight * sheetTotalRows * scale;
+  const totalRows = Math.ceil((maxAbsFrame + 1) / sheet.totalCols);
+  const sheetW = displayW * sheet.totalCols;
+  const sheetH = displayH * totalRows;
 
   return (
-    <>
-      {/* 이미지 프리로드 (로드 실패 감지용, 투명) */}
-      <img
-        src={sheet.src}
-        alt=""
-        aria-hidden
-        onError={onLoadError}
-        style={{ display: 'none' }}
-      />
+    <div
+      className={className}
+      style={{
+        width: displayW,
+        height: displayH,
+        transform: `translateZ(0)${facingLeft ? ' scaleX(-1)' : ''}`,
+        filter: `drop-shadow(0 2px 6px ${themeColor}88)`,
+        imageRendering: sheet.pixelated ? 'pixelated' : 'auto',
+      }}
+    >
       <div
-        className={className}
         style={{
           width: displayW,
           height: displayH,
-          backgroundImage: `url(${sheet.src})`,
-          backgroundPosition: `${bgX}px ${bgY}px`,
-          backgroundSize: `${sheetW}px ${sheetH}px`,
-          backgroundRepeat: 'no-repeat',
-          transform: facingLeft ? 'scaleX(-1)' : undefined,
-          imageRendering: sheet.pixelated ? 'pixelated' : 'auto',
-          willChange: 'background-position',
-          filter: `drop-shadow(0 2px 6px ${themeColor}88)`,
+          overflow: 'hidden',
+          position: 'relative',
+          backfaceVisibility: 'hidden',
         }}
-      />
-    </>
+      >
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: sheetW,
+            height: sheetH,
+            backgroundImage: `url(${sheet.src})`,
+            backgroundSize: `${sheetW}px ${sheetH}px`,
+            backgroundRepeat: 'no-repeat',
+            transform: `translate(-${col * displayW}px, -${row * displayH}px)`,
+            pointerEvents: 'none',
+            willChange: 'transform',
+          }}
+        />
+      </div>
+    </div>
   );
 }
 

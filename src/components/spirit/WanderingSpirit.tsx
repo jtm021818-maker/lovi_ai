@@ -72,6 +72,12 @@ const WanderingSpirit = forwardRef<WanderingSpiritHandle, Props>(function Wander
 
   const controls = useAnimationControls();
 
+  // 등장 애니메이션 (마운트 시 한 번)
+  useEffect(() => {
+    controls.start({ opacity: 1, scale: 1, transition: { duration: 0.5, ease: 'easeOut' } });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // 편집 모드에서는 배회 멈추고 현재 위치 유지
   useEffect(() => {
     if (editMode) {

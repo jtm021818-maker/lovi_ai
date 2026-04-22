@@ -90,17 +90,23 @@ type SpriteFrame = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 /**
  * 여자역할 전용 애니메이션 오버라이드 (v82.x):
+ *   0 (기본) → luna_sprite_nomal_cropped.webp (7×7, 49프레임, 크롭됨)
  *   1 (슬픔) → luna_sprite_movie_1.webp (7×7, 49프레임)
  *   5 (웃음) → luna_sprite_movie_2.webp (7×7, 49프레임)
  * 원본 해상도 1350×2400 → 프레임 aspect 2400/1350 ≈ 1.778 (세로 긴 프레임)
  */
 const FEMALE_MOVIE_SPRITE: Partial<Record<SpriteFrame, string>> = {
+  0: '/splite/luna_sprite_nomal_cropped.webp',
   1: '/splite/luna_sprite_movie_1.webp',
   5: '/splite/luna_sprite_movie_2.webp',
 };
 const MOVIE_SPRITE_COLS = 7;
 const MOVIE_SPRITE_ROWS = 7;
-const MOVIE_SPRITE_FRAME_ASPECT = 2400 / 1350 / (MOVIE_SPRITE_ROWS / MOVIE_SPRITE_COLS); // = (2400/7)/(1350/7) ≈ 1.778
+const MOVIE_SPRITE_FRAME_ASPECTS: Partial<Record<SpriteFrame, number>> = {
+  0: 192 / 117, // luna_sprite_nomal_cropped.webp (117x192 crop) ≈ 1.641
+  1: 2400 / 1350,
+  5: 2400 / 1350,
+};
 
 /** 감정/상황에 맞는 스프라이트 프레임 선택 */
 function pickSpriteFrame(emotion: string, isReveal: boolean): SpriteFrame {
@@ -612,7 +618,7 @@ function VNScene({
                   />
                 </motion.div>
               ) : (activeDuoSheet === femaleSheet && FEMALE_MOVIE_SPRITE[currentFrame]) ? (
-                /* 🆕 여자역할 슬픔(1)/웃음(5) — 49프레임 애니메이션 스프라이트로 교체 */
+                /* 🆕 여자역할 기본(0)/슬픔(1)/웃음(5) — 49프레임 애니메이션 스프라이트로 교체 */
                 <motion.div
                   key={`movie-${duoSpeakerKey}-${currentFrame}`}
                   initial={{ opacity: 0, scale: 0.88, x: currentLineGender === 'male' ? -30 : 30 }}
@@ -629,11 +635,11 @@ function VNScene({
                   }}
                 >
                   <LunaSprite
-                    size={spriteSize * (384 / 344) / MOVIE_SPRITE_FRAME_ASPECT}
+                    size={spriteSize * (384 / 344) / (MOVIE_SPRITE_FRAME_ASPECTS[currentFrame] || 1.778)}
                     src={FEMALE_MOVIE_SPRITE[currentFrame]!}
                     cols={MOVIE_SPRITE_COLS}
                     rows={MOVIE_SPRITE_ROWS}
-                    frameAspect={MOVIE_SPRITE_FRAME_ASPECT}
+                    frameAspect={MOVIE_SPRITE_FRAME_ASPECTS[currentFrame] || 1.778}
                     circle={false}
                     speed="normal"
                   />
