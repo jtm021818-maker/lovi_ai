@@ -44,7 +44,10 @@ const PANEL_REPORT_REGEX = /\[PANEL_REPORT\]([\s\S]*?)\[\/PANEL_REPORT\]\s*/;
 // 🤔 아이디어: [IDEA_REFINE:원래|다듬은|이유]
 const IDEA_REFINE_REGEX = /\[IDEA_REFINE:([^|\]]+)\|([^|\]]+)\|([^\]]+)\]\s*/;
 // 🆕 v39: 🎯 오늘의 작전: [ACTION_PLAN:planType|title|coreAction|sharedResult|planB|timingHint|lunaCheer]
-// 7개 필드 — planB/timingHint는 비어있을 수 있음 (빈 문자열 허용)
+// 🆕 v86: 9필드 확장: [ACTION_PLAN:planType|lunaIntro|title|coreAction|sharedResult|planB|timingHint|lunaJoke|lunaCheer]
+//   말풍선 체인 UI용 — lunaIntro(대화 종합), lunaJoke(농담 한방) 추가.
+//   역호환: 9필드 매칭 실패 시 7필드 폴백.
+const ACTION_PLAN_REGEX_V2 = /\[ACTION_PLAN:([^|\]]+)\|([^|\]]*)\|([^|\]]+)\|([^|\]]+)\|([^|\]]+)\|([^|\]]*)\|([^|\]]*)\|([^|\]]*)\|([^\]]+)\]\s*/;
 const ACTION_PLAN_REGEX = /\[ACTION_PLAN:([^|\]]+)\|([^|\]]+)\|([^|\]]+)\|([^|\]]+)\|([^|\]]*)\|([^|\]]*)\|([^\]]+)\]\s*/;
 // 🆕 v39: 💜 오늘의 마무리: [WARM_WRAP:strengthFound|emotionShift|nextStep|lunaMessage]
 const WARM_WRAP_REGEX = /\[WARM_WRAP:([^|\]]+)\|([^|\]]+)\|([^|\]]+)\|([^\]]+)\]\s*/;
@@ -203,13 +206,16 @@ export interface ParsedIdeaRefine {
 }
 
 // 🆕 v39: 🎯 ACTION_PLAN 파싱 데이터
+// 🆕 v86: lunaIntro(대화 종합), lunaJoke(농담) 확장 — 둘 다 빈 문자열 가능(역호환).
 export interface ParsedActionPlan {
   planType: string;       // kakao_draft | roleplay | panel | custom
+  lunaIntro: string;      // 빈 문자열 가능 (구버전 호환)
   title: string;
   coreAction: string;
   sharedResult: string;
   planB: string;          // 빈 문자열 가능
   timingHint: string;     // 빈 문자열 가능
+  lunaJoke: string;       // 빈 문자열 가능 (구버전 호환)
   lunaCheer: string;
 }
 
@@ -406,19 +412,38 @@ export function parsePhaseSignal(response: string): {
   }
 
   // 🆕 v39: 🎯 [ACTION_PLAN:...] 오늘의 작전 카드 태그 (SOLVE 마무리)
+  // 🆕 v86: 9필드 신버전 우선 매칭 → 실패 시 7필드 구버전 폴백
   let actionPlan: ParsedActionPlan | null = null;
-  const actionMatch = cleaned.match(ACTION_PLAN_REGEX);
-  if (actionMatch) {
+  const actionMatchV2 = cleaned.match(ACTION_PLAN_REGEX_V2);
+  if (actionMatchV2) {
     actionPlan = {
-      planType: actionMatch[1].trim(),
-      title: actionMatch[2].trim(),
-      coreAction: actionMatch[3].trim(),
-      sharedResult: actionMatch[4].trim(),
-      planB: actionMatch[5].trim(),
-      timingHint: actionMatch[6].trim(),
-      lunaCheer: actionMatch[7].trim(),
+      planType: actionMatchV2[1].trim(),
+      lunaIntro: actionMatchV2[2].trim(),
+      title: actionMatchV2[3].trim(),
+      coreAction: actionMatchV2[4].trim(),
+      sharedResult: actionMatchV2[5].trim(),
+      planB: actionMatchV2[6].trim(),
+      timingHint: actionMatchV2[7].trim(),
+      lunaJoke: actionMatchV2[8].trim(),
+      lunaCheer: actionMatchV2[9].trim(),
     };
-    cleaned = cleaned.replace(ACTION_PLAN_REGEX, '').trim();
+    cleaned = cleaned.replace(ACTION_PLAN_REGEX_V2, '').trim();
+  } else {
+    const actionMatch = cleaned.match(ACTION_PLAN_REGEX);
+    if (actionMatch) {
+      actionPlan = {
+        planType: actionMatch[1].trim(),
+        lunaIntro: '',
+        title: actionMatch[2].trim(),
+        coreAction: actionMatch[3].trim(),
+        sharedResult: actionMatch[4].trim(),
+        planB: actionMatch[5].trim(),
+        timingHint: actionMatch[6].trim(),
+        lunaJoke: '',
+        lunaCheer: actionMatch[7].trim(),
+      };
+      cleaned = cleaned.replace(ACTION_PLAN_REGEX, '').trim();
+    }
   }
 
   // 🆕 v39: 💜 [WARM_WRAP:...] 오늘의 마무리 카드 태그 (EMPOWER)

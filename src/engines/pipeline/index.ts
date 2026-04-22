@@ -962,7 +962,12 @@ export class CounselingPipeline {
 
     // 🆕 v6: 해결책 사전 프롬프트 생성
     // 🆕 v10: 턴별 세분화 프롬프트
-    const turnInPhase = PhaseManager.getTurnInPhase(newPhaseV2, turnCount);
+    // 🆕 v86: updatedPhaseStartTurn 우선 사용 — PHASE_START_TURNS 하드코딩 오류 수정.
+    //   이전 버그: SOLVE가 turn 5에 진입해도 하드코딩 7 기준으로 turnInPhase=1 계산
+    //   → AI가 계속 S1 힌트만 받아 [ACTION_PLAN] 태그 영원히 미발동.
+    const turnInPhase = updatedPhaseStartTurn
+      ? Math.max(1, turnCount - updatedPhaseStartTurn + 1)
+      : PhaseManager.getTurnInPhase(newPhaseV2, turnCount);
     // 🆕 v16: HOOK 경청 모드 — 감정 체크 미준비 시 경청 프롬프트
     const isListeningMode = newPhaseV2 === 'HOOK'
       && turnInPhase >= 2
@@ -2204,8 +2209,16 @@ ${researchResult.insight}
           // 🆕 v39: 🎯 SOLVE 마무리 — [ACTION_PLAN:...] → ACTION_PLAN 이벤트
           // SOLVE S3 시뮬레이션 후 "오늘의 작전" 카드 발동 → SOLVE→EMPOWER 전환 게이트
           // 🆕 v78.4: SOLVE(실행 계획) Phase 에서만 발동. MIRROR 에서 AI 가 섣불리 태그 달아도 무시.
-          if (hlrePost.actionPlan && newPhaseV2 === 'SOLVE' && canFireEvent() && !updatedCompletedEvents.includes('ACTION_PLAN')) {
-            const { planType, title, coreAction, sharedResult, planB, timingHint, lunaCheer } = hlrePost.actionPlan;
+          // 🆕 v86: ACTION_PLAN은 SOLVE 마무리 최우선 이벤트.
+          //   이전 버그: 같은 턴에 DATE_SPOT/BROWSE 검색 이벤트가 먼저 push되면 canFireEvent()=false
+          //   → ACTION_PLAN 영원히 차단. SOLVE 진입 후 데이트 장소 찾기 완료 시나리오에서 재현.
+          //   수정: ACTION_PLAN 발동 시 선행 이벤트 클리어 (VN 극장 패턴 동일).
+          if (hlrePost.actionPlan && newPhaseV2 === 'SOLVE' && !updatedCompletedEvents.includes('ACTION_PLAN')) {
+            if (eventsToFire.length > 0) {
+              console.log(`[Pipeline] 🎯 ACTION_PLAN 우선순위 — 선행 이벤트 클리어: [${eventsToFire.map(e => e.type).join(', ')}]`);
+              eventsToFire.length = 0;
+            }
+            const { planType, lunaIntro, title, coreAction, sharedResult, planB, timingHint, lunaJoke, lunaCheer } = hlrePost.actionPlan;
             eventsToFire.push(createActionPlan(
               planType as any,
               title,
@@ -2214,6 +2227,8 @@ ${researchResult.insight}
               planB,
               timingHint,
               lunaCheer,
+              lunaIntro,
+              lunaJoke,
             ));
             updatedCompletedEvents.push('ACTION_PLAN');
             updatedLastEventTurn = turnCount;

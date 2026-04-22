@@ -1363,6 +1363,8 @@ export function createActionPlan(
   planB: string,
   timingHint: string,
   lunaCheer: string,
+  lunaIntro: string = '',
+  lunaJoke: string = '',
 ): PhaseEvent {
   // StrategyMode의 'message_draft' → 'kakao_draft' 매핑 (UI 친화)
   const normalizedType: 'kakao_draft' | 'roleplay' | 'panel' | 'custom' =
@@ -1374,11 +1376,13 @@ export function createActionPlan(
 
   const data: ActionPlanData = {
     planType: normalizedType,
+    lunaIntro: lunaIntro?.trim() || undefined,
     title: title.trim() || '오늘의 작전',
     coreAction: coreAction.trim() || '같이 정한 거 해보기',
     sharedResult: sharedResult.trim(),
     planB: planB?.trim() || undefined,
     timingHint: timingHint?.trim() || undefined,
+    lunaJoke: lunaJoke?.trim() || undefined,
     lunaCheer: lunaCheer.trim() || '해보고 어땠는지 꼭 알려줘!',
     options: [
       { label: '좋아, 해볼래', emoji: '🔥', value: 'commit' },

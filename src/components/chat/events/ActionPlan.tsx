@@ -5,15 +5,13 @@ import { motion } from 'framer-motion';
 import type { PhaseEvent, SuggestionMeta } from '@/types/engine.types';
 
 /**
- * 🆕 v39: 🎯 ACTION_PLAN — "오늘의 작전" 카드 (SOLVE 마무리)
+ * 🆕 v86: 🎯 ACTION_PLAN — 말풍선 체인 + 미니 작전카드
  *
- * BRIDGE에서 모드별로 같이 만든 결과(카톡 초안/롤플 멘트/연참 조언/유저 아이디어)를
- * 한 장의 실전 작전 카드로 확정. 친한 언니가 같이 짜준 느낌.
- *
- * UX 포인트:
- * - 주황/라임 계열 gradient (에너지 있는 "자 해보자" 톤)
- * - 🎯 타이틀 → 핵심 액션 → 같이 만든 내용 → (플랜B) → (타이밍) → 루나 응원
- * - 2 선택지: "좋아 해볼래" / "조금만 수정"
+ * 이전(v39)의 큼직한 단일 카드 → "루나가 정리해주는 카톡 대화" 느낌.
+ * - 루나 말풍선(lunaIntro: 대화 종합) → 작전 미니 카드 → 농담 말풍선 → 응원 말풍선 → 선택 버튼
+ * - 말풍선은 기본 Luna 메시지 톤(크림 배경, rounded-2xl) 유지.
+ * - 중앙 "오늘의 작전" 미니 카드만 orange 살짝 강조 — 정리되는 느낌.
+ * - Framer Motion 으로 순차 등장 (진짜 채팅 받는 느낌).
  */
 
 interface ActionPlanOption {
@@ -42,32 +40,92 @@ const PLAN_LABEL: Record<string, string> = {
   custom: '내 작전',
 };
 
+/** 루나 아바타 + 말풍선 한 덩어리 */
+function LunaBubble({
+  children,
+  delay,
+  tone = 'default',
+  tag,
+}: {
+  children: React.ReactNode;
+  delay: number;
+  tone?: 'default' | 'joke' | 'cheer';
+  tag?: string;
+}) {
+  const toneClasses =
+    tone === 'joke'
+      ? 'bg-amber-50/90 border-amber-200/60 text-amber-900'
+      : tone === 'cheer'
+      ? 'bg-gradient-to-br from-pink-50/90 to-purple-50/90 border-pink-200/60 text-pink-900'
+      : 'bg-white/90 border-orange-100/70 text-gray-800';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ delay, type: 'spring', damping: 22, stiffness: 280 }}
+      className="flex items-end gap-2 mb-2.5"
+    >
+      <div
+        className="w-8 h-8 flex-shrink-0 border border-orange-300/60 overflow-hidden bg-white shadow-sm"
+        style={{ borderRadius: '50% 40% 60% 50% / 60% 50% 40% 50%' }}
+      >
+        <img src="/char_img/luna_1_event.webp" alt="루나" className="w-full h-full object-cover" />
+      </div>
+      <div className="flex flex-col max-w-[85%]">
+        {tag && (
+          <span className="text-[10px] font-bold text-orange-500/90 ml-1 mb-0.5">
+            {tag}
+          </span>
+        )}
+        <div
+          className={`rounded-2xl rounded-bl-sm border px-3.5 py-2.5 shadow-sm ${toneClasses}`}
+        >
+          {children}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function ActionPlan({ event, onSelect, disabled }: ActionPlanProps) {
   const [selected, setSelected] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
   const data = event.data as {
     planType?: 'kakao_draft' | 'roleplay' | 'panel' | 'custom';
+    lunaIntro?: string;
     title?: string;
     coreAction?: string;
     sharedResult?: string;
     planB?: string;
     timingHint?: string;
+    lunaJoke?: string;
     lunaCheer?: string;
     options?: ActionPlanOption[];
   };
 
   const planType = data.planType ?? 'custom';
+  const lunaIntro = data.lunaIntro?.trim() ?? '';
   const title = data.title ?? '오늘의 작전';
   const coreAction = data.coreAction ?? '';
   const sharedResult = data.sharedResult ?? '';
   const planB = data.planB ?? '';
   const timingHint = data.timingHint ?? '';
+  const lunaJoke = data.lunaJoke?.trim() ?? '';
   const lunaCheer = data.lunaCheer ?? '해보고 꼭 알려줘!';
   const options = data.options ?? [
     { label: '좋아, 해볼래', emoji: '🔥', value: 'commit' as const },
     { label: '조금만 수정', emoji: '✏️', value: 'tweak' as const },
   ];
+
+  // 순차 등장 타이밍
+  let t = 0.1;
+  const introDelay = t; if (lunaIntro) t += 0.4;
+  const cardDelay = t;  t += 0.5;
+  const jokeDelay = t;  if (lunaJoke) t += 0.35;
+  const cheerDelay = t; t += 0.35;
+  const buttonsDelay = t;
 
   const handleSelect = (option: ActionPlanOption) => {
     if (disabled || done) return;
@@ -75,9 +133,7 @@ export default function ActionPlan({ event, onSelect, disabled }: ActionPlanProp
     setTimeout(() => {
       setDone(true);
       onSelect(
-        option.value === 'commit'
-          ? '🔥 좋아, 해볼래!'
-          : '✏️ 조금만 수정하자',
+        option.value === 'commit' ? '🔥 좋아, 해볼래!' : '✏️ 조금만 수정하자',
         {
           source: 'action_plan' as any,
           context: {
@@ -109,186 +165,146 @@ export default function ActionPlan({ event, onSelect, disabled }: ActionPlanProp
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ type: 'spring', damping: 22, stiffness: 280, delay: 0.2 }}
-      className="mx-4 my-4"
-    >
-      <div
-        className="relative rounded-3xl border-2 shadow-xl overflow-hidden p-5"
-        style={{
-          background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 45%, #fef3c7 100%)',
-          borderColor: 'rgba(249, 115, 22, 0.45)',
-        }}
-      >
-        {/* 배경 에너지 스파크 */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          {[...Array(6)].map((_, i) => (
-            <motion.div
-              key={i}
-              className="absolute w-1 h-1 rounded-full bg-orange-400/40"
-              style={{ left: `${12 + i * 14}%`, top: `${18 + (i % 3) * 28}%` }}
-              animate={{
-                opacity: [0.2, 0.7, 0.2],
-                scale: [0.8, 1.3, 0.8],
-              }}
-              transition={{ duration: 2 + i * 0.3, repeat: Infinity, delay: i * 0.4 }}
-            />
-          ))}
-        </div>
+    <div className="mx-3 my-3">
+      {/* lunaIntro — 대화 종합 (언니톤 정리) */}
+      {lunaIntro && (
+        <LunaBubble delay={introDelay} tag="💬 자 정리해줄게">
+          <p className="text-[13px] leading-relaxed whitespace-pre-line">
+            {lunaIntro}
+          </p>
+        </LunaBubble>
+      )}
 
-        {/* 헤더 — 루나 + 작전 배지 */}
-        <div className="relative flex items-center gap-2.5 mb-4">
-          <div className="relative">
-            <div
-              className="w-11 h-11 flex-shrink-0 border-2 border-orange-400 overflow-hidden bg-white shadow-md"
-              style={{ borderRadius: '50% 40% 60% 50% / 60% 50% 40% 50%' }}
-            >
-              <img src="/char_img/luna_1_event.webp" alt="루나" className="w-full h-full object-cover" />
-            </div>
-            <motion.div
-              animate={{ scale: [1, 1.15, 1] }}
-              transition={{ duration: 1.8, repeat: Infinity }}
-              className="absolute -right-1 -top-1 text-[10px] bg-orange-500 text-white rounded-full px-1.5 py-0.5 font-bold shadow"
+      {/* 미니 작전 카드 — UI 살짝 가미 */}
+      <motion.div
+        initial={{ opacity: 0, y: 12, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ delay: cardDelay, type: 'spring', damping: 22, stiffness: 260 }}
+        className="ml-10 mr-2 my-2"
+      >
+        <div
+          className="relative rounded-2xl border shadow-md overflow-hidden"
+          style={{
+            background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 60%, #fef3c7 100%)',
+            borderColor: 'rgba(249, 115, 22, 0.4)',
+          }}
+        >
+          {/* 헤더 */}
+          <div className="flex items-center gap-2 px-3.5 py-2 border-b border-orange-200/40 bg-white/40">
+            <motion.span
+              animate={{ rotate: [0, -8, 8, 0] }}
+              transition={{ duration: 2, repeat: Infinity }}
+              className="text-base"
             >
               🎯
-            </motion.div>
+            </motion.span>
+            <span className="text-[12px] font-bold text-orange-700">오늘의 작전</span>
+            <span className="text-[10px] font-semibold bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full ml-auto">
+              {PLAN_ICON[planType]} {PLAN_LABEL[planType]}
+            </span>
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[14px] font-bold text-orange-700 flex items-center gap-1.5">
-              <span>🎯 오늘의 작전</span>
-              <span className="text-[10px] font-semibold bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full">
-                {PLAN_ICON[planType]} {PLAN_LABEL[planType]}
-              </span>
+
+          {/* 제목 */}
+          <div className="px-3.5 pt-3 pb-2">
+            <div className="text-[10px] font-bold text-orange-500 mb-0.5 flex items-center gap-1">
+              <span>📌</span><span>작전 이름</span>
             </div>
-            <div className="text-[11px] text-orange-500/90 truncate">같이 짠 작전이야 — 해보자</div>
+            <p className="text-[14px] font-bold text-gray-800 leading-snug">{title}</p>
           </div>
-        </div>
 
-        {/* 타이틀 */}
-        <motion.div
-          initial={{ opacity: 0, x: -10 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-white/80 backdrop-blur-sm rounded-2xl p-3 mb-3 border border-orange-200/60 shadow-sm"
-        >
-          <div className="text-[10px] font-bold text-orange-500 mb-1 flex items-center gap-1">
-            <span>📌</span>
-            <span>작전 이름</span>
-          </div>
-          <p className="text-[14px] font-bold text-gray-800 leading-snug">{title}</p>
-        </motion.div>
-
-        {/* 핵심 액션 */}
-        <motion.div
-          initial={{ opacity: 0, x: -10 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.45 }}
-          className="bg-gradient-to-r from-orange-100/80 to-amber-100/80 rounded-2xl p-3 mb-3 border border-orange-300/50"
-        >
-          <div className="text-[10px] font-bold text-orange-700 mb-1 flex items-center gap-1">
-            <span>🔥</span>
-            <span>핵심 액션</span>
-          </div>
-          <p className="text-[13px] text-gray-800 leading-relaxed font-semibold">
-            {coreAction}
-          </p>
-        </motion.div>
-
-        {/* 같이 만든 내용 */}
-        {sharedResult && (
-          <motion.div
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
-            className="bg-white/70 rounded-2xl p-3 mb-3 border border-orange-200/50"
-          >
-            <div className="text-[10px] font-bold text-orange-600 mb-1 flex items-center gap-1">
-              <span>💡</span>
-              <span>우리가 같이 만든 거</span>
+          {/* 핵심 액션 */}
+          <div className="mx-3 mb-2 bg-gradient-to-r from-orange-100/70 to-amber-100/70 rounded-xl px-3 py-2 border border-orange-300/40">
+            <div className="text-[10px] font-bold text-orange-700 mb-0.5 flex items-center gap-1">
+              <span>🔥</span><span>핵심 액션</span>
             </div>
-            <p className="text-[12px] text-gray-700 leading-relaxed italic whitespace-pre-line">
-              {sharedResult}
+            <p className="text-[13px] text-gray-800 leading-relaxed font-semibold">
+              {coreAction}
             </p>
-          </motion.div>
-        )}
-
-        {/* 타이밍 힌트 */}
-        {timingHint && (
-          <motion.div
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.75 }}
-            className="bg-yellow-50/80 rounded-2xl px-3 py-2 mb-2 border border-yellow-200/50 flex items-center gap-2"
-          >
-            <span className="text-sm">⏰</span>
-            <p className="text-[11px] text-yellow-800 leading-relaxed flex-1">{timingHint}</p>
-          </motion.div>
-        )}
-
-        {/* 플랜 B */}
-        {planB && (
-          <motion.div
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.85 }}
-            className="bg-slate-50/80 rounded-2xl px-3 py-2 mb-3 border border-slate-200/50 flex items-start gap-2"
-          >
-            <span className="text-sm mt-0.5">🛟</span>
-            <div className="flex-1">
-              <div className="text-[10px] font-bold text-slate-500 mb-0.5">만약 잘 안 되면</div>
-              <p className="text-[11px] text-slate-700 leading-relaxed">{planB}</p>
-            </div>
-          </motion.div>
-        )}
-
-        {/* 루나 응원 */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 1.0 }}
-          className="bg-gradient-to-r from-pink-50/70 to-purple-50/70 rounded-2xl p-3 mb-4 border border-pink-200/50"
-        >
-          <div className="text-[10px] font-bold text-pink-600 mb-1 flex items-center gap-1">
-            <span>💜</span>
-            <span>루나의 한마디</span>
           </div>
-          <p className="text-[12px] text-pink-800 leading-relaxed italic">&ldquo;{lunaCheer}&rdquo;</p>
-        </motion.div>
 
-        {/* 선택 옵션 */}
-        <motion.div
-          initial={{ opacity: 0, y: 5 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1.15 }}
-          className="flex gap-2"
-        >
-          {options.map((option, idx) => (
-            <motion.button
-              key={option.value}
-              whileHover={!disabled && !done ? { scale: 1.02 } : {}}
-              whileTap={!disabled && !done ? { scale: 0.98 } : {}}
-              onClick={() => handleSelect(option)}
-              disabled={disabled || done}
-              className={`flex-1 py-3 rounded-2xl font-bold text-[13px] transition-all ${
-                selected === option.value
-                  ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xl scale-105'
-                  : idx === 0
-                  ? 'bg-gradient-to-r from-orange-400 to-amber-400 text-white hover:shadow-md'
-                  : 'bg-white border-2 border-orange-200 text-orange-600 hover:bg-orange-50'
-              }`}
-            >
-              <span className="mr-1">{option.emoji}</span>
-              {option.label}
-            </motion.button>
-          ))}
-        </motion.div>
+          {/* 같이 만든 내용 */}
+          {sharedResult && (
+            <div className="mx-3 mb-2 bg-white/70 rounded-xl px-3 py-2 border border-orange-200/40">
+              <div className="text-[10px] font-bold text-orange-600 mb-0.5 flex items-center gap-1">
+                <span>💡</span><span>우리가 같이 만든 거</span>
+              </div>
+              <p className="text-[12px] text-gray-700 leading-relaxed italic whitespace-pre-line">
+                {sharedResult}
+              </p>
+            </div>
+          )}
 
-        <div className="text-center mt-3">
-          <span className="text-[9px] text-orange-500/80">🔥 같이 짠 작전이야 — 넌 혼자가 아니야</span>
+          {/* timing + planB — 나란히 */}
+          {(timingHint || planB) && (
+            <div className="flex flex-wrap gap-1.5 mx-3 mb-3">
+              {timingHint && (
+                <div className="flex-1 min-w-[45%] bg-yellow-50/80 rounded-lg px-2.5 py-1.5 border border-yellow-200/50 flex items-center gap-1.5">
+                  <span className="text-xs">⏰</span>
+                  <p className="text-[11px] text-yellow-800 leading-tight flex-1">{timingHint}</p>
+                </div>
+              )}
+              {planB && (
+                <div className="flex-1 min-w-[45%] bg-slate-50/80 rounded-lg px-2.5 py-1.5 border border-slate-200/50 flex items-start gap-1.5">
+                  <span className="text-xs mt-0.5">🛟</span>
+                  <div className="flex-1">
+                    <div className="text-[9px] font-bold text-slate-500">플랜 B</div>
+                    <p className="text-[11px] text-slate-700 leading-tight">{planB}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      </div>
-    </motion.div>
+      </motion.div>
+
+      {/* 농담 말풍선 — 긴장 풀어주기 */}
+      {lunaJoke && (
+        <LunaBubble delay={jokeDelay} tone="joke" tag="😏 근데 솔직히">
+          <p className="text-[13px] leading-relaxed">{lunaJoke}</p>
+        </LunaBubble>
+      )}
+
+      {/* 루나 응원 말풍선 */}
+      <LunaBubble delay={cheerDelay} tone="cheer" tag="💜 루나의 한마디">
+        <p className="text-[13px] leading-relaxed italic">&ldquo;{lunaCheer}&rdquo;</p>
+      </LunaBubble>
+
+      {/* 선택 버튼 */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: buttonsDelay }}
+        className="flex gap-2 ml-10 mr-2 mt-1"
+      >
+        {options.map((option, idx) => (
+          <motion.button
+            key={option.value}
+            whileHover={!disabled && !done ? { scale: 1.02 } : {}}
+            whileTap={!disabled && !done ? { scale: 0.98 } : {}}
+            onClick={() => handleSelect(option)}
+            disabled={disabled || done}
+            className={`flex-1 py-2.5 rounded-2xl font-bold text-[13px] transition-all ${
+              selected === option.value
+                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xl scale-105'
+                : idx === 0
+                ? 'bg-gradient-to-r from-orange-400 to-amber-400 text-white hover:shadow-md'
+                : 'bg-white border-2 border-orange-200 text-orange-600 hover:bg-orange-50'
+            }`}
+          >
+            <span className="mr-1">{option.emoji}</span>
+            {option.label}
+          </motion.button>
+        ))}
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: buttonsDelay + 0.2 }}
+        className="text-center mt-2"
+      >
+        <span className="text-[9px] text-orange-500/80">🔥 같이 짠 작전이야 — 넌 혼자가 아니야</span>
+      </motion.div>
+    </div>
   );
 }

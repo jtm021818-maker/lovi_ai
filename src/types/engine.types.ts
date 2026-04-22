@@ -394,6 +394,8 @@ export interface IdeaRefineData {
 export interface ActionPlanData {
   /** 모드 종류 — 어떤 작전인지 */
   planType: 'kakao_draft' | 'roleplay' | 'panel' | 'custom';
+  /** 🆕 대화 종합 인트로 — "자 정리해줄게" 언니톤 종합 요약 */
+  lunaIntro?: string;
   /** 작전 타이틀 ("오늘의 작전: 걔한테 카톡 보내기") */
   title: string;
   /** 핵심 액션 한 줄 ("이 카톡, 오늘 밤 10시에 보내보기") */
@@ -404,6 +406,8 @@ export interface ActionPlanData {
   planB?: string;
   /** 타이밍 힌트 */
   timingHint?: string;
+  /** 🆕 긴장 풀어주는 농담 한 마디 */
+  lunaJoke?: string;
   /** 루나의 마지막 응원 한 마디 */
   lunaCheer: string;
   /** 2 선택지: 해볼래 / 조금만 수정 */
