@@ -2178,9 +2178,8 @@ ${researchResult.insight}
             console.log(`[Pipeline] 🎬 MOVIE_SEARCHING 발동: "${hlrePost.movieReady.mood}"`);
           }
 
-          // 🆕 v85.6: 🔍 같이 찾기 — [BROWSE_READY:topic|query|context|budget]
-          // 모든 Phase 에서 자율 발동 가능. 한 세션에 1회 제한.
-          // 🆕 v85.7: browse_together 카드 클릭 시 즉시 트리거 (AI 태그 불필요)
+          // 🆕 v85.7: 🔍 같이 찾기 — BRIDGE 단계에서만 발동 (랜덤 이벤트 아님)
+          // luna_strategy 카드에서 선택 or [BROWSE_READY:...] 태그, 둘 다 BRIDGE 전용.
           const browseActivatedMeta = (
             suggestionMeta?.source === 'luna_strategy' &&
             (suggestionMeta?.context as any)?.strategyType === 'browse_together'
@@ -2188,6 +2187,7 @@ ${researchResult.insight}
 
           if (
             (hlrePost.browseReady || browseActivatedMeta) &&
+            newPhaseV2 === 'BRIDGE' &&
             canFireEvent() &&
             !updatedCompletedEvents.includes('BROWSE_SEARCHING') &&
             !updatedCompletedEvents.includes('BROWSE_SESSION')

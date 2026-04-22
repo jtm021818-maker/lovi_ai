@@ -317,9 +317,19 @@ function VNScene({
   const [mounted, setMounted] = useState(false);
   // 🆕 v82.10: 정정 입력 상태
   const [correctionInput, setCorrectionInput] = useState('');
+  const [bgImageLoaded, setBgImageLoaded] = useState(false);
 
   // Portal mount (SSR 방지)
   useEffect(() => { setMounted(true); }, []);
+
+  // 배경 이미지 preload — 디코딩 완료 전까지 gradient 유지, 완료 시 fade in
+  useEffect(() => {
+    if (!data.backgroundImageBase64) return;
+    setBgImageLoaded(false);
+    const img = new Image();
+    img.onload = () => setBgImageLoaded(true);
+    img.src = `data:image/jpeg;base64,${data.backgroundImageBase64}`;
+  }, [data.backgroundImageBase64]);
 
   // intro → playing: TheaterOpening 완료 시 전환 (콜백으로)
   const handleIntroComplete = useCallback(() => setPhase('playing'), []);
@@ -398,10 +408,7 @@ function VNScene({
     }
   }, [phase, lineIndex, lines.length]);
 
-  // 배경 스타일 (Pollinations = JPEG)
-  const bgStyle = data.backgroundImageBase64
-    ? { backgroundImage: `url(data:image/jpeg;base64,${data.backgroundImageBase64})` }
-    : { background: (scenario && SCENARIO_GRADIENTS[scenario]) || DEFAULT_GRADIENT };
+  const bgGradient = (scenario && SCENARIO_GRADIENTS[scenario]) || DEFAULT_GRADIENT;
 
   // 겉감정/속마음 라인 구분 (전환점 기준)
   const transitionIdx = Math.max(Math.floor(lines.length * 0.6), 2);
@@ -504,21 +511,32 @@ function VNScene({
             className="relative w-full h-full overflow-hidden cursor-pointer select-none"
             onClick={handleTap}
           >
-        {/* 배경 이미지 + Ken Burns (framer-motion) */}
-        <motion.div
-          className="absolute inset-0 bg-cover bg-center"
-          style={bgStyle}
-          animate={data.backgroundImageBase64 ? {
-            scale: [1.0, 1.08, 1.05, 1.0],
-            x: ['0%', '-1.5%', '1%', '0%'],
-            y: ['0%', '-1%', '-0.5%', '0%'],
-          } : undefined}
-          transition={data.backgroundImageBase64 ? {
-            duration: 25,
-            repeat: Infinity,
-            ease: 'easeInOut',
-          } : undefined}
-        />
+        {/* 배경 gradient 기저 레이어 — 이미지 로드 전/없을 때 항상 표시 */}
+        <div className="absolute inset-0" style={{ background: bgGradient }} />
+        {/* 배경 이미지 + Ken Burns — preload 완료 후 fade in (컬러박스 플래시 방지) */}
+        {data.backgroundImageBase64 && (
+          <motion.div
+            className="absolute inset-0"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: bgImageLoaded ? 1 : 0 }}
+            transition={{ duration: 0.6, ease: 'easeOut' }}
+          >
+            <motion.div
+              className="absolute inset-0 bg-cover bg-center"
+              style={{ backgroundImage: `url(data:image/jpeg;base64,${data.backgroundImageBase64})` }}
+              animate={bgImageLoaded ? {
+                scale: [1.0, 1.08, 1.05, 1.0],
+                x: ['0%', '-1.5%', '1%', '0%'],
+                y: ['0%', '-1%', '-0.5%', '0%'],
+              } : undefined}
+              transition={bgImageLoaded ? {
+                duration: 25,
+                repeat: Infinity,
+                ease: 'easeInOut',
+              } : undefined}
+            />
+          </motion.div>
+        )}
 
         {/* 🎬 시네마 비네팅 (영화관 느낌) */}
         <div
