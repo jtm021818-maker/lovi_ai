@@ -538,7 +538,15 @@ export class CounselingPipeline {
         userMessage,
       ],
       // 🆕 v81: BRIDGE 몰입 모드 활성 여부 — Phase 전환 bypass
-      activeMode: ragContext?.activeMode ?? null,
+      // 🆕 v85.7: browse_together 전략 활성 시 BRIDGE 유지 (SOLVE 조기 전환 방지)
+      activeMode: (
+        (
+          (suggestionMeta?.source === 'luna_strategy' && (suggestionMeta?.context as any)?.strategyType === 'browse_together') ||
+          savedStrategyMode === 'browse_together'
+        ) &&
+        !(completedEvents ?? []).includes('BROWSE_SESSION') &&
+        !(completedEvents ?? []).includes('BROWSE_FINAL')
+      ) ? 'browse_together' : (ragContext?.activeMode ?? null),
     };
     let newPhaseV2 = PhaseManager.getCurrentPhase(phaseCtx);
 
@@ -2172,12 +2180,25 @@ ${researchResult.insight}
 
           // 🆕 v85.6: 🔍 같이 찾기 — [BROWSE_READY:topic|query|context|budget]
           // 모든 Phase 에서 자율 발동 가능. 한 세션에 1회 제한.
-          if (hlrePost.browseReady && canFireEvent() && !updatedCompletedEvents.includes('BROWSE_SEARCHING') && !updatedCompletedEvents.includes('BROWSE_SESSION')) {
-            eventsToFire.push(createBrowseSearching(hlrePost.browseReady.topic, hlrePost.browseReady.query, newPhaseV2));
+          // 🆕 v85.7: browse_together 카드 클릭 시 즉시 트리거 (AI 태그 불필요)
+          const browseActivatedMeta = (
+            suggestionMeta?.source === 'luna_strategy' &&
+            (suggestionMeta?.context as any)?.strategyType === 'browse_together'
+          ) ? (suggestionMeta?.context as any) : null;
+
+          if (
+            (hlrePost.browseReady || browseActivatedMeta) &&
+            canFireEvent() &&
+            !updatedCompletedEvents.includes('BROWSE_SEARCHING') &&
+            !updatedCompletedEvents.includes('BROWSE_SESSION')
+          ) {
+            const bTopic = hlrePost.browseReady?.topic ?? browseActivatedMeta?.browseTopic ?? 'general';
+            const bQuery = hlrePost.browseReady?.query ?? browseActivatedMeta?.browseQuery ?? userMessage;
+            eventsToFire.push(createBrowseSearching(bTopic, bQuery, newPhaseV2));
             updatedCompletedEvents.push('BROWSE_SEARCHING');
             updatedLastEventTurn = turnCount;
-            pendingBrowseSearch = hlrePost.browseReady;
-            console.log(`[Pipeline] 🔍 BROWSE_SEARCHING 발동: topic=${hlrePost.browseReady.topic} "${hlrePost.browseReady.query}"`);
+            pendingBrowseSearch = hlrePost.browseReady ?? { topic: bTopic, query: bQuery };
+            console.log(`[Pipeline] 🔍 BROWSE_SEARCHING 발동: topic=${bTopic} "${bQuery}"`);
           }
 
           // 🆕 v39: 🎯 SOLVE 마무리 — [ACTION_PLAN:...] → ACTION_PLAN 이벤트
