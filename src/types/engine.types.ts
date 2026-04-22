@@ -697,6 +697,15 @@ export interface BrowseCandidate {
     stance: LunaStance;
     reason: string;
   };
+  /** 🆕 v85.7: 대화형 브라우징 — 루나 말풍선 3단 */
+  /** "아 이거 봤어?" 소개 한 줄 (~35자) */
+  lunaIntro?: string;
+  /** "리뷰 보니까 X, 근데 Y 후기도" 리뷰 기반 톤 (~60자) */
+  reviewTake?: string;
+  /** "너 ○○ 중요하댔지? 어때?" 개인화 + 질문 (~60자) */
+  personalTake?: string;
+  /** 실제 리뷰 스니펫 2~3개 ("더 자세히" 누를 때 노출) */
+  reviewSnippets?: string[];
 }
 
 /** 🔍 v85.6: 같이 찾기 세션 데이터 (이벤트 데이터로 UI 에 통째 전달) */

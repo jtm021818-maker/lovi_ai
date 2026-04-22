@@ -91,7 +91,7 @@ budget: ${p.budget ?? '없음'}
 [Brave 검색 스니펫]
 ${snippets}
 
-[출력 규칙 — 반드시 이 JSON 형식만, 코드블록 금지]
+[출력 규칙 — 반드시 이 JSON 형식만]
 {
   "openerMsg": "루나가 '같이 고르자' 건네는 한 줄 (~35자, 반말, 검색 얘기 X, 기대감)",
   "topicLabel": "화면 상단 라벨 (예: '여친 생일 선물 고르기', '성수 조용한 카페')",
@@ -101,18 +101,21 @@ ${snippets}
       "title": "구체적 이름 (실존 장소/상품/작품)",
       "category": "세부 분류 한 단어",
       "emoji": "적절한 이모지 1개",
-      "themeColor": "#HEX 또는 null",
+      "themeColor": "#HEX",
       "oneLine": "한 줄 요약 (~35자)",
-      "detail": "조금 더 긴 설명 (~60자, 선택)",
-      "priceHint": "가격/비용 (예: '2~3만원') 또는 null",
-      "sourceUrl": "출처 URL (스니펫에 있으면)",
+      "detail": "조금 더 긴 설명 (~60자)",
+      "priceHint": "가격/비용 (예: '2~3만원')",
+      "sourceUrl": "출처 URL (스니펫에 있을 때만)",
       "deepLink": "지도/쇼핑 검색 URL",
       "lunaTake": {
         "stance": "love | good | mixed | meh 중 하나",
-        "reason": "이 후보에 대한 루나의 감상 한 줄 (~35자, 반말)"
-      }
-    },
-    ...총 8개 (id: c1~c8)
+        "reason": "한 줄 감상 (~35자, 반말)"
+      },
+      "lunaIntro": "'아 이거 봤어? — ○○○' 같이 소개하는 톤 (~35자, 반말)",
+      "reviewTake": "리뷰 기반: '리뷰 보니까 X래, 근데 Y라는 후기도 있더라' 형식 (~60자, 반말)",
+      "personalTake": "맥락 반영 + 질문: '너 ○○ 중요하댔지? 여긴 딱일 듯 — 어때?' 형식 (~60자, 반말)",
+      "reviewSnippets": ["실제 리뷰 느낌 인용 1", "인용 2", "인용 3"]
+    }
   ],
   "lunaClosing": "모든 후보 훑었을 때 건넬 마무리 한 줄 (~30자)"
 }
@@ -121,7 +124,9 @@ ${snippets}
 - candidates 정확히 8개. id 는 c1~c8.
 - stance 분포: love 1~2, good 2~3, mixed 2~3, meh 1~2 (섞여 있어야 고르는 맛)
 - **실존하는 것만** (장소/상품/작품 모두). 스니펫 우선.
-- 설명 없이 JSON 만. 출력 앞뒤에 다른 텍스트 절대 금지.`;
+- lunaIntro/reviewTake/personalTake 는 언니가 동생한테 말하듯 반말, 친근.
+- reviewSnippets 는 스니펫의 후기 문장 스타일로 짧게 3개.
+- 검색 스니펫이 비어있으면 일반 지식으로 실존하는 것 기준 8개 생성.`;
 }
 
 function extractJson(text: string): any | null {
@@ -221,7 +226,11 @@ async function _runImpl(
 
     const response = await gemini.models.generateContent({
       model: 'gemini-2.5-flash-lite',
-      config: { maxOutputTokens: 2400, temperature: 0.7 },
+      config: {
+        maxOutputTokens: 5120,
+        temperature: 0.7,
+        responseMimeType: 'application/json',
+      },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });
 
@@ -234,6 +243,12 @@ async function _runImpl(
 
     const candidates: BrowseCandidate[] = (parsed.candidates as any[]).slice(0, 8).map((c, i) => {
       const title = String(c.title ?? `후보 ${i + 1}`).trim();
+      const snippets = Array.isArray(c.reviewSnippets)
+        ? c.reviewSnippets
+            .map((s: unknown) => cleanNullable(s))
+            .filter((s: string | undefined): s is string => !!s)
+            .slice(0, 3)
+        : undefined;
       return {
         id: String(c.id ?? `c${i + 1}`),
         title,
@@ -249,6 +264,16 @@ async function _runImpl(
           stance: sanitizeStance(c?.lunaTake?.stance),
           reason: scrubForbiddenPhrasing(String(c?.lunaTake?.reason ?? '').trim()) || '괜찮아 보여',
         },
+        lunaIntro: cleanNullable(c.lunaIntro)
+          ? scrubForbiddenPhrasing(cleanNullable(c.lunaIntro)!)
+          : `아 이거 — ${title}`,
+        reviewTake: cleanNullable(c.reviewTake)
+          ? scrubForbiddenPhrasing(cleanNullable(c.reviewTake)!)
+          : undefined,
+        personalTake: cleanNullable(c.personalTake)
+          ? scrubForbiddenPhrasing(cleanNullable(c.personalTake)!)
+          : '어때?',
+        reviewSnippets: snippets && snippets.length > 0 ? snippets : undefined,
       };
     });
 
