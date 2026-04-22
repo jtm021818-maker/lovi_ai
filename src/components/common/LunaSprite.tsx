@@ -197,7 +197,7 @@ export default function LunaSprite({
           backgroundImage: `url(${finalUrl})`,
           backgroundSize: `${frameW * finalCols}px ${frameH * finalRows}px`,
           backgroundRepeat: 'no-repeat',
-          imageRendering: 'crisp-edges', // Fallback for Firefox/standard
+          imageRendering: 'auto', // 부드러운 그림체 — crisp-edges 는 픽셀아트 전용
           WebkitFontSmoothing: 'antialiased',
           transform: `translate(-${col * frameW}px, -${row * frameH}px)`,
           pointerEvents: 'none',

@@ -450,6 +450,8 @@ export interface DualBrainInput {
   supabase?: any;
   /** 🆕 v71: 좌뇌도 최근 대화 히스토리 받아서 맥락 유지 */
   chatHistory?: Array<{ role: 'user' | 'ai'; content: string }>;
+  /** 🆕 v86: 이미 완료된 이벤트 목록 — AI가 중복 발동 멘트 반복 방지 */
+  completedEvents?: string[];
   // ─────────────────────────────
   userInput: string;
   contextBlock: string;
@@ -593,6 +595,7 @@ export async function* executeDualBrain(
           model: 'gemini',    // 🆕 Gemini 모드로 ACE v5 (저비용)
           memoryBundle,       // 🆕 v76
           chatHistory: input.chatHistory,   // 🆕 v78: 치매 방지 — 우뇌가 맥락 직접 봄
+          completedEvents: input.completedEvents,  // 🆕 v86: 중복 이벤트 멘트 방지
         }, logCollector)) {
           if (chunk.type === 'text') {
             aceChunkCount++;
@@ -679,6 +682,7 @@ export async function* executeDualBrain(
           model: 'claude',   // 🆕 v56: claude_rephrase 경로는 Claude 모델 명시
           memoryBundle,      // 🆕 v76
           chatHistory: input.chatHistory,   // 🆕 v78: 치매 방지 — 우뇌가 맥락 직접 봄
+          completedEvents: input.completedEvents,  // 🆕 v86: 중복 이벤트 멘트 방지
         }, logCollector)) {
           if (chunk.type === 'text') {
             fullResponseText += chunk.data;

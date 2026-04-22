@@ -147,7 +147,7 @@ export function mergeMemoryIntoHandoff(
 // 🆕 v75: "루나의 3단계 순간 사고" 포맷 — 내면 독백 스타일
 // ============================================================
 
-export function formatHandoffForPrompt(handoff: LeftToRightHandoff): string {
+export function formatHandoffForPrompt(handoff: LeftToRightHandoff, completedEvents?: string[]): string {
   const lines: string[] = [];
 
   // ── 1단계: 몸이 느낀 것 (감각)
@@ -374,7 +374,14 @@ export function formatHandoffForPrompt(handoff: LeftToRightHandoff): string {
   }
 
   // 이벤트 추천 (VN 극장 등)
-  if (handoff.event_recommendation?.suggested) {
+  // 🆕 v86: 이미 완료된 이벤트는 추천 차단 — AI가 "보여줄게~" 반복 방지
+  const completedSet = new Set(completedEvents ?? []);
+  const vnRelated = new Set(['VN_THEATER', 'EMOTION_MIRROR']);
+  const isEventAlreadyDone = (suggested: string) => {
+    if (vnRelated.has(suggested) && (completedSet.has('EMOTION_MIRROR') || completedSet.has('VN_THEATER'))) return true;
+    return completedSet.has(suggested);
+  };
+  if (handoff.event_recommendation?.suggested && !isEventAlreadyDone(handoff.event_recommendation.suggested)) {
     const rec = handoff.event_recommendation;
     const tagMap: Record<string, string> = {
       VN_THEATER: '[MIND_READ_READY]',
@@ -400,6 +407,10 @@ export function formatHandoffForPrompt(handoff: LeftToRightHandoff): string {
     if (rec.reasoning) lines.push(`이유: ${rec.reasoning}`);
     if (tag) lines.push(`발동하려면 응답 끝에 ${tag} 태그.`);
     lines.push(`→ 네가 맥락 봤을 때 어울리면 태그 출력. 이상하면 무시.`);
+    lines.push('');
+  } else if (handoff.event_recommendation?.suggested) {
+    // 이미 완료된 이벤트 — AI에게 "이미 했으니 추천 X" 알림
+    lines.push(`⛔ ${handoff.event_recommendation.suggested} 이벤트는 이번 세션에서 **이미 완료됨**. 재발동 유도 멘트 금지.`);
     lines.push('');
   }
 

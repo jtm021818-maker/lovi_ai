@@ -123,7 +123,7 @@ export async function* executeAceV5(
         input.memoryBundle.intimacyState,
       )
     : baseHandoff;
-  const handoffText = formatHandoffForPrompt(handoff);
+  const handoffText = formatHandoffForPrompt(handoff, input.completedEvents);
 
   // ────────────────────────────────────────
   // 2단계: 1차 우뇌 호출 (model 선택, 기본 gemini)
@@ -183,7 +183,7 @@ export async function* executeAceV5(
       // claudeConcern을 핸드오프 텍스트에 prepend
       const refinedHandoffText =
         `### ⚠️ 우뇌 의심사항 반영\n${reanalysisCheck.reason}\n\n` +
-        formatHandoffForPrompt(refinedHandoff);
+        formatHandoffForPrompt(refinedHandoff, input.completedEvents);
 
       // 5단계: 재호출 (재분석은 Claude 강제 — 더 깊은 사고)
       const secondCallResult = await streamVoiceOnce({

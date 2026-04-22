@@ -1541,6 +1541,8 @@ ${researchResult.insight}
             supabase: ragContext?.supabase,
             // 🆕 v71: 좌뇌가 대화 맥락 받게 (반복 질문 박멸)
             chatHistory: chatHistory,
+            // 🆕 v86: 이미 완료된 이벤트 → AI가 중복 발동 멘트 반복 방지
+            completedEvents: updatedCompletedEvents,
           }, logCollector)) {
             if (chunk.type === 'text') {
               // 🆕 v79: 항상 버퍼링 (인라인 힌트 파싱 위해)
@@ -1700,7 +1702,7 @@ ${researchResult.insight}
             //   — TAROT_READY/PATTERN_MIRROR_READY/THINKING_DEEP
             //   — TONE_SELECT/DRAFT_CARD/ROLEPLAY_FEEDBACK/PANEL_REPORT/IDEA_REFINE
             //   — REQUEST_REANALYSIS/LEFT_BRAIN_HINT/RP_IN/RP_OUT
-            const METADATA_TAG_RE = /\[(?:SITUATION_READ|LUNA_THOUGHT|PHASE_SIGNAL|SITUATION_CLEAR|MIND_READ_READY|STORY_READY|STRATEGY_READY|ACTION_PLAN|WARM_WRAP|TAROT_READY|PATTERN_MIRROR_READY|THINKING_DEEP|TONE_SELECT|DRAFT_CARD|ROLEPLAY_FEEDBACK|PANEL_REPORT|IDEA_REFINE|REQUEST_REANALYSIS|LEFT_BRAIN_HINT|RP_IN|RP_OUT|OPERATION_COMPLETE)(?::[^\]]*)?\]/gi;
+            const METADATA_TAG_RE = /\[(?:SITUATION_READ|LUNA_THOUGHT|PHASE_SIGNAL|SITUATION_CLEAR|MIND_READ_READY|STORY_READY|STRATEGY_READY|ACTION_PLAN|WARM_WRAP|TAROT_READY|PATTERN_MIRROR_READY|THINKING_DEEP|TONE_SELECT|DRAFT_CARD|ROLEPLAY_FEEDBACK|PANEL_REPORT|IDEA_REFINE|REQUEST_REANALYSIS|LEFT_BRAIN_HINT|RP_IN|RP_OUT|OPERATION_COMPLETE|SONG_READY|DATE_SPOT_READY|GIFT_READY|ACTIVITY_READY|ANNIVERSARY_READY|MOVIE_READY|BROWSE_READY)(?::[^\]]*)?\]/gi;
 
             const rawBursts = claudeBuffer.split('|||');
             const delayMap: Record<string, [number, number]> = {
@@ -1974,7 +1976,16 @@ ${researchResult.insight}
             ));
           const vnGate = willEnterMirror;
 
-          if (vnGate && !vnAlreadyFired && canFireEvent()) {
+          if (vnGate && !vnAlreadyFired) {
+            // 🆕 v86: VN 극장은 최고 우선순위 — 선행 이벤트(온도계 등)를 대체
+            //   이전 버그: EMOTION_THERMOMETER가 pre-ACE에서 먼저 eventsToFire에 들어가면
+            //     canFireEvent()=false → VN 발동 실패 → AI는 "보여줄게" 했는데 극장 안 뜸
+            //   수정: VN 게이트 충족 시 선행 이벤트 클리어 후 VN 발동
+            if (eventsToFire.length > 0) {
+              const preEmptedTypes = eventsToFire.map(e => e.type);
+              console.log(`[Pipeline] 🎭 VN 극장 우선순위 — 선행 이벤트 대체: [${preEmptedTypes.join(', ')}]`);
+              eventsToFire.length = 0; // clear pre-ACE events (VN이 온도계 등을 포함)
+            }
             const trigger = `willEnterMirror (currentPhase=${newPhaseV2}, lbPacing=${lbPacingState}/${lbTransition}, aiTag=${hlrePost.mindReadReady ?? false}, lbRecVN=${lbRecommendsVN})`;
             console.log(`[Pipeline] 🎭 VN 극장 발동 시도 — 트리거: ${trigger}`);
 

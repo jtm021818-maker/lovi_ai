@@ -196,6 +196,9 @@ export interface AceV5Input {
     /** 🆕 v77: 친밀도 상태 (handoff 에 주입됨) */
     intimacyState?: LeftToRightHandoff['intimacy_state'];
   };
+
+  /** 🆕 v86: 이미 완료된 이벤트 목록 — AI가 중복 발동 멘트 반복 방지 */
+  completedEvents?: string[];
 }
 
 // ============================================================
