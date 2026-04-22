@@ -549,6 +549,15 @@ export class CounselingPipeline {
       console.log(`[Pipeline] 🎬 v81: 몰입 모드 완료 신호 → BRIDGE → SOLVE 강제 전환`);
       newPhaseV2 = 'SOLVE';
     }
+    // 🆕 v85.7: 같이 찾기 완료 시 즉시 BRIDGE → SOLVE 강제 전환
+    if (
+      ((suggestionMeta?.context as any)?.browseEvent === 'finish' ||
+       (suggestionMeta?.context as any)?.browseEvent === 'decide') &&
+      (currentPhaseV2 ?? prevPhaseV2) === 'BRIDGE'
+    ) {
+      console.log(`[Pipeline] 🔍 v85.7: 같이 찾기 완료 → BRIDGE → SOLVE 강제 전환`);
+      newPhaseV2 = 'SOLVE';
+    }
     const phaseChanged = newPhaseV2 !== prevPhaseV2;
 
     // 🆕 v20: Phase 전환 시 phaseStartTurn 갱신
