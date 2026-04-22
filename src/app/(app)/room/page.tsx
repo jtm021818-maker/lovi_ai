@@ -30,6 +30,9 @@ import EditFab from '@/components/room/EditFab';
 import DexFab from '@/components/room/DexFab';
 import DexModal from '@/components/dex/DexModal';
 import { SPIRITS } from '@/data/spirits';
+// 🆕 v85.4: 스프라이트 기반 배회 정령
+import WanderingSpirit from '@/components/spirit/WanderingSpirit';
+import { hasSpiritSprite } from '@/data/spirit-sprites';
 
 /**
  * 🆕 v83.1: Spirit personality-based idle motion.
@@ -252,6 +255,26 @@ export default function RoomPage() {
             {room.placedSpirits.map((p) => {
               const sp = getSpirit(p.spiritId);
               if (!sp) return null;
+
+              // v85.4: 스프라이트 등록된 정령 → 배회 컴포넌트
+              if (hasSpiritSprite(p.spiritId)) {
+                return (
+                  <WanderingSpirit
+                    key={p.spiritId}
+                    spirit={sp}
+                    roomWidth={ROOM_W}
+                    roomHeight={ROOM_H}
+                    initialX={p.x}
+                    initialY={p.y}
+                    editMode={editMode}
+                    showRemoveBadge={editMode}
+                    onTap={() => handleSpiritTap(p)}
+                    onDragEnd={(nx, ny) => moveSpirit(p.spiritId, nx, ny)}
+                  />
+                );
+              }
+
+              // 기존: 이모지 fallback
               const motion$ = getSpiritMotion(p.spiritId);
               const idleAnim: any = editMode
                 ? { scale: 1, opacity: 1 }
@@ -394,6 +417,7 @@ export default function RoomPage() {
                 return (
                   <SpiritSlot
                     key={u.spiritId}
+                    spirit={sp}
                     emoji={sp.emoji}
                     themeColor={sp.themeColor}
                     bondLv={u.bondLv}
