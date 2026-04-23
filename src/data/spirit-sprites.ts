@@ -19,7 +19,7 @@ import type { SpiritSpriteSheet } from '@/types/spirit-sprite.types';
 
 export const SPIRIT_SPRITES: Partial<Record<SpiritId, SpiritSpriteSheet>> = {
   moon_rabbit: {
-    src: '/splite/moon_rabit_sprite_myroom.png',
+    src: '/splite/moon_rabit_sprite_myroom.webp',
     frameWidth: 128,
     frameHeight: 172,
     totalCols: 6,

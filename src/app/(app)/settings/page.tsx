@@ -252,6 +252,9 @@ export default function SettingsPage() {
   const isPremium = profile?.is_premium ?? false;
 
   return (
+    <>
+    {/* 설정 페이지에서만 setting 스프라이트 프리로드 (16MB — 전역 layout에서 제외됨) */}
+    <link rel="preload" as="image" href="/splite/luna_sprite_setting_1.webp" fetchPriority="high" />
     <div className="settings-page">
       {/* 벚꽃 장식 */}
       <div className="settings-sakura settings-sakura-1">🌸</div>
@@ -764,5 +767,6 @@ export default function SettingsPage() {
         }}
       />
     </div>
+    </>
   );
 }

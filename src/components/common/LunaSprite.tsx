@@ -59,13 +59,12 @@ function ensureSpriteLoaded(url: string): Promise<void> {
   return p;
 }
 
-// 모듈 import 시점에 즉시 프리로드 — layout의 <link rel="preload"> 와 시너지
-// 브라우저가 이미 캐시했으면 동기 마킹, 아니면 백그라운드 로드 시작
+// avatar 프리셋만 모듈 레벨 즉시 프리로드 (모든 페이지 공통)
+// setting(16MB)은 설정 페이지에서만 필요하므로 컴포넌트 마운트 시 로드
 if (typeof window !== 'undefined') {
-  for (const preset of Object.values(SPRITE_PRESETS)) {
-    if (!isBrowserCached(preset.url)) {
-      ensureSpriteLoaded(preset.url);
-    }
+  const avatarUrl = SPRITE_PRESETS.avatar.url;
+  if (!isBrowserCached(avatarUrl)) {
+    ensureSpriteLoaded(avatarUrl);
   }
 }
 
