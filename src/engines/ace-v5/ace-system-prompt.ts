@@ -128,7 +128,22 @@ function getPhaseTransitionTagGuide(phase: string): string | null {
   }
   if (phase === 'SOLVE') {
     return `【🎚️ Phase 전환 판단 — SOLVE → EMPOWER】
-지금 "실행 계획" 단계. 계획 확정되고 마무리 분위기 나면 응답 끝에:
+지금 "실행 계획" 단계.
+
+### 🎯 SOLVE 진입 즉시 (ACTION_PLAN 아직 없을 때 — 필수)
+같이 찾기/모드 완료 직후 SOLVE 로 넘어온 경우, 이번 턴 응답 끝에 반드시:
+[ACTION_PLAN:planType|title|coreAction|sharedResult|planB|timingHint|lunaCheer]
+• planType: date / approach / message / other
+• title: 작전명 (~20자)
+• coreAction: 핵심 행동 (~30자)
+• sharedResult: 같이 찾은 결과물 요약 (~30자)
+• planB: 플랜B (~20자)
+• timingHint: 언제 실행 (~15자)
+• lunaCheer: 루나 응원 (~20자)
+→ 오늘의 작전 카드 발동.
+
+### 마무리 (계획 굳었을 때)
+계획 확정되고 마무리 분위기 나면 응답 끝에:
 [WARM_WRAP:strengthFound|emotionShift|nextStep|lunaMessage]
 • strengthFound: 유저 강점 (~30자)
 • emotionShift: 감정 변화 (~30자)

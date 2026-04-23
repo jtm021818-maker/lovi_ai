@@ -85,40 +85,43 @@ const SPRITE_SHEET = {
 };
 const SPRITE_COLS = 4;
 const SPRITE_ROWS = 2;
-// 프레임 인덱스 (0-7): 0=기본, 1=슬픔, 2=화남, 3=생각, 4=놀람, 5=웃음, 6=걱정, 7=당당
-type SpriteFrame = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+// 프레임 인덱스 (0-8): 0=기본, 1=슬픔, 2=화남, 3=생각, 4=놀람, 5=약간웃음, 6=걱정, 7=당당, 8=매우행복/환희
+type SpriteFrame = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
 /**
- * 여자역할 전용 애니메이션 오버라이드 (v82.x):
- *   0 (기본) → luna_sprite_nomal_cropped.webp (7×7, 49프레임, 크롭됨)
- *   1 (슬픔) → luna_sprite_movie_1.webp (7×7, 49프레임)
- *   5 (웃음) → luna_sprite_movie_2.webp (7×7, 49프레임)
- * 원본 해상도 1350×2400 → 프레임 aspect 2400/1350 ≈ 1.778 (세로 긴 프레임)
+ * 여자역할 전용 애니메이션 오버라이드 (v88):
+ *   0 (기본)       → luna_sprite_nomal_cropped.webp
+ *   1 (슬픔)       → luna_sprite_movie_1.webp
+ *   5 (약간행복)   → luna_sprite_nomal_cropped.webp (살짝 행복, 설렘)
+ *   8 (매우행복)   → luna_sprite_movie_2.webp (감격/환희, LLM이 판단)
  */
 const FEMALE_MOVIE_SPRITE: Partial<Record<SpriteFrame, string>> = {
   0: '/splite/luna_sprite_nomal_cropped.webp',
   1: '/splite/luna_sprite_movie_1.webp',
-  5: '/splite/luna_sprite_movie_2.webp',
+  5: '/splite/luna_sprite_nomal_cropped.webp',
+  8: '/splite/luna_sprite_movie_2.webp',
 };
 const MOVIE_SPRITE_COLS = 7;
 const MOVIE_SPRITE_ROWS = 7;
 const MOVIE_SPRITE_FRAME_ASPECTS: Partial<Record<SpriteFrame, number>> = {
-  0: 192 / 117, // luna_sprite_nomal_cropped.webp (117x192 crop) ≈ 1.641
+  0: 192 / 117,
   1: 2400 / 1350,
-  5: 2400 / 1350,
+  5: 192 / 117,
+  8: 2400 / 1350,
 };
 
-/** 감정/상황에 맞는 스프라이트 프레임 선택 */
+/** 감정/상황에 맞는 스프라이트 프레임 선택 (LLM 프레임 없을 때 폴백) */
 function pickSpriteFrame(emotion: string, isReveal: boolean): SpriteFrame {
-  if (isReveal) return 3; // 생각/깨달음
+  if (isReveal) return 3;
   const lower = emotion.toLowerCase();
   if (lower.includes('화') || lower.includes('짜증') || lower.includes('분노')) return 2;
   if (lower.includes('슬') || lower.includes('울') || lower.includes('아프')) return 1;
   if (lower.includes('불안') || lower.includes('걱정') || lower.includes('무서')) return 6;
   if (lower.includes('놀') || lower.includes('헐') || lower.includes('충격')) return 4;
-  if (lower.includes('웃') || lower.includes('행복') || lower.includes('좋')) return 5;
+  if (lower.includes('감격') || lower.includes('환희') || lower.includes('너무좋') || lower.includes('너무 좋')) return 8;
+  if (lower.includes('웃') || lower.includes('행복') || lower.includes('좋') || lower.includes('설렘')) return 5;
   if (lower.includes('당당') || lower.includes('자신') || lower.includes('용기')) return 7;
-  return 0; // 기본
+  return 0;
 }
 
 /** CSS background-image로 스프라이트 시트에서 특정 프레임 표시 (div 기반, 크롭 확실) */
@@ -421,7 +424,7 @@ function VNScene({
     }
     if (phase === 'playing') {
       const llmFrame = data.sceneFrames?.[lineIndex];
-      if (llmFrame !== undefined) return Math.min(7, Math.max(0, llmFrame)) as SpriteFrame;
+      if (llmFrame !== undefined) return Math.min(8, Math.max(0, llmFrame)) as SpriteFrame;
       return pickSpriteFrame(parseSceneLine(lines[lineIndex], data.characterSetup).dialog, false);
     }
     return 0;

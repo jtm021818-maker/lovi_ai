@@ -442,6 +442,8 @@ export async function POST(req: NextRequest) {
           // 🆕 v37: 이전 턴들의 인사이트 히스토리 — 매 턴 누적 유지
           sessionData?.situation_read_history ?? [],
           sessionData?.luna_thought_history ?? [],
+          // 🆕 v88: 유저 성별 — 루나 극장 대본 성별 반영
+          profile?.onboarding_situation ?? undefined,
         )) {
           switch (event.type) {
             case 'state':

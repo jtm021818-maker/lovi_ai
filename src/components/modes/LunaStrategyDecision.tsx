@@ -172,7 +172,7 @@ export default function LunaStrategyDecision({
               transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
               className="relative shrink-0 mt-1"
             >
-              <LunaSprite className="border border-[#EACbb3]" />
+              <LunaSprite preset="setting" className="border border-[#EACbb3]" />
               {/* 생각 버블 이모지 */}
               <motion.div
                 animate={{ opacity: [0.3, 1, 0.3], y: [0, -2, 0] }}
@@ -257,7 +257,7 @@ export default function LunaStrategyDecision({
               transition={{ duration: 0.6, ease: 'easeOut' }}
               className="relative shrink-0 mt-1"
             >
-              <LunaSprite className="border-2" size={40} style={{ borderColor: meta.accent }} />
+              <LunaSprite preset="setting" className="border-2" size={40} style={{ borderColor: meta.accent }} />
               {/* 결정 배지 */}
               <motion.div
                 initial={{ scale: 0, rotate: -180 }}

@@ -247,6 +247,8 @@ export class CounselingPipeline {
     savedSituationReadHistory?: string[],
     /** 🆕 v37: 저장된 속마음 히스토리 (세션간 유지) */
     savedLunaThoughtHistory?: string[],
+    /** 🆕 v88: 유저 성별 (onboarding_situation) — 루나 극장 대본 생성에 사용 */
+    userGender?: string,
   ): AsyncGenerator<
     | { type: 'state'; data: StateResult }
     | { type: 'strategy'; data: StrategyResult }
@@ -754,7 +756,6 @@ export class CounselingPipeline {
     if (canFireEvent() && PhaseManager.shouldTriggerEvent(newPhaseV2, 'EMOTION_MIRROR', makeCtxForEvent())) {
       // 🆕 v74: 단일 LLM 호출 — 코드 게이트/재시도 루프 제거. LLM 자체 판단.
       let mirrorData: EmotionMirrorData | null = null;
-      const userGender = (memoryProfile as any)?.basicInfo?.gender;
       try {
         mirrorData = await generateDynamicMirror(updatedAccumulator, currentScenario, chatHistory, userGender);
         if (mirrorData) {
@@ -2201,7 +2202,6 @@ ${researchResult.insight}
 
             // 생성 시도 (최대 2회 — 1차 + solo 폴백)
             let mirrorData: EmotionMirrorData | null = null;
-            const userGender = (memoryProfile as any)?.basicInfo?.gender;
             for (let attempt = 1; attempt <= 2; attempt++) {
               try {
                 mirrorData = await generateDynamicMirror(updatedAccumulator, currentScenario, chatHistory, userGender);

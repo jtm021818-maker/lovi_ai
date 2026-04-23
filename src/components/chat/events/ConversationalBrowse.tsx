@@ -33,7 +33,7 @@ interface Props {
 }
 
 type Reaction = 'love' | 'skip' | 'reject';
-type Stage = 'intro' | 'card' | 'review' | 'personal' | 'awaiting' | 'snippets' | 'reacted';
+type Stage = 'searching' | 'intro' | 'card' | 'review' | 'personal' | 'awaiting' | 'snippets' | 'reacted';
 type ReactionMap = Record<string, Reaction>;
 
 const LUNA_RESPONSES: Record<Reaction, string[]> = {
@@ -52,6 +52,25 @@ function pickResponse(r: Reaction): string {
 // ============================================================
 
 function LunaBubble({ text, showAvatar = true, delay = 0 }: { text: string; showAvatar?: boolean; delay?: number }) {
+  const [displayed, setDisplayed] = useState('');
+
+  useEffect(() => {
+    setDisplayed('');
+    let i = 0;
+    let iv: ReturnType<typeof setInterval> | null = null;
+    const startTimer = setTimeout(() => {
+      iv = setInterval(() => {
+        i++;
+        setDisplayed(text.slice(0, i));
+        if (i >= text.length) clearInterval(iv!);
+      }, 32);
+    }, delay * 1000);
+    return () => {
+      clearTimeout(startTimer);
+      if (iv !== null) clearInterval(iv);
+    };
+  }, [text, delay]);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -67,14 +86,17 @@ function LunaBubble({ text, showAvatar = true, delay = 0 }: { text: string; show
         <div className="shrink-0 w-7" />
       )}
       <div
-        className="px-3 py-2 rounded-2xl rounded-bl-[4px] text-[12.5px] leading-relaxed text-[#2a1a10]"
+        className="px-3 py-2 rounded-2xl rounded-bl-[4px] text-[12.5px] leading-relaxed text-[#2a1a10] min-h-[2rem]"
         style={{
           background: 'linear-gradient(180deg, #fffdf5 0%, #fff5e0 100%)',
           border: '1px solid rgba(245,158,11,0.28)',
           boxShadow: '0 2px 6px rgba(245,158,11,0.10)',
         }}
       >
-        {text}
+        {displayed}
+        {displayed.length < text.length && (
+          <span className="inline-block w-1.5 h-3.5 bg-amber-400/70 rounded-sm animate-pulse ml-0.5 align-middle" />
+        )}
       </div>
     </motion.div>
   );
@@ -145,8 +167,16 @@ function ProgressDots({ total, current, reactions, candidates }: {
 // ============================================================
 
 export default function ConversationalBrowse({ data, onSelect, disabled }: Props) {
+  // 90초 이상 된 세션은 archived — 재애니메이션 없이 compact 요약만
+  const isArchived = useMemo(() => {
+    try {
+      const ts = parseInt(data.sessionId.split('-')[1]);
+      return Date.now() - ts > 90_000;
+    } catch { return false; }
+  }, [data.sessionId]);
+
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [stage, setStage] = useState<Stage>('intro');
+  const [stage, setStage] = useState<Stage>('searching');
   const [reactions, setReactions] = useState<ReactionMap>({});
   const [pendingReaction, setPendingReaction] = useState<{ reaction: Reaction; userMsg: string; lunaReply: string } | null>(null);
   const [done, setDone] = useState(false);
@@ -157,26 +187,38 @@ export default function ConversationalBrowse({ data, onSelect, disabled }: Props
 
   // 바닥으로 오토 스크롤
   useEffect(() => {
+    if (isArchived) return;
     scrollAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [stage, currentIndex, pendingReaction]);
+  }, [stage, currentIndex, pendingReaction, isArchived]);
 
   // 스테이지 자동 진행 타이머
   useEffect(() => {
-    if (!current || done) return;
+    if (!current || done || isArchived) return;
 
     const timers: ReturnType<typeof setTimeout>[] = [];
+    if (stage === 'searching') timers.push(setTimeout(() => setStage('intro'), 4000));
     if (stage === 'intro')    timers.push(setTimeout(() => setStage('card'), 900));
     if (stage === 'card')     timers.push(setTimeout(() => setStage('review'), 850));
     if (stage === 'review')   timers.push(setTimeout(() => setStage('personal'), 950));
     if (stage === 'personal') timers.push(setTimeout(() => setStage('awaiting'), 700));
 
     return () => timers.forEach(clearTimeout);
-  }, [stage, currentIndex, current, done]);
+  }, [stage, currentIndex, current, done, isArchived]);
 
   const shortlist = useMemo(
     () => data.candidates.filter((c) => reactions[c.id] === 'love'),
     [data.candidates, reactions],
   );
+
+  // 오래된 세션 — compact 요약만 (재애니메이션 방지)
+  if (isArchived) {
+    return (
+      <div className="my-1 ml-1 flex items-center gap-1.5 text-[11px] text-amber-700/50">
+        <span>🔍</span>
+        <span>{data.topicLabel} — 같이 찾아봤어</span>
+      </div>
+    );
+  }
 
   function handleReact(r: Reaction) {
     if (!current || disabled) return;
@@ -264,6 +306,35 @@ export default function ConversationalBrowse({ data, onSelect, disabled }: Props
         </div>
         <ProgressDots total={total} current={currentIndex} reactions={reactions} candidates={data.candidates} />
       </div>
+
+      {/* 검색 중 초기 상태 (4초) */}
+      {stage === 'searching' && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="px-4 pt-2 pb-3 flex flex-col gap-2"
+        >
+          <div className="flex items-center gap-2">
+            <LunaSprite size={28} circle />
+            <span className="text-[11px] font-bold text-amber-700/80 tracking-wide">LUNA · 둘러보는 중</span>
+          </div>
+          <div className="ml-9 text-[12px] font-semibold text-[#3a2418]">{data.topicLabel}</div>
+          <div className="ml-9 flex flex-col gap-1.5 mt-1">
+            {['인스타 태그 보는 중 📷', '지도 둘러보는 중 🗺️', '리뷰 읽는 중 💬'].map((label, i) => (
+              <motion.div
+                key={label}
+                initial={{ opacity: 0, x: -4 }}
+                animate={{ opacity: [0, 1, 0.5, 1] }}
+                transition={{ duration: 1.2, delay: i * 0.5, repeat: Infinity, repeatType: 'reverse' }}
+                className="text-[10.5px] text-amber-700/60"
+              >
+                {label}
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      )}
 
       {/* 인트로 멘트 (세션 첫 진입 1회) */}
       {currentIndex === 0 && stage === 'intro' && (
