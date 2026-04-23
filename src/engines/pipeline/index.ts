@@ -2534,12 +2534,26 @@ ${researchResult.insight}
       //   이전(v80): 2초 — 빠른 느낌. 유저 피드백으로 5초로 확장.
       const MAJOR_EVENT_TYPES = new Set(['EMOTION_MIRROR', 'LUNA_STRATEGY', 'LUNA_STORY', 'ACTION_PLAN', 'WARM_WRAP']);
       const MAJOR_EVENT_DELAY_MS = 5000;
+      // 🆕 v88: 주요 이벤트 자동 FX — 카드 등장 전 파티클로 임팩트 강화
+      const AUTO_EVENT_FX: Record<string, { id: string; target: 'text' | 'screen' | 'bubble' | 'avatar' | 'particle' | 'bg' }> = {
+        'ACTION_PLAN':   { id: 'particle.confetti', target: 'particle' },
+        'WARM_WRAP':     { id: 'particle.hearts',   target: 'particle' },
+        'LUNA_STRATEGY': { id: 'particle.sparkles', target: 'particle' },
+        'LUNA_STORY':    { id: 'bubble.glow',        target: 'bubble'   },
+        'EMOTION_MIRROR':{ id: 'flash.pink',         target: 'screen'   },
+        'SESSION_SUMMARY':{ id: 'particle.stars',   target: 'particle' },
+      };
       for (const event of eventsToFire) {
         if (MAJOR_EVENT_TYPES.has(event.type as string) && fullText.length > 0) {
           await new Promise((r) => setTimeout(r, MAJOR_EVENT_DELAY_MS));
         }
+        // 자동 FX 주입 (이벤트 카드 뜨기 직전)
+        const autoFx = AUTO_EVENT_FX[event.type as string];
+        if (autoFx) {
+          yield { type: 'fx', data: autoFx };
+        }
         yield { type: 'phase_event', data: event };
-        console.log(`[Pipeline] 🎮 이벤트 발생: ${event.type} (${newPhaseV2})`);
+        console.log(`[Pipeline] 🎮 이벤트 발생: ${event.type} (${newPhaseV2})${autoFx ? ` + auto-fx:${autoFx.id}` : ''}`);
       }
 
       // 🆕 v84: 🎵 루나 자율 노래 추천 — SEARCHING 이벤트 UI 진입 후 grounded Gemini 실행 → RECOMMENDATION 이벤트 yield

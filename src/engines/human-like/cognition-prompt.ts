@@ -1321,16 +1321,16 @@ WARM_WRAP 발동 후엔 **새 상담 절대 금지**. 카페 문 닫혔어.
       transitionHint = '\n\n[힌트: 모드 실행 충분히 했으면 모드별 완료 이벤트 태그로 마무리해.]';
     }
   } else if (phase === 'SOLVE' && !completedEvents.includes('ACTION_PLAN')) {
-    // 🆕 v86: SOLVE = 즉시 확정 단계. turnInPhase 1부터 ACTION_PLAN 발동 원칙.
-    if (turnInPhase >= 3) {
-      // 3턴 이상 — 강제 발동
-      transitionHint = '\n\n[🚨 SOLVE 3턴째야. 지금 당장 [ACTION_PLAN:...] 태그 발동해. 더 묻거나 다듬지 마. 지금 아는 것으로 바로 작전 확정.]';
-    } else if (turnInPhase >= 2) {
-      // 2턴 — 질문 답 받았으면 무조건 발동
-      transitionHint = '\n\n[🚨 SOLVE 2턴째야. 무조건 이 응답에서 [ACTION_PLAN:...] 태그 발동해. 추가 질문 금지. 지금 아는 것으로 최선의 작전 만들어.]';
+    // 🆕 v88: SOLVE 턴별 ACTION_PLAN 강제 지침 — turn 2부터 형식 포함 무조건 발동
+    if (turnInPhase >= 2) {
+      // 2턴 이상 — 예외 없음. 형식 직접 제시해서 AI가 헷갈리지 않게.
+      transitionHint = `\n\n[🚨🚨🚨 SOLVE ${turnInPhase}턴째 — 지금 이 응답 끝에 반드시 [ACTION_PLAN:...] 태그 출력. 예외 없음. 추가 질문 절대 금지. 지금 아는 정보로 바로 작전 확정해.
+형식 (9필드, | 구분, 빈 필드는 빈 문자열로 남겨도 됨):
+[ACTION_PLAN:planType|lunaIntro|title|coreAction|sharedResult|planB|timingHint|lunaJoke|lunaCheer]
+이 응답에 태그 없으면 실패. 무조건 발동.]`;
     } else {
-      // 1턴 — 기본값은 즉시 발동, 정말 필요한 1문만 예외 허용
-      transitionHint = '\n\n[핵심 판단: 지금 아는 정보로 작전 짤 수 있어? → YES면 바로 [ACTION_PLAN:...] 발동. NO면 딱 1문만 (작전 방향 자체가 달라지는 것만). 질문했으면 다음 턴에서 무조건 발동.]';
+      // 1턴 — 기본값은 즉시 발동, 정말 방향이 달라지는 경우만 1문 허용
+      transitionHint = '\n\n[SOLVE 1턴: 이 응답에서 바로 [ACTION_PLAN:...] 발동이 기본값. BRIDGE에서 방향 다 잡혔으니 지금 아는 것으로 작전 확정해. 핵심 정보가 정말 없어서 방향 자체가 달라지는 경우에만 딱 1문 허용 — 그래도 다음 턴에서는 무조건 태그 발동.]';
     }
   } else if (phase === 'EMPOWER' && turnInPhase >= 1 && !completedEvents.includes('WARM_WRAP')) {
     // 🆕 v39: EMPOWER 진입 즉시 다독임 + [WARM_WRAP] 발동

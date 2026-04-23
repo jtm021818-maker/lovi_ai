@@ -543,6 +543,18 @@ export function useChat(sessionId: string): UseChatReturn {
                     }
                     return [...prev, newEvent];
                   });
+                  // messages 에 이미 flush된 SEARCHING 메시지도 SESSION으로 교체
+                  // (3초 딜레이 후 flush됐는데 SESSION이 그 이후 도착한 경우 중복 렌더 방지)
+                  setMessages((prev) => {
+                    const mIdx = prev.findIndex((m) => {
+                      if ((m.senderType as any) !== 'event') return false;
+                      try { return JSON.parse(m.content).type === searchingType; } catch { return false; }
+                    });
+                    if (mIdx < 0) return prev;
+                    const next = [...prev];
+                    next[mIdx] = { ...next[mIdx], content: JSON.stringify(newEvent) };
+                    return next;
+                  });
                   const pIdx = pendingEventsBuffer.findIndex((e) => e.type === searchingType);
                   if (pIdx >= 0) pendingEventsBuffer[pIdx] = newEvent;
                   else pendingEventsBuffer.push(newEvent);

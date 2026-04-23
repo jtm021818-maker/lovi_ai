@@ -8,6 +8,7 @@ import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createClient } from '@/lib/supabase/client';
 import { useLunaVoice } from '@/hooks/useLunaVoice';
+import { isFxEnabled } from '@/lib/fx/effect-bus';
 import type { PersonaMode } from '@/types/persona.types';
 // 🆕 v41: 친밀도 카드
 import IntimacyCard from '@/components/intimacy/IntimacyCard';
@@ -104,6 +105,16 @@ export default function SettingsPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [showPersonaDetail, setShowPersonaDetail] = useState<string | null>(null);
   const [intimacyTab, setIntimacyTab] = useState<'luna' | 'tarot'>('luna');
+  const [fxEnabled, setFxEnabled] = useState(true);
+
+  useEffect(() => {
+    setFxEnabled(isFxEnabled());
+  }, []);
+
+  const toggleFx = (next: boolean) => {
+    setFxEnabled(next);
+    localStorage.setItem('fx_enabled', next ? 'true' : 'false');
+  };
 
   // 속도/음높이를 0~100 슬라이더로 매핑
   const rateMap: Record<string, number> = { '-20%': 20, '-10%': 40, '+0%': 60, '+10%': 80 };
@@ -637,7 +648,18 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* ⑤ 자동 음성 읽기 + 음성 활성화 */}
+        {/* ⑤ 화면 연출 */}
+        <div className="settings-toggles-row">
+          <div className="settings-toggle-item" style={{ width: '100%' }}>
+            <div>
+              <span className="settings-toggle-label">화면 연출 (FX)</span>
+              <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>흔들림 / 파티클 / 말풍선 효과</p>
+            </div>
+            <Toggle value={fxEnabled} onChange={toggleFx} />
+          </div>
+        </div>
+
+        {/* ⑥ 자동 음성 읽기 + 음성 활성화 */}
         <div className="settings-toggles-row">
           <div className="settings-toggle-item">
             <span className="settings-toggle-label">자동 음성 읽기</span>

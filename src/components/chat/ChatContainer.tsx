@@ -43,7 +43,6 @@ import IdeaMode from '@/components/modes/idea/IdeaMode';
 import DraftMode from '@/components/modes/draft/DraftMode';
 import PanelMode from '@/components/modes/panel/PanelMode';
 import RoleplayMode from '@/components/modes/roleplay/RoleplayMode';
-import FxBgmSettings from '@/components/settings/FxBgmSettings';
 import DraftsVault from '@/components/drafts/DraftsVault';
 import { useModeStore } from '@/engines/bridge-modes/mode-store';
 import type { ModeId, ToneOption, DraftOption, PanelPersona, RoleplayState } from '@/engines/bridge-modes/types';
@@ -303,7 +302,6 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
   const activeMode = modeSessionId === sessionId ? activeModeRaw : null;
   const modeState = modeSessionId === sessionId ? modeStateRaw : null;
   // 🆕 v81: 설정 / 초안함 토글
-  const [showSettings, setShowSettings] = useState(false);
   const [showDraftsVault, setShowDraftsVault] = useState(false);
 
   async function handleModeEnter(mode: ModeId | 'browse_together', strategyData: { opener?: string; situationSummary?: string }) {
@@ -1072,16 +1070,8 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
           >
             <span className="text-base">📂</span>
           </button>
-          <button
-            onClick={() => setShowSettings(true)}
-            className="pointer-events-auto w-9 h-9 rounded-full bg-white/80 backdrop-blur-md border border-[#D5C2A5]/60 shadow-sm flex items-center justify-center active:scale-95 transition-transform"
-            title="효과 설정"
-          >
-            <span className="text-base">⚙️</span>
-          </button>
         </div>
 
-        <FxBgmSettings open={showSettings} onClose={() => setShowSettings(false)} />
         <DraftsVault open={showDraftsVault} onClose={() => setShowDraftsVault(false)} />
     </div>
   );
