@@ -916,9 +916,23 @@ export interface GrowthReportData {
 /** 🆕 v20: 세션 요약 데이터 */
 export interface SessionSummaryData {
   title: string;
-  keyInsights: string[];        // 핵심 발견 3가지
-  emotionJourney: string;       // 감정 여정 요약 1줄
-  lunaMessage: string;          // 루나의 마무리 멘트
+  keyInsights: string[];        // 핵심 발견 3가지 (레거시 — 언니 쪽지 UI 에서는 사용 안 함)
+  emotionJourney: string;       // 감정 여정 요약 1줄 (레거시)
+  lunaMessage: string;          // 루나의 마무리 멘트 (레거시)
+
+  // 🆕 v87: "언니가 놓고 가는 쪽지" 톤 필드 (session-summary-synthesizer 로 채워짐)
+  /** 2~3문장 반말 paragraph — 쪽지 본문 */
+  letter?: string;
+  /** 시작 감정 이모지 */
+  emotionFromEmoji?: string;
+  /** 끝 감정 이모지 */
+  emotionToEmoji?: string;
+  /** 시작 감정 한 단어 */
+  emotionFromWord?: string;
+  /** 끝 감정 한 단어 */
+  emotionToWord?: string;
+  /** 하단 귀엽게 한 줄 */
+  footerLine?: string;
 }
 
 /** 🆕 v20: 숙제 카드 데이터 */

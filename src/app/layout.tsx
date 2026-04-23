@@ -1,11 +1,20 @@
 import type { Metadata, Viewport } from 'next';
-import { Geist } from 'next/font/google';
+import { Geist, Gaegu } from 'next/font/google';
 import './globals.css';
 import FxRoot from '@/components/fx/FxRoot';
 
 const geist = Geist({
   variable: '--font-geist',
   subsets: ['latin'],
+});
+
+// 🆕 v87: 손글씨 느낌 한글 폰트 — "언니 쪽지" 톤 UI 전용.
+// Gaegu 는 Google Fonts 에서 가장 따뜻한 한글 핸드라이팅 중 하나.
+const gaegu = Gaegu({
+  variable: '--font-gaegu',
+  subsets: ['latin'],
+  weight: ['300', '400', '700'],
+  display: 'swap',
 });
 
 export const metadata: Metadata = {
@@ -33,7 +42,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko" className={`${geist.variable} h-full`}>
+    <html lang="ko" className={`${geist.variable} ${gaegu.variable} h-full`}>
       <body className="h-full bg-[#0B0A1D] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-mystic-700/60 via-mystic-900 to-[#05040B] font-[family-name:var(--font-geist)] antialiased text-white overflow-hidden">
         {/* 🆕 v79: 전역 FX 레이어 (ScreenShake/Particle 등) */}
         <FxRoot />

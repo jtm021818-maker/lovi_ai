@@ -51,7 +51,19 @@ const LUNA_GATE_EVENTS: Record<string, PhaseEventType[]> = {
   HOOK:   ['EMOTION_THERMOMETER'],
   MIRROR: ['LUNA_STRATEGY'],
   // BRIDGE에서 모드 완료 이벤트 중 하나라도 fire되면 SOLVE로
-  BRIDGE: ['DRAFT_WORKSHOP', 'ROLEPLAY_FEEDBACK', 'PANEL_REPORT', 'IDEA_REFINE'],
+  // 🆕 v87: 실전 준비 완료형 이벤트(데이트 장소/선물/체험/기념일 추천 확정)도 BRIDGE→SOLVE 게이트에 포함
+  //   → 유저가 장소/선물 고르면 곧바로 SOLVE 로 진입해서 ACTION_PLAN 작전 카드 확정 유도
+  BRIDGE: [
+    'DRAFT_WORKSHOP',
+    'ROLEPLAY_FEEDBACK',
+    'PANEL_REPORT',
+    'IDEA_REFINE',
+    'DATE_SPOT_RECOMMENDATION',
+    'GIFT_RECOMMENDATION',
+    'ACTIVITY_RECOMMENDATION',
+    'ANNIVERSARY_RECOMMENDATION',
+    'BROWSE_SESSION',
+  ],
   SOLVE:  ['ACTION_PLAN'],
 };
 

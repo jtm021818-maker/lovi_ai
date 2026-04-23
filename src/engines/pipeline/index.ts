@@ -51,6 +51,10 @@ import { runAnniversarySearch } from '@/lib/ai/anniversary-search';
 import { runMovieSearch } from '@/lib/ai/movie-search';
 // 🆕 v85.6: 같이 찾기 (멀티턴 탐색)
 import { runBrowseTogetherSearch } from '@/lib/ai/browse-together-search';
+// 🆕 v87: EMPOWER 진입 시 ACTION_PLAN/WARM_WRAP/SessionLetter 자동 합성 폴백
+import { synthesizeActionPlan } from '@/lib/ai/action-plan-synthesizer';
+import { synthesizeWarmWrap } from '@/lib/ai/warm-wrap-synthesizer';
+import { synthesizeSessionLetter } from '@/lib/ai/session-summary-synthesizer';
 import type { ParsedSongReadyData, ParsedDateSpotReadyData, ParsedGiftReadyData, ParsedActivityReadyData, ParsedAnniversaryReadyData, ParsedMovieReadyData, ParsedBrowseReadyData } from '@/engines/human-like/phase-signal';
 import { generateDynamicTarotInsight } from '@/engines/tarot/interpretation-engine';
 import { matchTarotSolutions, getTarotSolutionPrompt } from '@/engines/solution-dictionary/tarot-solutions';
@@ -768,23 +772,112 @@ export class CounselingPipeline {
     }
 
     // 🆕 v20: 세션 요약 (EMPOWER 구간 — 숙제/리포트보다 먼저)
+    // 🆕 v87: EMPOWER 진입 시 필수 카드 안전망 — ACTION_PLAN 이 누락돼 있으면 먼저 합성해서 발동,
+    //        그 다음 SESSION_SUMMARY 를 "언니 쪽지" 톤으로 합성해서 발동, WARM_WRAP 도 없으면 합성 발동.
     if (canFireEvent() && PhaseManager.shouldTriggerEvent(newPhaseV2, 'SESSION_SUMMARY', makeCtxForEvent())) {
-      const insights = [
-        stateResult.emotionReason ?? '감정 탐색',
-        updatedAccumulator.deepEmotionHypothesis?.primaryEmotion ?? '깊은 감정 발견',
-        currentScenario !== RelationshipScenario.GENERAL ? `${currentScenario} 상황 분석` : '관계 패턴 인식',
-      ];
-      const journey = emotionBaseline !== undefined
-        ? `감정 ${emotionBaseline > 0 ? '+' : ''}${emotionBaseline} → ${stateResult.emotionScore > 0 ? '+' : ''}${stateResult.emotionScore}`
-        : '감정 탐색 여정';
-      // 🆕 v23: 타로 전용 세션 요약 (핵심 카드 포함)
-      if (persona === 'tarot') {
-        eventsToFire.push(createTarotSessionSummary(insights, journey, tarotMeta?.cards));
+      // 🆕 v87: 루나 페르소나 한정 — 타로냥은 기존 플로우 유지
+      if (persona !== 'tarot') {
+        // 대화 히스토리 → 합성기에 넘길 포맷으로 변환
+        const recentTurns = chatHistory
+          .slice(-16)
+          .map((m) => ({
+            role: (m.role === 'ai' ? 'assistant' : 'user') as 'user' | 'assistant',
+            content: m.content,
+          }));
+        const shiftHint = emotionBaseline !== undefined
+          ? { before: emotionBaseline, after: stateResult.emotionScore }
+          : null;
+
+        // 🎯 ACTION_PLAN 누락 시 자동 합성 (EMPOWER 진입 안전망)
+        if (!updatedCompletedEvents.includes('ACTION_PLAN')) {
+          try {
+            console.log(`[Pipeline:v87] 🎯 ACTION_PLAN 누락 감지 → 자동 합성 시작 (턴 ${turnCount})`);
+            const synth = await synthesizeActionPlan({
+              recentTurns,
+              confirmedChoice: null,
+              scenario: currentScenario,
+            });
+            eventsToFire.push(createActionPlan(
+              synth.planType as StrategyMode,
+              synth.title,
+              synth.coreAction,
+              synth.sharedResult,
+              synth.planB,
+              synth.timingHint,
+              synth.lunaCheer,
+              synth.lunaIntro,
+              synth.lunaJoke,
+            ));
+            updatedCompletedEvents.push('ACTION_PLAN');
+            updatedLastEventTurn = turnCount;
+            console.log(`[Pipeline:v87] 🎯 ACTION_PLAN 자동 합성 완료: "${synth.title}"`);
+          } catch (err) {
+            console.error(`[Pipeline:v87] 🎯 ACTION_PLAN 자동 합성 실패 (무시):`, err);
+          }
+        }
+
+        // 📝 SESSION_SUMMARY — "언니 쪽지" 톤으로 합성
+        let letterExtras: Parameters<typeof createSessionSummary>[2] | undefined;
+        try {
+          const letter = await synthesizeSessionLetter({
+            recentTurns,
+            emotionShiftHint: shiftHint,
+          });
+          letterExtras = {
+            letter: letter.letter,
+            footerLine: letter.footerLine,
+          };
+          console.log(`[Pipeline:v87] 📝 SESSION_LETTER 합성 완료`);
+        } catch (err) {
+          console.warn(`[Pipeline:v87] 📝 SESSION_LETTER 합성 실패, 레거시 필드로 폴백:`, err);
+        }
+
+        const insights = [
+          stateResult.emotionReason ?? '감정 탐색',
+          updatedAccumulator.deepEmotionHypothesis?.primaryEmotion ?? '깊은 감정 발견',
+          currentScenario !== RelationshipScenario.GENERAL ? `${currentScenario} 상황 분석` : '관계 패턴 인식',
+        ];
+        const journey = emotionBaseline !== undefined
+          ? `감정 ${emotionBaseline > 0 ? '+' : ''}${emotionBaseline} → ${stateResult.emotionScore > 0 ? '+' : ''}${stateResult.emotionScore}`
+          : '감정 탐색 여정';
+        eventsToFire.push(createSessionSummary(insights, journey, letterExtras));
+        updatedCompletedEvents.push('SESSION_SUMMARY');
+        updatedLastEventTurn = turnCount;
+
+        // 💜 WARM_WRAP — 없으면 합성해서 함께 발동
+        if (!updatedCompletedEvents.includes('WARM_WRAP')) {
+          try {
+            const wrap = await synthesizeWarmWrap({
+              recentTurns,
+              emotionShiftHint: shiftHint,
+            });
+            eventsToFire.push(createWarmWrap(
+              wrap.strengthFound,
+              wrap.emotionShift,
+              wrap.nextStep,
+              wrap.lunaMessage,
+            ));
+            updatedCompletedEvents.push('WARM_WRAP');
+            updatedLastEventTurn = turnCount;
+            console.log(`[Pipeline:v87] 💜 WARM_WRAP 자동 합성 완료: "${wrap.strengthFound.slice(0, 24)}..."`);
+          } catch (err) {
+            console.error(`[Pipeline:v87] 💜 WARM_WRAP 자동 합성 실패 (무시):`, err);
+          }
+        }
       } else {
-        eventsToFire.push(createSessionSummary(insights, journey));
+        // 타로냥 — 기존 플로우 유지
+        const insights = [
+          stateResult.emotionReason ?? '감정 탐색',
+          updatedAccumulator.deepEmotionHypothesis?.primaryEmotion ?? '깊은 감정 발견',
+          currentScenario !== RelationshipScenario.GENERAL ? `${currentScenario} 상황 분석` : '관계 패턴 인식',
+        ];
+        const journey = emotionBaseline !== undefined
+          ? `감정 ${emotionBaseline > 0 ? '+' : ''}${emotionBaseline} → ${stateResult.emotionScore > 0 ? '+' : ''}${stateResult.emotionScore}`
+          : '감정 탐색 여정';
+        eventsToFire.push(createTarotSessionSummary(insights, journey, tarotMeta?.cards));
+        updatedCompletedEvents.push('SESSION_SUMMARY');
+        updatedLastEventTurn = turnCount;
       }
-      updatedCompletedEvents.push('SESSION_SUMMARY');
-      updatedLastEventTurn = turnCount;
     }
 
     // 🆕 v20: 숙제 카드 (EMPOWER 구간 — 세션 요약 후)

@@ -882,12 +882,30 @@ export function createGrowthReport(
 export function createSessionSummary(
   keyInsights: string[],
   emotionJourney: string,
+  /**
+   * 🆕 v87: 언니 쪽지 톤 필드 (session-summary-synthesizer 로 채워져 전달).
+   * 있으면 새 UI 가 letter/emotion* 필드만 사용.
+   */
+  letterExtras?: {
+    letter?: string;
+    emotionFromEmoji?: string;
+    emotionToEmoji?: string;
+    emotionFromWord?: string;
+    emotionToWord?: string;
+    footerLine?: string;
+  },
 ): PhaseEvent {
   const data: SessionSummaryData = {
     title: '오늘 대화 요약 📋',
     keyInsights: keyInsights.slice(0, 3),
     emotionJourney,
     lunaMessage: '오늘 많은 이야기 나눠줘서 고마워. 네 마음이 조금이라도 가벼워졌으면 좋겠다 🦊',
+    letter: letterExtras?.letter,
+    emotionFromEmoji: letterExtras?.emotionFromEmoji,
+    emotionToEmoji: letterExtras?.emotionToEmoji,
+    emotionFromWord: letterExtras?.emotionFromWord,
+    emotionToWord: letterExtras?.emotionToWord,
+    footerLine: letterExtras?.footerLine,
   };
 
   return {
