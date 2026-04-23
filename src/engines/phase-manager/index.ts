@@ -302,6 +302,21 @@ export class PhaseManager {
     const nextPhase = PHASE_ORDER[currentIdx + 1];
     const turnsInPhase = turnCount - phaseStartTurn;
 
+    // 🔒 BRIDGE/SOLVE: 게이트 이벤트로만 전환 (카드 만족/READY streak/pacingMeta 등 모두 무시)
+    // - BRIDGE → SOLVE: 루나의 전략에서 선택된 모드 완료 이벤트 필수
+    // - SOLVE → EMPOWER: ACTION_PLAN 이벤트 필수
+    const GATE_ONLY_PHASES: ConversationPhaseV2[] = ['BRIDGE', 'SOLVE'];
+    if (GATE_ONLY_PHASES.includes(currentPhase)) {
+      const gateEvents = persona === 'tarot'
+        ? TAROT_GATE_EVENTS[currentPhase]
+        : LUNA_GATE_EVENTS[currentPhase];
+      if (gateEvents?.some(e => completedEvents.includes(e))) {
+        console.log(`[PhaseManager] ✅ 게이트 이벤트 충족 → ${currentPhase} → ${nextPhase} (턴 ${turnCount}, phase내 ${turnsInPhase}턴)`);
+        return nextPhase;
+      }
+      return currentPhase;
+    }
+
     // 🆕 v73: 0. 카드 만족 긍정 전환 — 필수 카드가 모두 채워지면 즉시 전환
     const requiredCards = PHASE_REQUIRED_CARDS[currentPhase] ?? [];
     const filledKeys = Object.keys(filledCards ?? {});
@@ -422,6 +437,13 @@ export class PhaseManager {
     // Phase 내 상대 턴 계산
     const turnsInPhase = ctx.turnCount - ctx.phaseStartTurn;
 
+    // 🔒 EMPOWER 이벤트는 Phase 진입 즉시 발동 — turnsInPhase/minTurnInPhase 제한 완전 무시
+    // WARM_WRAP(편지)이 첫 EMPOWER 턴에 반드시 떠야 하므로 turnsInPhase=0도 허용
+    if (phase === 'EMPOWER') {
+      console.log(`[PhaseManager] ⏰ ${eventType} 즉시발동 (EMPOWER, turnsInPhase=${turnsInPhase})`);
+      return true;
+    }
+
     // Phase 전환 직후(turnsInPhase=0) 이벤트 차단 — 타로 체인은 예외
     if (turnsInPhase <= 0) {
       const isTarotChain =
@@ -438,12 +460,6 @@ export class PhaseManager {
     if (turnsInPhase < config.minTurnInPhase) {
       console.log(`[PhaseManager] ⏳ ${eventType}: phase내 ${turnsInPhase}턴 < min ${config.minTurnInPhase}`);
       return false;
-    }
-
-    // EMPOWER 이벤트는 조건 충족 시 즉시 발동
-    if (phase === 'EMPOWER') {
-      console.log(`[PhaseManager] ⏰ ${eventType} 즉시발동 (EMPOWER)`);
-      return true;
     }
 
     // 마음읽기 — AI 자율 판단
