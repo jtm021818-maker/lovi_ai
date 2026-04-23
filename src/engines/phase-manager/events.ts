@@ -54,6 +54,10 @@ import {
   BrowseSessionData,
   BrowseSearchingData,
   BrowseFinalData,
+  // 🆕 v88: 스트리밍 대화형 같이 찾기
+  BrowseStreamStartData,
+  BrowseStreamBlockData,
+  BrowseStreamEndData,
 } from '@/types/engine.types';
 import { drawCards, getSingleSpread, getThreeCardSpread, getLoveSpread, getUnrequitedSpread, getReconnectionSpread, getPaceSpread, getAvoidantSpread, getYesNoSpread } from '@/engines/tarot';
 // spread-recommender는 pipeline에서 자동 선택용으로 사용
@@ -1663,5 +1667,45 @@ export function createBrowseFinal(
     type: 'BROWSE_FINAL' as PhaseEventType,
     phase: currentPhase,
     data: payload as unknown as Record<string, unknown>,
+  };
+}
+
+// ============================================
+// 🆕 v88: 스트리밍 대화형 "같이 찾기" 이벤트들
+// ============================================
+
+/** 🔍 v88: BROWSE_STREAM_START — 세션 시작 (메타 + 로딩 UI) */
+export function createBrowseStreamStart(
+  data: BrowseStreamStartData,
+  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'BRIDGE',
+): PhaseEvent {
+  return {
+    type: 'BROWSE_STREAM_START' as PhaseEventType,
+    phase: currentPhase,
+    data: data as unknown as Record<string, unknown>,
+  };
+}
+
+/** 🔍 v88: BROWSE_STREAM_BLOCK — 말풍선/링크/리뷰/결정 블록 1개 */
+export function createBrowseStreamBlock(
+  data: BrowseStreamBlockData,
+  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'BRIDGE',
+): PhaseEvent {
+  return {
+    type: 'BROWSE_STREAM_BLOCK' as PhaseEventType,
+    phase: currentPhase,
+    data: data as unknown as Record<string, unknown>,
+  };
+}
+
+/** 🔍 v88: BROWSE_STREAM_END — 세션 종료 + shortlist 요약 */
+export function createBrowseStreamEnd(
+  data: BrowseStreamEndData,
+  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'BRIDGE',
+): PhaseEvent {
+  return {
+    type: 'BROWSE_STREAM_END' as PhaseEventType,
+    phase: currentPhase,
+    data: data as unknown as Record<string, unknown>,
   };
 }

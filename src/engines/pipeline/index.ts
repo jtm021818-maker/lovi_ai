@@ -40,7 +40,7 @@ import { analyzeAcc, ACC_CONFIG } from '@/engines/acc';
 
 // 📱 v55: KBE (Kakao Behavior Engine) — 카톡 행동 LLM 판단
 import { runKBE, KBE_CONFIG } from '@/engines/kbe';
-import { createEmotionThermometer, createMindReading, createSituationSummary, createEmotionMirror, createPatternMirror, createSolutionPreview, createSolutionCard, createMessageDraft, createGrowthReport, createSessionSummary, createHomeworkCard, createTarotAxisCollect, createTarotDraw, createTarotInsight, createTarotSessionSummary, createTarotHomework, createLunaStory, createLunaStrategy, createToneSelect, createDraftWorkshop, createRoleplayFeedback, createPanelReport, createIdeaRefine, createActionPlan, createWarmWrap, createSongSearching, createSongRecommendation, createDateSpotSearching, createDateSpotRecommendation, createGiftSearching, createGiftRecommendation, createActivitySearching, createActivityRecommendation, createAnniversarySearching, createAnniversaryRecommendation, createMovieSearching, createMovieRecommendation, createBrowseSearching, createBrowseSession } from '@/engines/phase-manager/events';
+import { createEmotionThermometer, createMindReading, createSituationSummary, createEmotionMirror, createPatternMirror, createSolutionPreview, createSolutionCard, createMessageDraft, createGrowthReport, createSessionSummary, createHomeworkCard, createTarotAxisCollect, createTarotDraw, createTarotInsight, createTarotSessionSummary, createTarotHomework, createLunaStory, createLunaStrategy, createToneSelect, createDraftWorkshop, createRoleplayFeedback, createPanelReport, createIdeaRefine, createActionPlan, createWarmWrap, createSongSearching, createSongRecommendation, createDateSpotSearching, createDateSpotRecommendation, createGiftSearching, createGiftRecommendation, createActivitySearching, createActivityRecommendation, createAnniversarySearching, createAnniversaryRecommendation, createMovieSearching, createMovieRecommendation, createBrowseSearching, createBrowseSession, createBrowseStreamStart, createBrowseStreamBlock, createBrowseStreamEnd } from '@/engines/phase-manager/events';
 // 🆕 v84: 루나 자율 판단형 인터넷 검색 모듈
 import { runSongSearch } from '@/lib/ai/song-search';
 import { runDateSpotSearch } from '@/lib/ai/date-spot-search';
@@ -49,8 +49,10 @@ import { runGiftSearch } from '@/lib/ai/gift-search';
 import { runActivitySearch } from '@/lib/ai/activity-search';
 import { runAnniversarySearch } from '@/lib/ai/anniversary-search';
 import { runMovieSearch } from '@/lib/ai/movie-search';
-// 🆕 v85.6: 같이 찾기 (멀티턴 탐색)
+// 🆕 v85.6: 같이 찾기 (멀티턴 탐색 — 레거시)
 import { runBrowseTogetherSearch } from '@/lib/ai/browse-together-search';
+// 🆕 v88: 루나 대화형 "같이 찾기" 스트리밍 에이전트
+import { startBrowseAgent, resumeBrowseAgent } from '@/lib/ai/browse-agent';
 // 🆕 v87: EMPOWER 진입 시 ACTION_PLAN/WARM_WRAP/SessionLetter 자동 합성 폴백
 import { synthesizeActionPlan } from '@/lib/ai/action-plan-synthesizer';
 import { synthesizeWarmWrap } from '@/lib/ai/warm-wrap-synthesizer';
@@ -291,6 +293,86 @@ export class CounselingPipeline {
     }
 
     yield { type: 'state', data: stateResult };
+
+    // 🆕 v88: 루나 대화형 "같이 찾기" — 유저가 decision 버튼 누른 경우
+    //   browse_decision 이벤트는 일반 LLM 파이프라인을 타지 않고 agent resume 만 함.
+    //   서버 상태(shortlist/pool) 는 BrowseSessionStore 에 저장되어 있음.
+    if (suggestionMeta?.source === 'browse_decision') {
+      const ctx = (suggestionMeta.context as { sessionId?: string; promptId?: string; value?: string } | undefined);
+      const sessionId = ctx?.sessionId;
+      const promptId = ctx?.promptId;
+      const value = ctx?.value;
+      if (sessionId && promptId && value) {
+        try {
+          const result = await resumeBrowseAgent(sessionId, { promptId, value });
+          for (const emit of result.blocks) {
+            yield {
+              type: 'phase_event',
+              data: createBrowseStreamBlock(
+                {
+                  sessionId,
+                  candidateId: emit.candidateId,
+                  block: emit.block,
+                  order: emit.order,
+                },
+                currentPhaseV2 ?? 'BRIDGE',
+              ),
+            };
+          }
+          if (result.ended && result.endPayload) {
+            yield {
+              type: 'phase_event',
+              data: createBrowseStreamEnd(
+                {
+                  sessionId,
+                  chosen: result.endPayload.chosen,
+                  shortlist: result.endPayload.shortlist,
+                  lunaFinal: result.endPayload.lunaFinal,
+                },
+                currentPhaseV2 ?? 'BRIDGE',
+              ),
+            };
+          }
+          // done 이벤트 — 정상 파이프라인 종료와 동일 필드로 (로그/상태 유지)
+          yield {
+            type: 'done',
+            data: {
+              stateResult,
+              strategyResult: { strategyType: 'active_listening' as any, confidence: 0.5, reasoning: 'browse_decision' } as unknown as StrategyResult,
+              suggestionShown: false,
+              phaseV2: currentPhaseV2,
+              completedEvents: result.ended
+                ? [...(completedEvents ?? []), 'BROWSE_STREAM_END' as PhaseEventType]
+                : completedEvents,
+              lastEventTurn,
+              emotionHistory,
+              phaseStartTurn,
+            },
+          };
+          console.log(`[Pipeline:v88] 🔍 browse_decision 처리 완료 (ended=${result.ended}, blocks=${result.blocks.length})`);
+          return;
+        } catch (err) {
+          console.error('[Pipeline:v88] 🔍 browse_decision 처리 실패:', err);
+          // 실패해도 세션 자체는 종료. 빈 done 반환.
+          yield {
+            type: 'done',
+            data: {
+              stateResult,
+              strategyResult: { strategyType: 'active_listening' as any, confidence: 0.5, reasoning: 'browse_decision_error' } as unknown as StrategyResult,
+              suggestionShown: false,
+              phaseV2: currentPhaseV2,
+              completedEvents,
+              lastEventTurn,
+              emotionHistory,
+              phaseStartTurn,
+            },
+          };
+          return;
+        }
+      } else {
+        console.warn('[Pipeline:v88] browse_decision meta 누락 → 레거시 플로우로 폴백', ctx);
+      }
+    }
 
     // 🆕 v19: 감정 누적기 — 매 턴 감정 신호 누적
     let updatedAccumulator = emotionAccumulatorState ?? { signals: [], deepEmotionHypothesis: null, surfaceEmotion: null };
@@ -2565,21 +2647,74 @@ ${researchResult.insight}
         }
       }
 
-      // 🆕 v85.6: 🔍 같이 찾기 — 8개 후보 수집 후 세션 이벤트 yield
+      // 🆕 v88: 🔍 같이 찾기 — 대화형 스트리밍 에이전트 시작
+      //   기존 v85.6 runBrowseTogetherSearch (8개 카드 일괄) → startBrowseAgent (말풍선 스트림)
+      //   - BROWSE_STREAM_START 로 세션 메타 전달
+      //   - 오프닝 + 첫 후보까지 블록들을 BROWSE_STREAM_BLOCK 으로 순차 발행
+      //   - 유저가 decision 누르면 browse_decision 소스로 재진입해서 resume
       if (pendingBrowseSearch) {
         try {
-          const browseResult = await runBrowseTogetherSearch({
+          const sessionId = `browse-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+          const constraints = [pendingBrowseSearch.context, pendingBrowseSearch.budget]
+            .filter((v): v is string => !!v);
+
+          // 1) 스트림 시작 알림 (클라이언트 로딩 UI 전환용)
+          yield {
+            type: 'phase_event',
+            data: createBrowseStreamStart({
+              sessionId,
+              meta: {
+                sessionId,
+                topic: pendingBrowseSearch.topic,
+                topicLabel: pendingBrowseSearch.query,
+                userAsk: pendingBrowseSearch.query,
+                budget: pendingBrowseSearch.budget,
+                constraints,
+                createdAt: Date.now(),
+              },
+            }, newPhaseV2),
+          };
+
+          // 2) 에이전트 루프 시작 — 오프닝 + 첫 후보까지
+          const agentResult = await startBrowseAgent({
+            sessionId,
             topic: pendingBrowseSearch.topic,
-            query: pendingBrowseSearch.query,
+            userAsk: pendingBrowseSearch.query,
             context: pendingBrowseSearch.context,
             budget: pendingBrowseSearch.budget,
+            constraints,
           });
-          const browseEvent = createBrowseSession(browseResult, newPhaseV2);
-          yield { type: 'phase_event', data: browseEvent };
-          updatedCompletedEvents.push('BROWSE_SESSION');
-          console.log(`[Pipeline] 🔍 BROWSE_SESSION yield: ${browseResult.candidates.length}개 후보`);
+
+          // 3) 블록 시퀀스 발행
+          for (const emit of agentResult.blocks) {
+            yield {
+              type: 'phase_event',
+              data: createBrowseStreamBlock({
+                sessionId,
+                candidateId: emit.candidateId,
+                block: emit.block,
+                order: emit.order,
+              }, newPhaseV2),
+            };
+          }
+
+          // 4) 종료되면 END — 후보가 0개이거나 즉시 결정됐을 때
+          if (agentResult.ended && agentResult.endPayload) {
+            yield {
+              type: 'phase_event',
+              data: createBrowseStreamEnd({
+                sessionId,
+                chosen: agentResult.endPayload.chosen,
+                shortlist: agentResult.endPayload.shortlist,
+                lunaFinal: agentResult.endPayload.lunaFinal,
+              }, newPhaseV2),
+            };
+            updatedCompletedEvents.push('BROWSE_STREAM_END');
+          }
+
+          console.log(`[Pipeline:v88] 🔍 BROWSE_STREAM 시작: sessionId=${sessionId}, 초기블록=${agentResult.blocks.length}, ended=${agentResult.ended}`);
         } catch (err) {
-          console.error(`[Pipeline] 🔍 같이 찾기 검색 실패:`, err);
+          console.error(`[Pipeline:v88] 🔍 같이 찾기 agent 실패:`, err);
         }
       }
 

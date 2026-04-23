@@ -2,11 +2,24 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { ChatMessage, StreamEvent } from '@/types/chat.types';
-import type { NudgeAction, StateResult, SuggestionMeta, SuggestionItem, PhaseEvent, ConversationPhaseV2 } from '@/types/engine.types';
+import type {
+  NudgeAction,
+  StateResult,
+  SuggestionMeta,
+  SuggestionItem,
+  PhaseEvent,
+  ConversationPhaseV2,
+  BrowseStreamStartData,
+  BrowseStreamBlockData,
+  BrowseStreamEndData,
+  BrowseSessionMeta,
+} from '@/types/engine.types';
 import type { PanelResponse } from '@/types/persona.types';
 import { MIN_DELAY_MS } from '@/lib/utils/typing-delay';
 import { calcTypingDelay, calcBubbleGapDelay } from '@/engines/human-like/adaptive-typing';
 import type { LunaEmotion } from '@/engines/human-like/luna-emotion-core';
+// 🆕 v88: 루나 대화형 "같이 찾기" 블록 큐
+import { useBrowseStreamQueue } from './useBrowseStreamQueue';
 
 interface UseChatReturn {
   messages: ChatMessage[];
@@ -47,6 +60,20 @@ interface UseChatReturn {
   } | null;
   /** 친밀도 레벨업 팝업을 닫음 */
   dismissIntimacyLevelUp: () => void;
+  // 🆕 v88: 루나 대화형 "같이 찾기" — BrowseBlockBubble 의 decision 버튼 핸들러
+  handleBrowseDecision: (
+    promptId: string,
+    value: string,
+    label: string,
+    sessionId: string,
+    candidateId?: string,
+  ) => void;
+  /** 해결된 promptId 목록 — 버튼 비활성화에 사용 */
+  resolvedBrowsePrompts: Set<string>;
+  /** 현재 활성 브라우징 세션 메타 — 헤더 표시 등 */
+  browseSessionMeta: BrowseSessionMeta | null;
+  /** 루나 타이핑 dot — 브라우징 블록 페이싱용 */
+  browseTypingDot: boolean;
 }
 
 export function useChat(sessionId: string): UseChatReturn {
@@ -89,6 +116,23 @@ export function useChat(sessionId: string): UseChatReturn {
   const abortRef = useRef<AbortController | null>(null);
   // 🆕 v20: 턴 내 이벤트 중복 방지 (state 대신 ref로 — React 배칭 이슈 방지)
   const firedEventTypesRef = useRef<Set<string>>(new Set());
+
+  // 🆕 v88: 루나 대화형 "같이 찾기" — 현재 활성 세션 메타 + 해결된 promptId 추적
+  const [browseSessionMeta, setBrowseSessionMeta] = useState<BrowseSessionMeta | null>(null);
+  const [resolvedBrowsePrompts, setResolvedBrowsePrompts] = useState<Set<string>>(() => new Set());
+  // 루나 타이핑 인디케이터 (dot) 표시 상태 — browse 블록 전용 페이싱용
+  const [browseTypingDot, setBrowseTypingDot] = useState(false);
+
+  // 메시지 추가 콜백 (큐 내부에서 호출)
+  const addBrowseMessage = useCallback((msg: ChatMessage) => {
+    setMessages((prev) => [...prev, msg]);
+  }, []);
+
+  const browseQueue = useBrowseStreamQueue({
+    sessionId,
+    addMessage: addBrowseMessage,
+    setTypingDot: setBrowseTypingDot,
+  });
 
   // 세션 진입 시 기존 메시지 로드
   useEffect(() => {
@@ -440,6 +484,40 @@ export function useChat(sessionId: string): UseChatReturn {
               case 'phase_event': {
                 const newEvent = event.data as unknown as PhaseEvent;
 
+                // 🆕 v88: 루나 대화형 "같이 찾기" — phaseEvents 배열이 아닌 메시지 큐로 라우팅
+                if (newEvent.type === 'BROWSE_STREAM_START') {
+                  const d = newEvent.data as unknown as BrowseStreamStartData;
+                  setBrowseSessionMeta(d.meta);
+                  setResolvedBrowsePrompts(new Set());
+                  browseQueue.reset();
+                  console.log(`[useChat:v88] 🔍 BROWSE_STREAM_START sessionId=${d.sessionId}`);
+                  break;
+                }
+                if (newEvent.type === 'BROWSE_STREAM_BLOCK') {
+                  const d = newEvent.data as unknown as BrowseStreamBlockData;
+                  browseQueue.push({
+                    sessionId: d.sessionId,
+                    candidateId: d.candidateId,
+                    block: d.block,
+                    order: d.order,
+                  });
+                  break;
+                }
+                if (newEvent.type === 'BROWSE_STREAM_END') {
+                  const d = newEvent.data as unknown as BrowseStreamEndData;
+                  // 종료 멘트는 이미 직전 블록으로 queue 에 들어갔을 수 있음.
+                  // lunaFinal 이 아직 안 들어온 경우에만 추가.
+                  if (d.lunaFinal) {
+                    browseQueue.push({
+                      sessionId: d.sessionId,
+                      block: { type: 'luna_text', text: d.lunaFinal },
+                      order: Number.MAX_SAFE_INTEGER - 1,
+                    });
+                  }
+                  console.log(`[useChat:v88] 🏁 BROWSE_STREAM_END sessionId=${d.sessionId}, shortlist=${d.shortlist.length}`);
+                  break;
+                }
+
                 // 🆕 v84+v85+v85.6: SEARCHING → RECOMMENDATION / SESSION 덮어쓰기 (같은 자리 대체)
                 const SEARCHING_PAIR: Record<string, string> = {
                   'SONG_RECOMMENDATION': 'SONG_SEARCHING',
@@ -696,6 +774,50 @@ export function useChat(sessionId: string): UseChatReturn {
     }
   }, [sessionId, isLoading, depthOverride]);
 
+  // 🆕 v88: 루나 대화형 "같이 찾기" — decision 버튼 클릭 핸들러
+  //   1) 유저 말풍선 추가
+  //   2) 해당 promptId 를 resolved 로 마킹 (버튼 비활성화)
+  //   3) 큐 resume (남은 블록 있으면 흐르게)
+  //   4) /api/chat/stream 에 source='browse_decision' 로 재진입 (서버가 agent resume)
+  const handleBrowseDecision = useCallback(
+    (promptId: string, value: string, label: string, browseSessionId: string, candidateId?: string) => {
+      // 해결된 prompt 마킹 (중복 클릭 방지)
+      setResolvedBrowsePrompts((prev) => {
+        if (prev.has(promptId)) return prev;
+        const next = new Set(prev);
+        next.add(promptId);
+        return next;
+      });
+
+      // 유저 말풍선
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          sessionId,
+          senderType: 'user',
+          content: label,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+
+      // 큐 재개 (decision_prompt 뒤에 이미 도착한 블록이 있을 경우 흐르게)
+      browseQueue.resume();
+
+      // 서버에 decision 전달 → agent resume → 새 블록 스트림
+      void sendMessage(label, {
+        source: 'browse_decision',
+        context: {
+          sessionId: browseSessionId,
+          promptId,
+          value,
+          candidateId,
+        },
+      });
+    },
+    [sessionId, browseQueue, sendMessage],
+  );
+
   return {
     messages, isLoading, nudges, stateResult, suggestions, panelData,
     axesProgress, phaseEvents, currentPhase, phaseProgress, concernDepth,
@@ -709,5 +831,10 @@ export function useChat(sessionId: string): UseChatReturn {
     // 🆕 v41: 친밀도 레벨업 팝업 상태
     intimacyLevelUp,
     dismissIntimacyLevelUp: () => setIntimacyLevelUp(null),
+    // 🆕 v88: 루나 대화형 "같이 찾기" 관련
+    handleBrowseDecision,
+    resolvedBrowsePrompts,
+    browseSessionMeta,
+    browseTypingDot,
   };
 }

@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import MessageBubble from './MessageBubble';
+// 🆕 v88: 루나 대화형 "같이 찾기" 블록 렌더러
+import BrowseBlockBubble from './BrowseBlockBubble';
 import DateDivider from './DateDivider';
 import ChatInput from './ChatInput';
 import QuickReplyButtons from './QuickReplyButtons';
@@ -129,7 +131,10 @@ const SCENARIO_LABELS: Record<RelationshipScenario, { icon: string; label: strin
 };
 
 export default function ChatContainer({ sessionId }: ChatContainerProps) {
-  const { messages, isLoading, nudges, stateResult, suggestions, panelData, axesProgress, phaseEvents, currentPhase, phaseProgress, sessionStatus, sessionSummary, sendMessage, pendingEventLock, lunaThinking, understandingLevel, thinkingDeep, retryStatus, intimacyLevelUp, dismissIntimacyLevelUp } = useChat(sessionId);
+  const { messages, isLoading, nudges, stateResult, suggestions, panelData, axesProgress, phaseEvents, currentPhase, phaseProgress, sessionStatus, sessionSummary, sendMessage, pendingEventLock, lunaThinking, understandingLevel, thinkingDeep, retryStatus, intimacyLevelUp, dismissIntimacyLevelUp,
+    // 🆕 v88: 루나 대화형 "같이 찾기"
+    handleBrowseDecision, resolvedBrowsePrompts, browseTypingDot,
+  } = useChat(sessionId);
   // 🆕 v79: 마지막 AI 메시지 ID (bubble FX 매칭용)
   const lastAiMsgId = (() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -769,27 +774,74 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
           {messageGroups.map(({ dateKey, messages: groupMsgs }) => (
             <div key={dateKey}>
               <DateDivider date={groupMsgs[0].createdAt} />
-              {groupMsgs.filter((msg) => !(msg.senderType === 'user' && msg.content?.trim() === '')).map((msg) => (
-                msg.senderType === ('event' as any) ? (
-                  (() => {
+              {(() => {
+                const visible = groupMsgs.filter((msg) => !(msg.senderType === 'user' && msg.content?.trim() === ''));
+                return visible.map((msg, idx) => {
+                  if (msg.senderType === ('event' as any)) {
                     try {
                       const evt = JSON.parse(msg.content) as PhaseEvent;
                       return renderPhaseEvent(evt, msg.id as any);
-                    } catch { return null; }
-                  })()
-                ) :
-                <MessageBubble
-                  key={msg.id}
-                  message={msg}
-                  isTyping={isLoading && msg.senderType === 'ai' && !msg.content}
-                  onSpeak={ttsSupported && voiceSettings.enabled ? toggleSpeak : undefined}
-                  isSpeaking={isSpeaking}
-                  isPremium={isPremium}
-                  persona={activePersona}
-                  // 🆕 v79: 마지막 AI 메시지 식별 → bubble FX 매칭
-                  isLastAi={msg.senderType === 'ai' && msg.id === lastAiMsgId}
-                />
-              ))}
+                    } catch {
+                      return null;
+                    }
+                  }
+
+                  // 🆕 v88: 루나 대화형 "같이 찾기" 블록
+                  if (msg.renderAs === 'browse_block' && msg.browseBlock) {
+                    // 직전 메시지가 같은 브라우징 세션의 루나 블록이면 avatar 생략
+                    const prev = visible[idx - 1];
+                    const hideAvatar =
+                      !!prev &&
+                      prev.senderType === 'ai' &&
+                      prev.renderAs === 'browse_block' &&
+                      prev.browseContext?.sessionId === msg.browseContext?.sessionId;
+                    const block = msg.browseBlock;
+                    const resolved =
+                      block.type === 'decision_prompt'
+                        ? resolvedBrowsePrompts.has(block.promptId)
+                        : false;
+                    return (
+                      <BrowseBlockBubble
+                        key={msg.id}
+                        message={msg}
+                        hideAvatar={hideAvatar}
+                        resolved={resolved}
+                        onDecision={handleBrowseDecision}
+                      />
+                    );
+                  }
+
+                  return (
+                    <MessageBubble
+                      key={msg.id}
+                      message={msg}
+                      isTyping={isLoading && msg.senderType === 'ai' && !msg.content}
+                      onSpeak={ttsSupported && voiceSettings.enabled ? toggleSpeak : undefined}
+                      isSpeaking={isSpeaking}
+                      isPremium={isPremium}
+                      persona={activePersona}
+                      // 🆕 v79: 마지막 AI 메시지 식별 → bubble FX 매칭
+                      isLastAi={msg.senderType === 'ai' && msg.id === lastAiMsgId}
+                    />
+                  );
+                });
+              })()}
+              {/* 🆕 v88: 브라우징 타이핑 dot */}
+              {browseTypingDot && (
+                <div className="flex items-end gap-1.5 max-w-[88%] my-1 ml-9 pl-0">
+                  <div className="px-3 py-2 rounded-2xl rounded-bl-[4px] bg-gradient-to-b from-[#fffdf5] to-[#fff5e0] border border-amber-200 shadow-sm">
+                    <div className="flex gap-0.5">
+                      {[0, 1, 2].map((i) => (
+                        <span
+                          key={i}
+                          className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"
+                          style={{ animationDelay: `${i * 150}ms` }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
 

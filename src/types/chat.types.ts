@@ -9,6 +9,17 @@ export interface ChatMessage {
   createdAt: string;
   /** @internal 스트리밍 중 ||| 구분자를 포함한 전체 원본 (v29) */
   _fullContent?: string;
+
+  // 🆕 v88: 루나 대화형 "같이 찾기" 블록 메시지 렌더 분기
+  /** 이 메시지를 어떻게 렌더할지. 'browse_block' 이면 BrowseBlockBubble 로. */
+  renderAs?: 'text' | 'browse_block';
+  /** renderAs==='browse_block' 일 때 블록 페이로드 */
+  browseBlock?: import('./engine.types').BrowseBlock;
+  /** 블록이 속한 세션 식별자 + 후보 id (decision 응답 때 함께 전송) */
+  browseContext?: {
+    sessionId: string;
+    candidateId?: string;
+  };
 }
 
 /** 상담 세션 */

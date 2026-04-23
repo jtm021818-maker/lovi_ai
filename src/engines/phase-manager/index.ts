@@ -63,6 +63,7 @@ const LUNA_GATE_EVENTS: Record<string, PhaseEventType[]> = {
     'ACTIVITY_RECOMMENDATION',
     'ANNIVERSARY_RECOMMENDATION',
     'BROWSE_SESSION',
+    'BROWSE_STREAM_END', // 🆕 v88: 스트리밍 브라우징 종료 → BRIDGE→SOLVE 게이트
   ],
   SOLVE:  ['ACTION_PLAN'],
 };

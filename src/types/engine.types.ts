@@ -182,9 +182,16 @@ export type PhaseEventType =
   // ──────────────────────────────
   // 🆕 v85.6: 같이 찾기 — 멀티턴 탐색 전략
   // ──────────────────────────────
-  | 'BROWSE_SEARCHING'         // 🔍 v85.6: 같이 찾기 검색 진행 중
-  | 'BROWSE_SESSION'           // 🔍 v85.6: 후보들 브라우징 세션 (1개씩 카드 제시)
-  | 'BROWSE_FINAL';            // 🔍 v85.6: 최종 결정 요약 카드
+  | 'BROWSE_SEARCHING'         // 🔍 v85.6: 같이 찾기 검색 진행 중 (레거시)
+  | 'BROWSE_SESSION'           // 🔍 v85.6: 후보들 브라우징 세션 (레거시)
+  | 'BROWSE_FINAL'             // 🔍 v85.6: 최종 결정 요약 카드 (레거시)
+  // ──────────────────────────────
+  // 🆕 v88: 루나와 "같이 찾기" 스트리밍 대화 리아키텍처
+  //   말풍선 시퀀스로 찾아보기 — 링크·리뷰·루나 판단·유저 질문이 실제 채팅 메시지로 흐름
+  // ──────────────────────────────
+  | 'BROWSE_STREAM_START'      // 🔍 v88: 브라우징 세션 시작 (메타 + searching UI)
+  | 'BROWSE_STREAM_BLOCK'      // 🔍 v88: 단일 말풍선/링크/리뷰/결정 블록
+  | 'BROWSE_STREAM_END';       // 🔍 v88: 세션 종료 + shortlist 요약
 
 /** Phase 이벤트 데이터 */
 export interface PhaseEvent {
@@ -752,6 +759,96 @@ export interface BrowseFinalData {
   lunaWrap: string;
 }
 
+// ──────────────────────────────────────
+// 🆕 v88: 루나와 "같이 찾기" 스트리밍 대화 리아키텍처
+//   기존 카드형 BROWSE_SESSION → 실시간 말풍선 시퀀스 (링크·리뷰·판단·질문 섞여서 흐름)
+// ──────────────────────────────────────
+
+/** 🔍 v88: 브라우징 세션 메타 (헤더/상태 저장용) */
+export interface BrowseSessionMeta {
+  sessionId: string;
+  topic: BrowseSessionData['topic'];
+  topicLabel: string;
+  userAsk: string;
+  budget?: string;
+  /** 유저 맥락 태그 (예: ['여친 향 좋아함','1년차']) */
+  constraints?: string[];
+  createdAt: number;
+}
+
+/** 🔍 v88: 말풍선 하나를 구성하는 블록 */
+export type BrowseBlock =
+  | {
+      type: 'luna_text';
+      /** 루나가 하는 말 (한 문장~두 문장 반말) */
+      text: string;
+      /** 이 블록이 실제로 렌더될 때까지 대기할 ms (선택, 기본 서버/클라이언트에서 결정) */
+      delay?: number;
+    }
+  | {
+      type: 'link_card';
+      title: string;
+      url: string;
+      siteName?: string;
+      imageUrl?: string;
+      category?: string;
+      priceHint?: string;
+      delay?: number;
+    }
+  | {
+      type: 'review_quote';
+      /** 리뷰 문장 (80자 내 클램프) */
+      quote: string;
+      /** "네이버 블로그" / "인스타" / "쿠팡 후기" 등 출처 라벨 */
+      sourceLabel: string;
+      sourceUrl?: string;
+      /** 긍/부/중립 — 색상 살짝 구분 */
+      stance?: 'pos' | 'neg' | 'neutral';
+      delay?: number;
+    }
+  | {
+      type: 'decision_prompt';
+      /** 같은 promptId 에 대한 클릭만 유효 (중복/만료 필터) */
+      promptId: string;
+      /** 루나가 질문을 말풍선으로 먼저 던지고 싶을 때 */
+      question?: string;
+      options: Array<{
+        label: string;
+        /** 서버 에이전트가 분기할 키 — keep/skip/decide/more 등 */
+        value: string;
+        emoji?: string;
+        style?: 'primary' | 'neutral' | 'danger';
+      }>;
+      delay?: number;
+    };
+
+/** 🔍 v88: BROWSE_STREAM_START 이벤트 data */
+export interface BrowseStreamStartData {
+  sessionId: string;
+  meta: BrowseSessionMeta;
+}
+
+/** 🔍 v88: BROWSE_STREAM_BLOCK 이벤트 data */
+export interface BrowseStreamBlockData {
+  sessionId: string;
+  /** 어떤 후보에 대한 블록인지 (오프닝/마무리일 때 없음) */
+  candidateId?: string;
+  block: BrowseBlock;
+  /** 세션 내 블록 순번 (0부터) */
+  order: number;
+}
+
+/** 🔍 v88: BROWSE_STREAM_END 이벤트 data */
+export interface BrowseStreamEndData {
+  sessionId: string;
+  /** 유저가 최종 선택한 것 (없으면 undefined) */
+  chosen?: { title: string; url?: string };
+  /** love 받은 후보들 */
+  shortlist: Array<{ title: string; url?: string }>;
+  /** 루나 마무리 한 마디 */
+  lunaFinal: string;
+}
+
 /** 🆕 v35: 작전 모드 타입 — SOLVE 단계의 특화 모드
  *  v85.6: browse_together 추가 */
 export type StrategyMode = 'message_draft' | 'roleplay' | 'panel' | 'browse_together' | 'custom';
@@ -1142,7 +1239,7 @@ export type SuggestionCategory =
 /** 선택지 메타 정보 — 프론트→서버→엔진 전달 */
 export interface SuggestionMeta {
   /** 메시지 출처 */
-  source: 'typed' | 'suggestion' | 'emotion_thermometer' | 'insight_card' | 'emotion_mirror' | 'luna_story' | 'luna_strategy' | 'mind_reading' | 'pattern_mirror' | 'solution_preview' | 'solution_preview_delay' | 'solution_card_draft' | 'solution_card_other' | 'message_copy' | 'message_modify' | 'message_custom' | 'growth_report_promise' | 'growth_report_continue' | 'tone_select' | 'draft_workshop' | 'roleplay_feedback' | 'panel_report' | 'idea_refine';
+  source: 'typed' | 'suggestion' | 'emotion_thermometer' | 'insight_card' | 'emotion_mirror' | 'luna_story' | 'luna_strategy' | 'mind_reading' | 'pattern_mirror' | 'solution_preview' | 'solution_preview_delay' | 'solution_card_draft' | 'solution_card_other' | 'message_copy' | 'message_modify' | 'message_custom' | 'growth_report_promise' | 'growth_report_continue' | 'tone_select' | 'draft_workshop' | 'roleplay_feedback' | 'panel_report' | 'idea_refine' | 'browse_decision' | 'event';
   context?: Record<string, any>;
   /** 선택지가 의도한 전략 */
   strategyHint?: StrategyType;
