@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * 🦊 v82.20: Luna Sprite — 범용 스프라이트 컴포넌트
+ * 🦊 v82.22: Luna Sprite — 범용 스프라이트 컴포넌트
  *
  * 여러 스프라이트 시트 지원:
  *   - luna_sprite_1.webp (5×5, 25프레임) — BRIDGE 아바타, 루나극장 choice
@@ -32,6 +32,19 @@ export type SpritePresetKey = keyof typeof SPRITE_PRESETS;
 const LOADED: Record<string, boolean> = {};
 const LOAD_PROMISES: Record<string, Promise<void>> = {};
 
+/** 브라우저가 이미 캐시한 이미지인지 동기 체크 (preload hint 활용) */
+function isBrowserCached(url: string): boolean {
+  if (typeof window === 'undefined') return false;
+  if (LOADED[url]) return true;
+  const probe = new Image();
+  probe.src = url;
+  if (probe.complete && probe.naturalWidth > 0) {
+    LOADED[url] = true;
+    return true;
+  }
+  return false;
+}
+
 function ensureSpriteLoaded(url: string): Promise<void> {
   if (LOADED[url]) return Promise.resolve();
   const existing = LOAD_PROMISES[url];
@@ -44,6 +57,16 @@ function ensureSpriteLoaded(url: string): Promise<void> {
   });
   LOAD_PROMISES[url] = p;
   return p;
+}
+
+// 모듈 import 시점에 즉시 프리로드 — layout의 <link rel="preload"> 와 시너지
+// 브라우저가 이미 캐시했으면 동기 마킹, 아니면 백그라운드 로드 시작
+if (typeof window !== 'undefined') {
+  for (const preset of Object.values(SPRITE_PRESETS)) {
+    if (!isBrowserCached(preset.url)) {
+      ensureSpriteLoaded(preset.url);
+    }
+  }
 }
 
 // ─── Props ────────────────────────────────────────────
@@ -89,7 +112,8 @@ export default function LunaSprite({
   const totalFrames = finalCols * finalRows;
 
   const [frame, setFrame] = useState(0);
-  const [loaded, setLoaded] = useState(LOADED[finalUrl] ?? false);
+  // lazy initializer: 브라우저 캐시 동기 체크로 초기 로드 플래시 제거
+  const [loaded, setLoaded] = useState(() => isBrowserCached(finalUrl));
   const [inView, setInView] = useState(true);
   const [tabVisible, setTabVisible] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -110,7 +134,7 @@ export default function LunaSprite({
     return () => { cancelled = true; };
   }, [finalUrl]);
 
-  // 🆕 v82.21: 탭 숨김 감지 (다른 브라우저 탭 / 앱 백그라운드 시 정지)
+  // 탭 숨김 감지 (다른 브라우저 탭 / 앱 백그라운드 시 정지)
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const onVisibility = () => setTabVisible(document.visibilityState === 'visible');
@@ -119,7 +143,7 @@ export default function LunaSprite({
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
-  // 🆕 v82.21: IntersectionObserver — 스크롤로 화면 밖이면 정지
+  // IntersectionObserver — 스크롤로 화면 밖이면 정지
   useEffect(() => {
     const el = containerRef.current;
     if (!el || typeof IntersectionObserver === 'undefined') return;
@@ -133,8 +157,7 @@ export default function LunaSprite({
     return () => obs.disconnect();
   }, []);
 
-  // 🆕 v82.21: requestAnimationFrame 기반 timing (setInterval 대비 정확 + 탭 숨김 시 자동 throttle)
-  //   - paused / 미로드 / 오프스크린 / 탭 숨김 중이면 루프 정지 (배터리 절약)
+  // requestAnimationFrame 기반 timing — 탭 숨김/오프스크린 시 자동 정지
   useEffect(() => {
     if (paused || !loaded || !inView || !tabVisible) return;
     let rafId = 0;
@@ -167,26 +190,12 @@ export default function LunaSprite({
         position: 'relative',
         transform: 'translateZ(0)',
         backfaceVisibility: 'hidden',
+        // 로드 전: visibility hidden (박스 안 보임, 레이아웃 공간 유지)
+        // 로드 후: visible + 내부 opacity 트랜지션으로 부드럽게 등장
+        visibility: loaded ? 'visible' : 'hidden',
         ...style,
       }}
     >
-      {/* 로드 전 플레이스홀더 */}
-      {!loaded && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'linear-gradient(135deg, #fde1c4 0%, #f9a8d4 50%, #c4b5fd 100%)',
-            animation: 'lunaSpritePulse 1.2s ease-in-out infinite',
-          }}
-        />
-      )}
-      <style>{`
-        @keyframes lunaSpritePulse {
-          0%, 100% { opacity: 0.6; }
-          50% { opacity: 1; }
-        }
-      `}</style>
       <div
         style={{
           position: 'absolute',
@@ -197,12 +206,10 @@ export default function LunaSprite({
           backgroundImage: `url(${finalUrl})`,
           backgroundSize: `${frameW * finalCols}px ${frameH * finalRows}px`,
           backgroundRepeat: 'no-repeat',
-          imageRendering: 'auto', // 부드러운 그림체 — crisp-edges 는 픽셀아트 전용
+          imageRendering: 'auto',
           WebkitFontSmoothing: 'antialiased',
           transform: `translate(-${col * frameW}px, -${row * frameH}px)`,
           pointerEvents: 'none',
-          opacity: loaded ? 1 : 0,
-          transition: 'opacity 0.3s ease-out',
         }}
       />
     </div>

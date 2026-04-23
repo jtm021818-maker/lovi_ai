@@ -10,6 +10,19 @@ import { useSpriteAnimation } from '@/hooks/useSpriteAnimation';
 const LOADED: Record<string, boolean> = {};
 const LOAD_PROMISES: Partial<Record<string, Promise<void>>> = {};
 
+/** 브라우저 캐시 동기 체크 — preload hint 활용 시 초기 플래시 제거 */
+function isBrowserCached(url: string): boolean {
+  if (typeof window === 'undefined') return false;
+  if (LOADED[url]) return true;
+  const probe = new Image();
+  probe.src = url;
+  if (probe.complete && probe.naturalWidth > 0) {
+    LOADED[url] = true;
+    return true;
+  }
+  return false;
+}
+
 function ensureLoaded(url: string): Promise<void> {
   if (LOADED[url]) return Promise.resolve();
   if (LOAD_PROMISES[url]) return LOAD_PROMISES[url];
@@ -50,7 +63,8 @@ export default function SpiritSprite({
   className,
 }: Props) {
   const sheet = getSpiritSprite(spirit.id);
-  const [loaded, setLoaded] = useState(sheet ? (LOADED[sheet.src] ?? false) : false);
+  // lazy initializer: 브라우저 캐시 동기 체크로 초기 플래시 제거
+  const [loaded, setLoaded] = useState(() => sheet ? isBrowserCached(sheet.src) : false);
 
   useEffect(() => {
     if (!sheet) return;
@@ -60,6 +74,7 @@ export default function SpiritSprite({
     return () => { cancelled = true; };
   }, [sheet]);
 
+  // 스프라이트 시트 없음 → 이모지 fallback
   if (!sheet) {
     return (
       <EmojiFallback
@@ -72,14 +87,16 @@ export default function SpiritSprite({
     );
   }
 
+  // 시트 있지만 로딩 중 → 동일 크기 투명 placeholder
+  // (이모지 → 스프라이트 교체 플래시/박스 방지)
   if (!loaded) {
+    const scale = size ? size / sheet.frameWidth : (sheet.displayScale ?? 1);
+    const displayW = sheet.frameWidth * scale;
+    const displayH = sheet.frameHeight * scale;
     return (
-      <EmojiFallback
-        emoji={spirit.emoji}
-        themeColor={spirit.themeColor}
-        size={size}
-        emojiSize={emojiSize}
+      <div
         className={className}
+        style={{ width: displayW, height: displayH, visibility: 'hidden' }}
       />
     );
   }
