@@ -22,24 +22,6 @@ type SessionPreview = {
   ended_at?: string;
 };
 
-// 시나리오 ENUM → { 한국어 라벨, 이모지 } 매핑
-const SCENARIO_META: Record<string, { label: string; icon: string }> = {
-  READ_AND_IGNORED:        { label: '읽씹 상황', icon: '📱' },
-  GHOSTING:                { label: '잠수 이별', icon: '👻' },
-  JEALOUSY_CONFLICT:       { label: '질투/갈등', icon: '🔥' },
-  JEALOUSY:                { label: '질투', icon: '💚' },
-  BREAKUP_CONTEMPLATION:   { label: '이별 고민', icon: '💔' },
-  COMMUNICATION_BREAKDOWN: { label: '소통 단절', icon: '🔇' },
-  TRUST_ISSUES:            { label: '신뢰 문제', icon: '🕵️' },
-  LONG_DISTANCE:           { label: '장거리 연애', icon: '✈️' },
-  INFIDELITY:              { label: '외도/바람', icon: '💣' },
-  BOREDOM:                 { label: '권태기', icon: '😴' },
-  GENERAL:                 { label: '연애 고민', icon: '💜' },
-};
-function getScenarioDisplay(scenario?: string | null) {
-  return SCENARIO_META[scenario || 'GENERAL'] || SCENARIO_META['GENERAL'];
-}
-
 // Phase별 5단계 진행도
 const PHASE_ORDER = ['HOOK', 'MIRROR', 'BRIDGE', 'GUIDE', 'CLOSE'];
 function getPhaseProgress(phase?: string): number {
@@ -411,7 +393,6 @@ export default function ChatListPage() {
                   const imgSrc = cardSrcs[i % cardSrcs.length];
                   const uniformInsets = "top-[18%] left-[7%] right-[7%] bottom-[10%]";
 
-                  const { label: scenarioLabel, icon: scenarioIcon } = getScenarioDisplay(session.locked_scenario);
                   const phaseProgress = getPhaseProgress(session.current_phase_v2);
                   const emStart = emotionEmoji(session.emotion_start);
                   const emEnd = session.emotion_end != null ? emotionEmoji(session.emotion_end) : emotionEmoji(session.emotion_start);
@@ -422,7 +403,7 @@ export default function ChatListPage() {
                     if (session.session_summary) {
                       previewText = session.session_summary;
                     } else {
-                      previewText = `${scenarioLabel} 관련 상담이 진행 중이에요.`;
+                      previewText = '상담이 진행 중이에요.';
                     }
                   }
 
@@ -465,14 +446,8 @@ export default function ChatListPage() {
 
                       <div className={`absolute ${uniformInsets} flex flex-col pointer-events-none`}>
 
-                        {/* Top Row: Scenario Badge & Time */}
-                        <div className="flex justify-between items-center px-1 shrink-0">
-                          <div className="bg-white/95 px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1.5">
-                            <span className="text-[min(4vw,14px)] leading-none">{scenarioIcon}</span>
-                            <span className="font-[800] text-[min(3.8vw,14px)] text-[#D94F6E] leading-none">
-                              {scenarioLabel}
-                            </span>
-                          </div>
+                        {/* Top Row: Time */}
+                        <div className="flex justify-end items-center px-1 shrink-0">
                           <span className="font-[600] text-[#5C3A21] text-[min(3.5vw,13px)] mt-1.5 mr-1">
                             {timeLabel}
                           </span>

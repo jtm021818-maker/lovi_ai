@@ -1,17 +1,15 @@
 'use client';
 
-import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { PhaseEvent, SuggestionMeta } from '@/types/engine.types';
 
 /**
- * 🆕 v86: 🎯 ACTION_PLAN — 말풍선 체인 + 미니 작전카드
+ * v88: ActionPlan — 언니가 카톡으로 작전 정리해주는 대화형 UI
  *
- * 이전(v39)의 큼직한 단일 카드 → "루나가 정리해주는 카톡 대화" 느낌.
- * - 루나 말풍선(lunaIntro: 대화 종합) → 작전 미니 카드 → 농담 말풍선 → 응원 말풍선 → 선택 버튼
- * - 말풍선은 기본 Luna 메시지 톤(크림 배경, rounded-2xl) 유지.
- * - 중앙 "오늘의 작전" 미니 카드만 orange 살짝 강조 — 정리되는 느낌.
- * - Framer Motion 으로 순차 등장 (진짜 채팅 받는 느낌).
+ * stiff plan card 제거 → 순차 bubble chain으로 전환.
+ * coreAction: dots(500ms) → shimmer reveal (강조 느낌).
+ * 나머지 필드: 자연스러운 언니 말투 bubble.
  */
 
 interface ActionPlanOption {
@@ -26,74 +24,206 @@ interface ActionPlanProps {
   disabled?: boolean;
 }
 
-const PLAN_ICON: Record<string, string> = {
-  kakao_draft: '💬',
-  roleplay: '🎭',
-  panel: '🍿',
-  custom: '🤔',
+// ─── Avatar ───────────────────────────────────────────────────────────────────
+function LunaAvatar() {
+  return (
+    <div
+      className="w-8 h-8 flex-shrink-0 border border-orange-300/60 overflow-hidden bg-white shadow-sm"
+      style={{ borderRadius: '50% 40% 60% 50% / 60% 50% 40% 50%' }}
+    >
+      <img src="/char_img/luna_1_event.webp" alt="루나" className="w-full h-full object-cover" />
+    </div>
+  );
+}
+
+// ─── Typing dots ──────────────────────────────────────────────────────────────
+function TypingDots() {
+  return (
+    <span className="flex gap-1 items-center h-5">
+      {[0, 1, 2].map((i) => (
+        <motion.span
+          key={i}
+          className="w-1.5 h-1.5 rounded-full bg-orange-400"
+          animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
+          transition={{ duration: 0.7, repeat: Infinity, delay: i * 0.18, ease: 'easeInOut' }}
+        />
+      ))}
+    </span>
+  );
+}
+
+// ─── Bubble variants ──────────────────────────────────────────────────────────
+const BUBBLE_STYLE: Record<string, React.CSSProperties> = {
+  default: { background: '#F4EFE6', borderColor: '#D5C2A5' },
+  core:    { background: 'linear-gradient(135deg, #FFF7ED 0%, #FEF3C7 100%)', borderColor: '#FDBA74' },
+  quote:   { background: '#FFFBF5', borderColor: '#E8D8C5' },
+  timing:  { background: '#FFFDF0', borderColor: '#FDE68A' },
+  planb:   { background: '#F8F9FB', borderColor: '#CBD5E1' },
+  joke:    { background: '#FFFBEA', borderColor: '#FDE68A' },
+  cheer:   { background: 'linear-gradient(135deg, #FDF2F8 0%, #F5F3FF 100%)', borderColor: '#F9A8D4' },
 };
 
-const PLAN_LABEL: Record<string, string> = {
-  kakao_draft: '카톡 작전',
-  roleplay: '롤플 작전',
-  panel: '연참 작전',
-  custom: '내 작전',
-};
-
-/** 루나 아바타 + 말풍선 한 덩어리 */
 function LunaBubble({
   children,
-  delay,
-  tone = 'default',
-  tag,
+  delayMs = 0,
+  variant = 'default',
+  showAvatar = true,
 }: {
   children: React.ReactNode;
-  delay: number;
-  tone?: 'default' | 'joke' | 'cheer';
-  tag?: string;
+  delayMs?: number;
+  variant?: keyof typeof BUBBLE_STYLE;
+  showAvatar?: boolean;
 }) {
-  const toneClasses =
-    tone === 'joke'
-      ? 'bg-amber-50/90 border-amber-200/60 text-amber-900'
-      : tone === 'cheer'
-      ? 'bg-gradient-to-br from-pink-50/90 to-purple-50/90 border-pink-200/60 text-pink-900'
-      : 'bg-white/90 border-orange-100/70 text-gray-800';
-
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ delay, type: 'spring', damping: 22, stiffness: 280 }}
-      className="flex items-end gap-2 mb-2.5"
+      initial={{ opacity: 0, x: -10, y: 10, scale: 0.97 }}
+      animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+      transition={{ delay: delayMs / 1000, type: 'spring', stiffness: 220, damping: 20 }}
+      className="flex items-end gap-2"
     >
+      {showAvatar ? <LunaAvatar /> : <div className="w-8 shrink-0" />}
       <div
-        className="w-8 h-8 flex-shrink-0 border border-orange-300/60 overflow-hidden bg-white shadow-sm"
-        style={{ borderRadius: '50% 40% 60% 50% / 60% 50% 40% 50%' }}
+        className="px-3.5 py-2.5 rounded-2xl rounded-tl-sm border max-w-[83%] text-[13px] text-[#4E342E] leading-relaxed"
+        style={BUBBLE_STYLE[variant]}
       >
-        <img src="/char_img/luna_1_event.webp" alt="루나" className="w-full h-full object-cover" />
-      </div>
-      <div className="flex flex-col max-w-[85%]">
-        {tag && (
-          <span className="text-[10px] font-bold text-orange-500/90 ml-1 mb-0.5">
-            {tag}
-          </span>
-        )}
-        <div
-          className={`rounded-2xl rounded-bl-sm border px-3.5 py-2.5 shadow-sm ${toneClasses}`}
-        >
-          {children}
-        </div>
+        {children}
       </div>
     </motion.div>
   );
 }
 
+// ─── Core action bubble — dots → shimmer reveal ───────────────────────────────
+function CoreActionBubble({
+  title, coreAction, planType, delayMs,
+}: {
+  title: string;
+  coreAction: string;
+  planType: string;
+  delayMs: number;
+}) {
+  const [revealed, setRevealed] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setRevealed(true), delayMs + 520);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const PLAN_LABEL: Record<string, string> = {
+    kakao_draft: '카톡 작전', roleplay: '롤플 작전', custom: '커스텀 작전',
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -10, y: 10, scale: 0.97 }}
+      animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+      transition={{ delay: delayMs / 1000, type: 'spring', stiffness: 220, damping: 20 }}
+      className="flex items-end gap-2"
+    >
+      <LunaAvatar />
+      <AnimatePresence mode="wait">
+        {!revealed ? (
+          <motion.div
+            key="dots"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.12 } }}
+            className="px-3.5 py-2.5 rounded-2xl rounded-tl-sm border min-h-[44px] flex items-center"
+            style={BUBBLE_STYLE.core}
+          >
+            <TypingDots />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="content"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="relative overflow-hidden px-3.5 py-3 rounded-2xl rounded-tl-sm border max-w-[83%]"
+            style={{
+              ...BUBBLE_STYLE.core,
+              boxShadow: '0 2px 14px rgba(249,115,22,0.13)',
+            }}
+          >
+            {/* One-time shimmer sweep */}
+            <motion.div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background: 'linear-gradient(90deg, transparent 0%, rgba(249,115,22,0.12) 50%, transparent 100%)',
+              }}
+              initial={{ x: '-100%' }}
+              animate={{ x: '220%' }}
+              transition={{ duration: 1.0, ease: 'easeInOut' }}
+            />
+
+            {/* Plan type tag */}
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <span className="text-[10px] font-bold text-orange-500">🎯 오늘의 작전</span>
+              {PLAN_LABEL[planType] && (
+                <span className="text-[9px] font-semibold text-orange-400/80 bg-orange-100/70 px-1.5 py-0.5 rounded-full">
+                  {PLAN_LABEL[planType]}
+                </span>
+              )}
+            </div>
+
+            {/* Title */}
+            <p className="text-[14px] font-bold text-gray-800 leading-snug mb-2.5">{title}</p>
+
+            {/* Core action highlight */}
+            <div className="bg-orange-100/60 rounded-xl px-3 py-2 border border-orange-200/60">
+              <p className="text-[9px] font-bold text-orange-600 mb-0.5 uppercase tracking-wide">핵심 액션</p>
+              <p className="text-[13px] text-gray-800 font-semibold leading-relaxed">{coreAction}</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// ─── User reply bubble ────────────────────────────────────────────────────────
+function UserBubble({ text }: { text: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 16, scale: 0.92 }}
+      animate={{ opacity: 1, x: 0, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+      className="flex justify-end"
+    >
+      <div className="px-3.5 py-2.5 rounded-2xl rounded-tr-sm bg-[#F97316] text-white text-[13px] max-w-[72%] leading-relaxed font-medium">
+        {text}
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Chip button ──────────────────────────────────────────────────────────────
+function Chip({
+  label, emoji, primary = false, disabled = false, onClick,
+}: {
+  label: string; emoji: string; primary?: boolean; disabled?: boolean; onClick: () => void;
+}) {
+  return (
+    <motion.button
+      whileTap={!disabled ? { scale: 0.91 } : {}}
+      onClick={onClick}
+      disabled={disabled}
+      className="flex-1 py-2.5 rounded-2xl text-[13px] font-bold transition-opacity"
+      style={primary
+        ? { background: '#F97316', color: '#fff', opacity: disabled ? 0.45 : 1 }
+        : { background: 'white', color: '#F97316', border: '1.5px solid #FDBA7499', opacity: disabled ? 0.45 : 1 }
+      }
+    >
+      <span className="mr-1">{emoji}</span>{label}
+    </motion.button>
+  );
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 export default function ActionPlan({ event, onSelect, disabled }: ActionPlanProps) {
-  const [selected, setSelected] = useState<string | null>(null);
+  const [userSaid, setUserSaid] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
   const data = event.data as {
-    planType?: 'kakao_draft' | 'roleplay' | 'panel' | 'custom';
+    planType?: string;
     lunaIntro?: string;
     title?: string;
     coreAction?: string;
@@ -105,206 +235,159 @@ export default function ActionPlan({ event, onSelect, disabled }: ActionPlanProp
     options?: ActionPlanOption[];
   };
 
-  const planType = data.planType ?? 'custom';
-  const lunaIntro = data.lunaIntro?.trim() ?? '';
-  const title = data.title ?? '오늘의 작전';
-  const coreAction = data.coreAction ?? '';
+  const planType    = data.planType    ?? 'custom';
+  const lunaIntro   = data.lunaIntro?.trim()  ?? '';
+  const title       = data.title       ?? '오늘의 작전';
+  const coreAction  = data.coreAction  ?? '';
   const sharedResult = data.sharedResult ?? '';
-  const planB = data.planB ?? '';
-  const timingHint = data.timingHint ?? '';
-  const lunaJoke = data.lunaJoke?.trim() ?? '';
-  const lunaCheer = data.lunaCheer ?? '해보고 꼭 알려줘!';
-  const options = data.options ?? [
+  const planB       = data.planB       ?? '';
+  const timingHint  = data.timingHint  ?? '';
+  const lunaJoke    = data.lunaJoke?.trim()   ?? '';
+  const lunaCheer   = data.lunaCheer   ?? '해보고 꼭 알려줘!';
+  const options     = data.options     ?? [
     { label: '좋아, 해볼래', emoji: '🔥', value: 'commit' as const },
     { label: '조금만 수정', emoji: '✏️', value: 'tweak' as const },
   ];
 
-  // 순차 등장 타이밍
-  let t = 0.1;
-  const introDelay = t; if (lunaIntro) t += 0.4;
-  const cardDelay = t;  t += 0.5;
-  const jokeDelay = t;  if (lunaJoke) t += 0.35;
-  const cheerDelay = t; t += 0.35;
-  const buttonsDelay = t;
+  // ── Build timing sequence ──
+  const GAP = 460; // ms between bubbles
+  let t = 0;
+  const introDelay  = t; if (lunaIntro)    t += GAP;
+  const coreDelay   = t; t += 520 + 500;   // dots(520) + reveal-settle(500)
+  const sharedDelay = t; if (sharedResult) t += GAP;
+  const timingDelay = t; if (timingHint)   t += GAP - 60;
+  const planBDelay  = t; if (planB)        t += GAP - 60;
+  const jokeDelay   = t; if (lunaJoke)     t += GAP;
+  const cheerDelay  = t; t += GAP;
+  const chipsDelay  = t;
 
   const handleSelect = (option: ActionPlanOption) => {
-    if (disabled || done) return;
-    setSelected(option.value);
+    if (disabled || userSaid) return;
+    const label = `${option.emoji} ${option.label}`;
+    setUserSaid(label);
     setTimeout(() => {
       setDone(true);
-      onSelect(
-        option.value === 'commit' ? '🔥 좋아, 해볼래!' : '✏️ 조금만 수정하자',
-        {
-          source: 'action_plan' as any,
-          context: {
-            choice: option.value,
-            planType,
-            title,
-            coreAction,
-          },
-        },
-      );
-    }, 400);
+      onSelect(label, {
+        source: 'action_plan' as any,
+        context: { choice: option.value, planType, title, coreAction },
+      });
+    }, 500);
   };
 
+  // Completed state
   if (done) {
     return (
       <motion.div
-        initial={{ opacity: 0.5, scale: 0.98 }}
+        initial={{ opacity: 0, scale: 0.97 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="mx-4 my-3 p-4 bg-gradient-to-br from-orange-50/80 to-amber-50/80 rounded-2xl border border-orange-200/60 shadow-sm"
+        className="flex items-center gap-2.5 mx-4 my-3 px-3.5 py-2.5 rounded-2xl border"
+        style={{ background: 'linear-gradient(135deg, #FFF7ED, #FEF3C7)', borderColor: '#FDBA74' }}
       >
-        <div className="flex items-center gap-2">
-          <span className="text-lg">🎯</span>
-          <span className="text-[12px] font-bold text-orange-700">
-            오늘의 작전 — {selected === 'commit' ? '확정! 해보자' : '조금 수정 중'}
-          </span>
+        <motion.span
+          animate={{ rotate: [0, -10, 10, 0] }}
+          transition={{ duration: 1.4, repeat: 2 }}
+          className="text-[18px]"
+        >
+          🎯
+        </motion.span>
+        <div>
+          <p className="text-[11px] font-bold text-orange-600">작전 확정!</p>
+          <p className="text-[12px] text-gray-700 font-semibold">{title}</p>
         </div>
       </motion.div>
     );
   }
 
   return (
-    <div className="mx-3 my-3">
-      {/* lunaIntro — 대화 종합 (언니톤 정리) */}
+    <div className="mx-3 my-3 space-y-2.5">
+
+      {/* 1. Luna intro — situation summary */}
       {lunaIntro && (
-        <LunaBubble delay={introDelay} tag="💬 자 정리해줄게">
-          <p className="text-[13px] leading-relaxed whitespace-pre-line">
-            {lunaIntro}
+        <LunaBubble delayMs={introDelay}>
+          <p className="whitespace-pre-line">{lunaIntro}</p>
+        </LunaBubble>
+      )}
+
+      {/* 2. Core action — dots → shimmer reveal (the "big moment") */}
+      <CoreActionBubble
+        title={title}
+        coreAction={coreAction}
+        planType={planType}
+        delayMs={coreDelay}
+      />
+
+      {/* 3. Shared result — "우리가 같이 만든 거" */}
+      {sharedResult && (
+        <LunaBubble delayMs={sharedDelay} variant="quote" showAvatar={false}>
+          <p className="text-[10px] font-bold text-orange-400 mb-1">💡 우리가 같이 만든 거야</p>
+          <p className="italic text-[12px] text-[#6D4C41] leading-relaxed whitespace-pre-line">
+            {sharedResult}
           </p>
         </LunaBubble>
       )}
 
-      {/* 미니 작전 카드 — UI 살짝 가미 */}
-      <motion.div
-        initial={{ opacity: 0, y: 12, scale: 0.96 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ delay: cardDelay, type: 'spring', damping: 22, stiffness: 260 }}
-        className="ml-10 mr-2 my-2"
-      >
-        <div
-          className="relative rounded-2xl border shadow-md overflow-hidden"
-          style={{
-            background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 60%, #fef3c7 100%)',
-            borderColor: 'rgba(249, 115, 22, 0.4)',
-          }}
-        >
-          {/* 헤더 */}
-          <div className="flex items-center gap-2 px-3.5 py-2 border-b border-orange-200/40 bg-white/40">
-            <motion.span
-              animate={{ rotate: [0, -8, 8, 0] }}
-              transition={{ duration: 2, repeat: Infinity }}
-              className="text-base"
-            >
-              🎯
-            </motion.span>
-            <span className="text-[12px] font-bold text-orange-700">오늘의 작전</span>
-            <span className="text-[10px] font-semibold bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full ml-auto">
-              {PLAN_ICON[planType]} {PLAN_LABEL[planType]}
-            </span>
-          </div>
-
-          {/* 제목 */}
-          <div className="px-3.5 pt-3 pb-2">
-            <div className="text-[10px] font-bold text-orange-500 mb-0.5 flex items-center gap-1">
-              <span>📌</span><span>작전 이름</span>
-            </div>
-            <p className="text-[14px] font-bold text-gray-800 leading-snug">{title}</p>
-          </div>
-
-          {/* 핵심 액션 */}
-          <div className="mx-3 mb-2 bg-gradient-to-r from-orange-100/70 to-amber-100/70 rounded-xl px-3 py-2 border border-orange-300/40">
-            <div className="text-[10px] font-bold text-orange-700 mb-0.5 flex items-center gap-1">
-              <span>🔥</span><span>핵심 액션</span>
-            </div>
-            <p className="text-[13px] text-gray-800 leading-relaxed font-semibold">
-              {coreAction}
-            </p>
-          </div>
-
-          {/* 같이 만든 내용 */}
-          {sharedResult && (
-            <div className="mx-3 mb-2 bg-white/70 rounded-xl px-3 py-2 border border-orange-200/40">
-              <div className="text-[10px] font-bold text-orange-600 mb-0.5 flex items-center gap-1">
-                <span>💡</span><span>우리가 같이 만든 거</span>
-              </div>
-              <p className="text-[12px] text-gray-700 leading-relaxed italic whitespace-pre-line">
-                {sharedResult}
-              </p>
-            </div>
-          )}
-
-          {/* timing + planB — 나란히 */}
-          {(timingHint || planB) && (
-            <div className="flex flex-wrap gap-1.5 mx-3 mb-3">
-              {timingHint && (
-                <div className="flex-1 min-w-[45%] bg-yellow-50/80 rounded-lg px-2.5 py-1.5 border border-yellow-200/50 flex items-center gap-1.5">
-                  <span className="text-xs">⏰</span>
-                  <p className="text-[11px] text-yellow-800 leading-tight flex-1">{timingHint}</p>
-                </div>
-              )}
-              {planB && (
-                <div className="flex-1 min-w-[45%] bg-slate-50/80 rounded-lg px-2.5 py-1.5 border border-slate-200/50 flex items-start gap-1.5">
-                  <span className="text-xs mt-0.5">🛟</span>
-                  <div className="flex-1">
-                    <div className="text-[9px] font-bold text-slate-500">플랜 B</div>
-                    <p className="text-[11px] text-slate-700 leading-tight">{planB}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </motion.div>
-
-      {/* 농담 말풍선 — 긴장 풀어주기 */}
-      {lunaJoke && (
-        <LunaBubble delay={jokeDelay} tone="joke" tag="😏 근데 솔직히">
-          <p className="text-[13px] leading-relaxed">{lunaJoke}</p>
+      {/* 4. Timing hint */}
+      {timingHint && (
+        <LunaBubble delayMs={timingDelay} variant="timing" showAvatar={false}>
+          <span className="text-[12px]">⏰ </span>
+          <span className="font-medium">타이밍은 — {timingHint}</span>
         </LunaBubble>
       )}
 
-      {/* 루나 응원 말풍선 */}
-      <LunaBubble delay={cheerDelay} tone="cheer" tag="💜 루나의 한마디">
-        <p className="text-[13px] leading-relaxed italic">&ldquo;{lunaCheer}&rdquo;</p>
+      {/* 5. Plan B */}
+      {planB && (
+        <LunaBubble delayMs={planBDelay} variant="planb" showAvatar={false}>
+          <p className="text-[10px] font-semibold text-slate-400 mb-0.5">혹시 잘 안 되면 🛟</p>
+          <p>{planB}</p>
+        </LunaBubble>
+      )}
+
+      {/* 6. Luna joke — 긴장 완화 */}
+      {lunaJoke && (
+        <LunaBubble delayMs={jokeDelay} variant="joke">
+          <p className="text-[10px] font-semibold text-amber-500 mb-0.5">😏 솔직히 말하면</p>
+          <p>{lunaJoke}</p>
+        </LunaBubble>
+      )}
+
+      {/* 7. Luna cheer — emotional peak */}
+      <LunaBubble delayMs={cheerDelay} variant="cheer">
+        <p className="text-[10px] font-bold text-pink-500 mb-1">💜 루나가 믿어</p>
+        <p className="italic text-[#6D4C41]">"{lunaCheer}"</p>
       </LunaBubble>
 
-      {/* 선택 버튼 */}
+      {/* 8. User reply bubble */}
+      <AnimatePresence>
+        {userSaid && <UserBubble key="user" text={userSaid} />}
+      </AnimatePresence>
+
+      {/* 9. Quick-reply chips */}
       <motion.div
-        initial={{ opacity: 0, y: 8 }}
+        initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: buttonsDelay }}
-        className="flex gap-2 ml-10 mr-2 mt-1"
+        transition={{ delay: chipsDelay / 1000, duration: 0.28, ease: 'easeOut' }}
+        className="flex gap-2 ml-10"
       >
-        {options.map((option, idx) => (
-          <motion.button
-            key={option.value}
-            whileHover={!disabled && !done ? { scale: 1.02 } : {}}
-            whileTap={!disabled && !done ? { scale: 0.98 } : {}}
-            onClick={() => handleSelect(option)}
-            disabled={disabled || done}
-            className={`flex-1 py-2.5 rounded-2xl font-bold text-[13px] transition-all ${
-              selected === option.value
-                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xl scale-105'
-                : idx === 0
-                ? 'bg-gradient-to-r from-orange-400 to-amber-400 text-white hover:shadow-md'
-                : 'bg-white border-2 border-orange-200 text-orange-600 hover:bg-orange-50'
-            }`}
-          >
-            <span className="mr-1">{option.emoji}</span>
-            {option.label}
-          </motion.button>
+        {options.map((opt, idx) => (
+          <Chip
+            key={opt.value}
+            label={opt.label}
+            emoji={opt.emoji}
+            primary={idx === 0}
+            disabled={disabled || !!userSaid}
+            onClick={() => handleSelect(opt)}
+          />
         ))}
       </motion.div>
 
-      <motion.div
+      <motion.p
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: buttonsDelay + 0.2 }}
-        className="text-center mt-2"
+        transition={{ delay: chipsDelay / 1000 + 0.3 }}
+        className="text-center text-[9px] text-orange-400/70 pb-1"
       >
-        <span className="text-[9px] text-orange-500/80">🔥 같이 짠 작전이야 — 넌 혼자가 아니야</span>
-      </motion.div>
+        🔥 같이 짠 작전이야 — 넌 혼자가 아니야
+      </motion.p>
     </div>
   );
 }
