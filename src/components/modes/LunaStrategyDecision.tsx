@@ -18,7 +18,7 @@ import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import LunaSprite from '@/components/common/LunaSprite';
 
-export type StrategyMode = 'browse_together' | 'draft' | 'panel' | 'roleplay';
+export type StrategyMode = 'browse_together' | 'draft' | 'roleplay';
 
 
 interface StrategyDecision {
@@ -55,13 +55,6 @@ const MODE_META: Record<StrategyMode, { emoji: string; label: string; color: str
     color: '#d97706',
     bg: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
     accent: 'rgba(217,119,6,0.5)',
-  },
-  panel: {
-    emoji: '👥',
-    label: '3인 패널 의견',
-    color: '#059669',
-    bg: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
-    accent: 'rgba(5,150,105,0.5)',
   },
   roleplay: {
     emoji: '🎭',

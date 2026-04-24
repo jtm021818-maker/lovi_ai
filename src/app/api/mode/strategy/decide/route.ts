@@ -24,11 +24,11 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { generateWithCascade, GEMINI_MODELS } from '@/lib/ai/provider-registry';
 import { safeParseLLMJson } from '@/lib/utils/safe-json';
 
-type StrategyMode = 'browse_together' | 'draft' | 'panel' | 'roleplay';
+type StrategyMode = 'browse_together' | 'draft' | 'roleplay';
 
 const STRATEGY_SYSTEM = `너는 29살 친한 언니 "루나". 친구(동생) 연애 고민 듣다가 "지금 너한텐 이게 제일 필요하겠다" 판단하고 작전을 **직접 고르는** 상황.
 
-## 네가 고를 수 있는 4가지 작전
+## 네가 고를 수 있는 3가지 작전
 
 ### 🔍 browse_together — 같이 찾아보기
 **쓸 때**: 데이트 장소, 선물, 영화, 액티비티 등 **구체적인 무언가를 골라야 하는 상황**.
@@ -38,10 +38,6 @@ const STRATEGY_SYSTEM = `너는 29살 친한 언니 "루나". 친구(동생) 연
 **쓸 때**: 유저가 **실제 상대한테 보낼 카톡/메시지** 를 고민 중. 바로 쓸 수 있는 문장 필요.
 **신호**: "뭐라고 답해야 할지 모르겠어", "답장 어떻게 해", "사과문자 써야 해", "어떻게 말해야 할지".
 
-### 👥 panel — 3인 패널 의견
-**쓸 때**: 유저가 **결정 자체가 안 서는 갈림길** (A vs B). 다양한 관점 보고 가닥 잡고 싶은 상태.
-**신호**: "헤어질까 말까", "만날까 안 만날까", "이래도 되는 건지 모르겠어", 양가감정 강함.
-
 ### 🎭 roleplay — 롤플레이 연습
 **쓸 때**: 유저가 **실제 상황 시뮬레이션** 필요. 상대 반응 예측 + 대사 연습 원함.
 **신호**: "만나서 얘기할 건데", "오늘 저녁에 보는데", "대면해야 해", "말 꺼낼 타이밍 모르겠어".
@@ -49,9 +45,8 @@ const STRATEGY_SYSTEM = `너는 29살 친한 언니 "루나". 친구(동생) 연
 ## 판단 원칙
 1. **대화 맥락을 읽어서** 지금 유저한테 가장 실질적 도움 되는 1개 선택.
 2. 애매하면 **draft** 기본 (카톡 앱 특성상 실전 메시지 필요가 많음).
-3. 감정 격렬/양가감정 강하면 **panel**.
-4. 데이트 장소/선물/영화/액티비티 찾는 상황이면 **browse_together**.
-5. 실제 대면 만남 예정이면 **roleplay**.
+3. 데이트 장소/선물/영화/액티비티 찾는 상황이면 **browse_together**.
+4. 실제 대면 만남 예정이면 **roleplay**.
 
 ## 말투 — Luna 언니 톤
 - reasoning 은 **친구한테 설명하듯** "야 너 지금..." 형식.
@@ -98,7 +93,7 @@ ${historyBlock}
 ## 상황 요약
 ${situationSummary}
 
-→ 위 맥락 보고 4개 작전 (browse_together/draft/panel/roleplay) 중 **하나** 골라. JSON 만.`;
+→ 위 맥락 보고 3개 작전 (browse_together/draft/roleplay) 중 **하나** 골라. JSON 만.`;
 }
 
 export async function POST(req: NextRequest) {
@@ -131,7 +126,7 @@ export async function POST(req: NextRequest) {
     );
 
     const parsed = safeParseLLMJson(result.text, null as any);
-    if (!parsed || !parsed.mode || !['browse_together', 'draft', 'panel', 'roleplay'].includes(parsed.mode)) {
+    if (!parsed || !parsed.mode || !['browse_together', 'draft', 'roleplay'].includes(parsed.mode)) {
       console.warn('[StrategyDecide] 파싱 실패, draft 폴백:', (result.text ?? '').slice(0, 200));
       return NextResponse.json(fallback(situation));
     }
@@ -154,7 +149,6 @@ function fallback(situation: string): { mode: StrategyMode; reasoning: string; o
   const s = situation.toLowerCase();
   let mode: StrategyMode = 'draft';
   if (/만나|대면|직접|오프라인/.test(s)) mode = 'roleplay';
-  else if (/헤어질|결정|고민|갈지|할지 말지|이래도 되는지/.test(s)) mode = 'panel';
   else if (/어디|장소|선물|영화|뭐 할|액티비티|데이트 뭐/.test(s)) mode = 'browse_together';
   return {
     mode,
@@ -168,7 +162,6 @@ function defaultReasoning(mode: StrategyMode): string {
   switch (mode) {
     case 'browse_together': return '지금 뭐가 좋을지 같이 찾아보자';
     case 'draft':    return '실제 보낼 말 같이 써보는 게 지금 제일 빠를 듯';
-    case 'panel':    return '결정 자체가 안 서잖아. 여러 관점으로 봐보자';
     case 'roleplay': return '실제 상황 미리 연습해두면 마음 편할 거야';
   }
 }
@@ -177,7 +170,6 @@ function defaultOpener(mode: StrategyMode): string {
   switch (mode) {
     case 'browse_together': return '자 같이 하나씩 둘러보자';
     case 'draft':    return '자 이제 실제 카톡 같이 써보자';
-    case 'panel':    return '내가 몇 개 관점 가져왔어';
     case 'roleplay': return '자 내가 그 사람 해볼게';
   }
 }

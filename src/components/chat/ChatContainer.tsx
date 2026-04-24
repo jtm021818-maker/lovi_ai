@@ -458,7 +458,17 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
             <LunaStrategy
               key={`event-${idx}-manual`}
               event={event}
-              onSelect={handleSuggestionSelect}
+              onSelect={(text, meta) => {
+                const strategyType = meta?.context?.strategyType as string | undefined;
+                const situationSummary = (meta?.context?.situationSummary as string | undefined) ?? '';
+                if (strategyType === 'roleplay') {
+                  handleModeEnter('roleplay', { situationSummary });
+                } else if (strategyType === 'message_draft') {
+                  handleModeEnter('draft', { situationSummary });
+                } else {
+                  handleSuggestionSelect(text, meta);
+                }
+              }}
               disabled={isLoading}
             />
           );

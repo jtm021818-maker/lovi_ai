@@ -71,14 +71,6 @@ export default function LunaStrategy({ event, onSelect, disabled }: LunaStrategy
       preview: '실제로 만나면 어떨지 미리 시뮬',
       lunaComment: '실전 전 연습이 필요할 때',
     },
-    {
-      type: 'panel',
-      emoji: '🍿',
-      title: '연참 모드 (객관적 평가)',
-      description: '한 발 떨어져서 너의 상황 정리',
-      preview: '강점/주의점 + 응원 한 마디',
-      lunaComment: '너무 가까워서 안 보일 때',
-    },
     // 🆕 v85.6: 같이 찾기
     {
       type: 'browse_together',
