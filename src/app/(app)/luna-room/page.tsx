@@ -61,16 +61,11 @@ function LunaInitScreen({ onInit }: { onInit: () => void }) {
             animate={{ scale: [0.9, 1.1, 0.9], opacity: [0.4, 0.8, 0.4] }}
             transition={{ duration: 3, repeat: Infinity }}
           />
-          <div className="w-28 h-28 rounded-full overflow-hidden border-2 border-violet-300/50 shadow-xl">
-            <img
-              src="/char_img/luna_sleep.png"
-              alt="루나"
-              className="w-full h-full object-cover"
-              style={{ filter: 'brightness(0.9) saturate(0.7)' }}
-            />
-            {/* Sleeping overlay */}
-            <div className="absolute inset-0 bg-violet-900/20 rounded-full" />
-          </div>
+          <img
+            src="/char_img/luna_sleep.png"
+            alt="루나"
+            className="w-52 h-52 object-contain drop-shadow-xl"
+          />
         </div>
       </motion.div>
 
