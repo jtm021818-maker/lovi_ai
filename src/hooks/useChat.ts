@@ -567,8 +567,26 @@ export function useChat(sessionId: string): UseChatReturn {
                   break;
                 }
                 firedEventTypesRef.current.add(newEvent.type);
-                console.log('[useChat] 🎯 턴 이벤트 수신 (버퍼링):', newEvent.type);
                 setPhaseEvents((prev) => [...prev, newEvent]);
+
+                // BROWSE_SEARCHING은 browseQueue 말풍선보다 먼저 보여야 해서 즉시 삽입
+                // (pendingEventsBuffer에 넣으면 스트림 끝 3초 뒤에야 나와서 순서가 뒤집힘)
+                if (newEvent.type === 'BROWSE_SEARCHING') {
+                  console.log('[useChat] 🔍 BROWSE_SEARCHING 즉시 메시지 삽입 (검색 애니메이션 선행)');
+                  setMessages((prev) => [
+                    ...prev,
+                    {
+                      id: `event-BROWSE_SEARCHING-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                      sessionId,
+                      senderType: 'event' as any,
+                      content: JSON.stringify(newEvent),
+                      createdAt: new Date().toISOString(),
+                    },
+                  ]);
+                  break;
+                }
+
+                console.log('[useChat] 🎯 턴 이벤트 수신 (버퍼링):', newEvent.type);
                 // 🆕 ACE v4: 즉시 메시지에 추가하지 않고 버퍼에 저장
                 // ||| 분리 처리 후 마지막에 삽입하여 이벤트가 항상 대화 끝에 오도록
                 pendingEventsBuffer.push(newEvent);
