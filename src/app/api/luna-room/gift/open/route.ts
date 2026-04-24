@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createServerSupabaseClient, createServiceRoleClient } from '@/lib/supabase/server';
 
 export async function POST(req: NextRequest) {
   const supabase = await createServerSupabaseClient();
@@ -19,7 +19,8 @@ export async function POST(req: NextRequest) {
 
   if (!body.giftId) return NextResponse.json({ error: 'giftId 필요' }, { status: 400 });
 
-  const { error } = await supabase
+  const admin = createServiceRoleClient();
+  const { error } = await admin
     .from('luna_gifts')
     .update({ opened_at: new Date().toISOString() })
     .eq('id', body.giftId)

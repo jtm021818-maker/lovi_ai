@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createServerSupabaseClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { getAgeDays, getLifeStageInfo, pendingGiftDay, getGiftPrompt, GIFT_SCHEDULE } from '@/lib/luna-life';
 import { generateWithCascade, GEMINI_MODELS } from '@/lib/ai/provider-registry';
 
@@ -15,8 +15,10 @@ export async function GET(_req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: '로그인 필요' }, { status: 401 });
 
+  const admin = createServiceRoleClient();
+
   // Fetch Luna's life record
-  const { data: life } = await supabase
+  const { data: life } = await admin
     .from('luna_life')
     .select('*')
     .eq('user_id', user.id)
@@ -32,13 +34,13 @@ export async function GET(_req: NextRequest) {
   // Auto-generate pending gift (fire-and-forget style, awaited for correctness)
   const pendingDay = pendingGiftDay(ageDays, life.last_gift_day);
   if (pendingDay !== null) {
-    await generateAndStoreGift(supabase, user.id, pendingDay, info);
-    await supabase
+    await generateAndStoreGift(admin, user.id, pendingDay, info);
+    await admin
       .from('luna_life')
       .update({ last_gift_day: pendingDay, is_deceased: ageDays >= 100 })
       .eq('user_id', user.id);
   } else if (ageDays >= 100 && !life.is_deceased) {
-    await supabase
+    await admin
       .from('luna_life')
       .update({ is_deceased: true })
       .eq('user_id', user.id);
@@ -46,11 +48,11 @@ export async function GET(_req: NextRequest) {
 
   // Fetch gifts + memories
   const [{ data: gifts }, { data: memories }] = await Promise.all([
-    supabase.from('luna_gifts').select('*').eq('user_id', user.id).order('trigger_day', { ascending: true }),
-    supabase.from('luna_memories').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(5),
+    admin.from('luna_gifts').select('*').eq('user_id', user.id).order('trigger_day', { ascending: true }),
+    admin.from('luna_memories').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(5),
   ]);
 
-  const unopened = (gifts ?? []).filter((g) => !g.opened_at).length;
+  const unopened = (gifts ?? []).filter((g: any) => !g.opened_at).length;
 
   return NextResponse.json({
     initialized: true,
@@ -59,7 +61,7 @@ export async function GET(_req: NextRequest) {
     isDeceased: ageDays >= 100,
     stage: info,
     unopenedGifts: unopened,
-    gifts: (gifts ?? []).map((g) => ({
+    gifts: (gifts ?? []).map((g: any) => ({
       id: g.id,
       triggerDay: g.trigger_day,
       giftType: g.gift_type,
@@ -68,7 +70,7 @@ export async function GET(_req: NextRequest) {
       openedAt: g.opened_at,
       createdAt: g.created_at,
     })),
-    recentMemories: (memories ?? []).map((m) => ({
+    recentMemories: (memories ?? []).map((m: any) => ({
       id: m.id,
       title: m.title,
       content: m.content,
@@ -79,12 +81,12 @@ export async function GET(_req: NextRequest) {
 }
 
 async function generateAndStoreGift(
-  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  admin: ReturnType<typeof createServiceRoleClient>,
   userId: string,
   triggerDay: number,
   info: ReturnType<typeof getLifeStageInfo>,
 ) {
-  const { data: memoriesRaw } = await supabase
+  const { data: memoriesRaw } = await admin
     .from('luna_memories')
     .select('*')
     .eq('user_id', userId)
@@ -95,7 +97,7 @@ async function generateAndStoreGift(
     id: m.id, title: m.title, content: m.content, dayNumber: m.day_number, createdAt: m.created_at,
   }));
 
-  const scheduleEntry = GIFT_SCHEDULE.find((g) => g.day === triggerDay);
+  const scheduleEntry = GIFT_SCHEDULE.find((g: { day: number }) => g.day === triggerDay);
   const { system, user: userPrompt } = getGiftPrompt(triggerDay, info, memories);
 
   try {
@@ -112,7 +114,7 @@ async function generateAndStoreGift(
     const content = result.text?.trim() ?? '';
     if (!content) return;
 
-    await supabase.from('luna_gifts').insert({
+    await admin.from('luna_gifts').insert({
       user_id: userId,
       trigger_day: triggerDay,
       gift_type: scheduleEntry?.type ?? 'letter',
