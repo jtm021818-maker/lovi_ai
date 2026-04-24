@@ -6,17 +6,15 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient, createServiceRoleClient } from '@/lib/supabase/server';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
 
 export async function POST(_req: NextRequest) {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: '로그인 필요' }, { status: 401 });
 
-  const admin = createServiceRoleClient();
-
   // Check if already initialized
-  const { data: existing } = await admin
+  const { data: existing } = await supabase
     .from('luna_life')
     .select('birth_date')
     .eq('user_id', user.id)
@@ -27,7 +25,7 @@ export async function POST(_req: NextRequest) {
   }
 
   const now = new Date().toISOString();
-  const { error } = await admin.from('luna_life').insert({
+  const { error } = await supabase.from('luna_life').insert({
     user_id: user.id,
     birth_date: now,
     last_gift_day: 0,
