@@ -19,6 +19,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/chat', label: '상담', image: '/ui/bottom_menu_1.webp' },
   { href: '/xray', label: '엑스레이', image: '/ui/bottom_menu_4.webp' },
   { href: '/room', label: '마음의방', emoji: '🏡' },
+  { href: '/luna-room', label: '루나', emoji: '🌙' },
   // 🆕 v85.4: 상점 — 10~20대 여성 감성 커스텀 SVG (리본 쇼핑백 + 하트 태그 + 스파클)
   { href: '/shop', label: '상점', Icon: ShopIcon },
   { href: '/settings', label: '설정', image: '/ui/bottom_menu_2.webp' },
