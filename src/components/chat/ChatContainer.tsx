@@ -54,6 +54,7 @@ import LunaThinkingDeep from './LunaThinkingDeep';
 import LunaRetrying from './LunaRetrying';
 // 🆕 v41: 친밀도 레벨업 축하 팝업
 import IntimacyLevelUp from '@/components/intimacy/IntimacyLevelUp';
+import IntimacyDeltaHint from '@/components/intimacy/IntimacyDeltaHint';
 // 🆕 v35: 모드별 SOLVE 이벤트 UI
 import ToneSelector from './events/ToneSelector';
 import DraftWorkshop from './events/DraftWorkshop';
@@ -130,7 +131,7 @@ const SCENARIO_LABELS: Record<RelationshipScenario, { icon: string; label: strin
 };
 
 export default function ChatContainer({ sessionId }: ChatContainerProps) {
-  const { messages, isLoading, nudges, stateResult, suggestions, panelData, axesProgress, phaseEvents, currentPhase, phaseProgress, sessionStatus, sessionSummary, sendMessage, pendingEventLock, lunaThinking, understandingLevel, thinkingDeep, retryStatus, intimacyLevelUp, dismissIntimacyLevelUp, intimacyDerived,
+  const { messages, isLoading, nudges, stateResult, suggestions, panelData, axesProgress, phaseEvents, currentPhase, phaseProgress, sessionStatus, sessionSummary, sendMessage, pendingEventLock, lunaThinking, understandingLevel, thinkingDeep, retryStatus, intimacyLevelUp, dismissIntimacyLevelUp, intimacyDerived, intimacyDelta,
     // 🆕 v88: 루나 대화형 "같이 찾기"
     handleBrowseDecision, resolvedBrowsePrompts, browseTypingDot,
   } = useChat(sessionId);
@@ -570,20 +571,28 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
 
           {/* 친밀도 미니 배지 */}
           {intimacyDerived && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-2xl bg-white/60 backdrop-blur-sm border border-white/50 shadow-sm ml-1">
-              <span className="text-base leading-none">{intimacyDerived.levelEmoji}</span>
-              <div className="flex flex-col items-start gap-0.5">
-                <span className="text-[10px] font-bold text-[#795548] leading-none">{intimacyDerived.levelName}</span>
-                <div className="w-14 h-1 bg-white/40 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-700"
-                    style={{
-                      width: `${intimacyDerived.progressPercent}%`,
-                      background: 'linear-gradient(90deg, #c084fc, #f472b6)',
-                    }}
-                  />
+            <div className="relative ml-1">
+              <motion.div
+                animate={intimacyDelta ? {
+                  boxShadow: ['0 0 0px rgba(192,132,252,0)', '0 0 12px rgba(192,132,252,0.6)', '0 0 0px rgba(192,132,252,0)'],
+                } : {}}
+                transition={{ duration: 0.8, ease: 'easeInOut' }}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-2xl bg-white/60 backdrop-blur-sm border border-white/50 shadow-sm"
+              >
+                <span className="text-base leading-none">{intimacyDerived.levelEmoji}</span>
+                <div className="flex flex-col items-start gap-0.5">
+                  <span className="text-[10px] font-bold text-[#795548] leading-none">{intimacyDerived.levelName}</span>
+                  <div className="w-14 h-1 bg-white/40 rounded-full overflow-hidden">
+                    <motion.div
+                      className="h-full rounded-full"
+                      animate={{ width: `${intimacyDerived.progressPercent}%` }}
+                      transition={{ duration: 0.9, ease: 'easeOut' }}
+                      style={{ background: 'linear-gradient(90deg, #c084fc, #f472b6)' }}
+                    />
+                  </div>
                 </div>
-              </div>
+              </motion.div>
+              <IntimacyDeltaHint delta={intimacyDelta} />
             </div>
           )}
 

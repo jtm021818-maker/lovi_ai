@@ -69,6 +69,8 @@ interface UseChatReturn {
     progressPercent: number;
     avgScore: number;
   } | null;
+  /** 친밀도 증가량 (애니메이션 트리거용, 2.5초 후 null) */
+  intimacyDelta: { value: number; key: number } | null;
   // 🆕 v88: 루나 대화형 "같이 찾기" — BrowseBlockBubble 의 decision 버튼 핸들러
   handleBrowseDecision: (
     promptId: string,
@@ -130,6 +132,9 @@ export function useChat(sessionId: string): UseChatReturn {
     progressPercent: number;
     avgScore: number;
   } | null>(null);
+  const [intimacyDelta, setIntimacyDelta] = useState<{ value: number; key: number } | null>(null);
+  const prevAvgScoreRef = useRef<number | null>(null);
+  const deltaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchIntimacy = useCallback(async () => {
     try {
       const res = await fetch('/api/user/intimacy?persona=luna');
@@ -137,6 +142,14 @@ export function useChat(sessionId: string): UseChatReturn {
       const json = await res.json();
       const d = json.derived;
       if (d) {
+        const prev = prevAvgScoreRef.current;
+        if (prev !== null && d.avgScore > prev + 0.01) {
+          const delta = Math.round((d.avgScore - prev) * 10) / 10;
+          if (deltaTimerRef.current) clearTimeout(deltaTimerRef.current);
+          setIntimacyDelta({ value: delta, key: Date.now() });
+          deltaTimerRef.current = setTimeout(() => setIntimacyDelta(null), 2500);
+        }
+        prevAvgScoreRef.current = d.avgScore;
         setIntimacyDerived({
           level: d.level,
           levelEmoji: d.levelEmoji,
@@ -903,6 +916,7 @@ export function useChat(sessionId: string): UseChatReturn {
     retryStatus,
     // 헤더 배지용 친밀도 정보
     intimacyDerived,
+    intimacyDelta,
     // 🆕 v41: 친밀도 레벨업 팝업 상태
     intimacyLevelUp,
     dismissIntimacyLevelUp: () => setIntimacyLevelUp(null),
