@@ -9,7 +9,6 @@
  *   - sources 항상 하단 + 접힌 상태
  */
 
-import { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { PhaseEvent, DateSpotRecommendationData, DateSpotSearchingData, DateSpot } from '@/types/engine.types';
 import LunaSearching from './LunaSearching';
@@ -52,7 +51,6 @@ function getTypeColor(type: string): string {
 }
 
 function ResultCard({ data }: { data: DateSpotRecommendationData }) {
-  const [showSources, setShowSources] = useState(false);
   const hasSpots = data.spots && data.spots.length > 0;
 
   return (
@@ -104,36 +102,6 @@ function ResultCard({ data }: { data: DateSpotRecommendationData }) {
         </div>
       )}
 
-      {/* 출처 — 하단 + 접힌 상태 */}
-      {data.sources && data.sources.length > 0 && (
-        <div className="px-4 pb-3">
-          <button
-            onClick={() => setShowSources((v) => !v)}
-            className="text-[10px] text-orange-600/80 hover:text-orange-700 transition-colors"
-          >
-            {showSources ? '▼' : '▶'} 내가 훑어본 것들 ({data.sources.length})
-          </button>
-          {showSources && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              className="mt-1 flex flex-col gap-0.5"
-            >
-              {data.sources.slice(0, 5).map((uri, i) => (
-                <a
-                  key={i}
-                  href={uri}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[10px] text-orange-600/80 hover:text-orange-800 truncate"
-                >
-                  · {uri.replace(/^https?:\/\//, '').slice(0, 50)}
-                </a>
-              ))}
-            </motion.div>
-          )}
-        </div>
-      )}
 
       {/* Google Search Suggestions (하위 호환 — Brave 는 필요 없음) */}
       {data.renderedContent && (

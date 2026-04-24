@@ -10,7 +10,6 @@
  * 디자인: 체리~핑크 gradient, 카테고리 배지, 2026 트렌드 배지
  */
 
-import { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { PhaseEvent, GiftRecommendationData, GiftSearchingData, GiftCard } from '@/types/engine.types';
 import LunaSearching from './LunaSearching';
@@ -55,7 +54,6 @@ function getCategoryColor(cat: string): string {
 }
 
 function ResultCard({ data }: { data: GiftRecommendationData }) {
-  const [showSources, setShowSources] = useState(false);
   const has = data.gifts && data.gifts.length > 0;
 
   return (
@@ -104,36 +102,6 @@ function ResultCard({ data }: { data: GiftRecommendationData }) {
         </div>
       )}
 
-      {/* 출처 — 접힌 상태 기본 */}
-      {data.sources && data.sources.length > 0 && (
-        <div className="px-4 pb-3">
-          <button
-            onClick={() => setShowSources((v) => !v)}
-            className="text-[10px] text-rose-500/70 hover:text-rose-700 transition-colors"
-          >
-            {showSources ? '▼' : '▶'} 내가 훑어본 것들 ({data.sources.length})
-          </button>
-          {showSources && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              className="mt-1 flex flex-col gap-0.5"
-            >
-              {data.sources.slice(0, 5).map((uri, i) => (
-                <a
-                  key={i}
-                  href={uri}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[10px] text-rose-500/80 hover:text-rose-700 truncate"
-                >
-                  · {uri.replace(/^https?:\/\//, '').slice(0, 50)}
-                </a>
-              ))}
-            </motion.div>
-          )}
-        </div>
-      )}
     </motion.div>
   );
 }
