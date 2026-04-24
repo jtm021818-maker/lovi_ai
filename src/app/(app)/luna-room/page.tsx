@@ -63,7 +63,7 @@ function LunaInitScreen({ onInit }: { onInit: () => void }) {
           />
           <div className="w-28 h-28 rounded-full overflow-hidden border-2 border-violet-300/50 shadow-xl">
             <img
-              src="/char_img/luna_1_event.webp"
+              src="/luna_sleep.png"
               alt="루나"
               className="w-full h-full object-cover"
               style={{ filter: 'brightness(0.9) saturate(0.7)' }}
