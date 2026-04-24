@@ -248,6 +248,9 @@ export function detectTurnTriggers(ctx: TurnDetectionContext): IntimacyTriggerTy
     triggers.push('short_repeat');
   }
 
+  // 기본 채팅 턴 — 메시지가 있으면 항상 소폭 증가
+  triggers.push('chat_turn');
+
   return triggers;
 }
 

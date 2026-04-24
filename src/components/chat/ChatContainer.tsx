@@ -130,7 +130,7 @@ const SCENARIO_LABELS: Record<RelationshipScenario, { icon: string; label: strin
 };
 
 export default function ChatContainer({ sessionId }: ChatContainerProps) {
-  const { messages, isLoading, nudges, stateResult, suggestions, panelData, axesProgress, phaseEvents, currentPhase, phaseProgress, sessionStatus, sessionSummary, sendMessage, pendingEventLock, lunaThinking, understandingLevel, thinkingDeep, retryStatus, intimacyLevelUp, dismissIntimacyLevelUp,
+  const { messages, isLoading, nudges, stateResult, suggestions, panelData, axesProgress, phaseEvents, currentPhase, phaseProgress, sessionStatus, sessionSummary, sendMessage, pendingEventLock, lunaThinking, understandingLevel, thinkingDeep, retryStatus, intimacyLevelUp, dismissIntimacyLevelUp, intimacyDerived,
     // 🆕 v88: 루나 대화형 "같이 찾기"
     handleBrowseDecision, resolvedBrowsePrompts, browseTypingDot,
   } = useChat(sessionId);
@@ -567,6 +567,25 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
             </h1>
             <span className="text-2xl drop-shadow-sm">{activePersona === 'tarot' ? '🔮' : '☕️'}</span>
           </div>
+
+          {/* 친밀도 미니 배지 */}
+          {intimacyDerived && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-2xl bg-white/60 backdrop-blur-sm border border-white/50 shadow-sm ml-1">
+              <span className="text-base leading-none">{intimacyDerived.levelEmoji}</span>
+              <div className="flex flex-col items-start gap-0.5">
+                <span className="text-[10px] font-bold text-[#795548] leading-none">{intimacyDerived.levelName}</span>
+                <div className="w-14 h-1 bg-white/40 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{
+                      width: `${intimacyDerived.progressPercent}%`,
+                      background: 'linear-gradient(90deg, #c084fc, #f472b6)',
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
         </div>
 

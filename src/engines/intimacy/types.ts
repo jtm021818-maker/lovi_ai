@@ -105,7 +105,8 @@ export type IntimacyTriggerType =
   | 'consecutive_week'     // 25. 7일 연속
   | 'luna_mistake_forgive' // 26. 루나 실수 용서
   | 'relationship_update'  // 27. 관계 변화 긍정 보고
-  | 'anniversary_visit';   // 28. 기념일 방문
+  | 'anniversary_visit'    // 28. 기념일 방문
+  | 'chat_turn';           // 29. 기본 채팅 턴 (항상 소폭 증가)
 
 /** 개별 트리거 이벤트 */
 export interface IntimacyTrigger {

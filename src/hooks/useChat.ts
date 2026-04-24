@@ -60,6 +60,15 @@ interface UseChatReturn {
   } | null;
   /** 친밀도 레벨업 팝업을 닫음 */
   dismissIntimacyLevelUp: () => void;
+  /** 헤더 배지용 친밀도 파생 정보 */
+  intimacyDerived: {
+    level: number;
+    levelEmoji: string;
+    levelName: string;
+    levelLabel: string;
+    progressPercent: number;
+    avgScore: number;
+  } | null;
   // 🆕 v88: 루나 대화형 "같이 찾기" — BrowseBlockBubble 의 decision 버튼 핸들러
   handleBrowseDecision: (
     promptId: string,
@@ -112,6 +121,33 @@ export function useChat(sessionId: string): UseChatReturn {
     newLevel: number;
     newLevelName: string;
   } | null>(null);
+  // 헤더 배지용 친밀도 파생 정보
+  const [intimacyDerived, setIntimacyDerived] = useState<{
+    level: number;
+    levelEmoji: string;
+    levelName: string;
+    levelLabel: string;
+    progressPercent: number;
+    avgScore: number;
+  } | null>(null);
+  const fetchIntimacy = useCallback(async () => {
+    try {
+      const res = await fetch('/api/user/intimacy?persona=luna');
+      if (!res.ok) return;
+      const json = await res.json();
+      const d = json.derived;
+      if (d) {
+        setIntimacyDerived({
+          level: d.level,
+          levelEmoji: d.levelEmoji,
+          levelName: d.levelName,
+          levelLabel: d.levelLabel,
+          progressPercent: d.progressPercent,
+          avgScore: d.avgScore,
+        });
+      }
+    } catch { /* silent */ }
+  }, []);
   const [understandingLevel, setUnderstandingLevel] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   // 🆕 v20: 턴 내 이벤트 중복 방지 (state 대신 ref로 — React 배칭 이슈 방지)
@@ -248,6 +284,9 @@ export function useChat(sessionId: string): UseChatReturn {
 
     return () => { cancelled = true; };
   }, [sessionId]);
+
+  // 친밀도 초기 로드
+  useEffect(() => { fetchIntimacy(); }, [fetchIntimacy]);
 
   const sendMessage = useCallback(async (content: string, meta?: SuggestionMeta) => {
     // 🆕 ACE v4: 이벤트 선택으로 호출된 경우 잠금 해제
@@ -467,6 +506,8 @@ export function useChat(sessionId: string): UseChatReturn {
               }
 
               case 'done':
+                // 친밀도 최신 상태 갱신 (DB 저장 후 fetch)
+                setTimeout(() => fetchIntimacy(), 800);
                 break;
 
               case 'suggestions':
@@ -490,6 +531,8 @@ export function useChat(sessionId: string): UseChatReturn {
                   setBrowseSessionMeta(d.meta);
                   setResolvedBrowsePrompts(new Set());
                   browseQueue.reset();
+                  // 재시도 시 이전 세션의 browse_block 메시지 제거 (중복 방지)
+                  setMessages((prev) => prev.filter((m) => (m as any).renderAs !== 'browse_block'));
                   console.log(`[useChat:v88] 🔍 BROWSE_STREAM_START sessionId=${d.sessionId}`);
                   break;
                 }
@@ -858,6 +901,8 @@ export function useChat(sessionId: string): UseChatReturn {
     thinkingDeep,
     // 🆕 v48: 캐스케이드 재시도 상태
     retryStatus,
+    // 헤더 배지용 친밀도 정보
+    intimacyDerived,
     // 🆕 v41: 친밀도 레벨업 팝업 상태
     intimacyLevelUp,
     dismissIntimacyLevelUp: () => setIntimacyLevelUp(null),

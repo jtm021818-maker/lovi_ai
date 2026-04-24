@@ -731,15 +731,6 @@ export class HumanLikeEngine {
         currentState: personaState,
       });
 
-      if (detected.length === 0) {
-        return {
-          detectedTriggers: [],
-          delta: { trust: 0, openness: 0, bond: 0, respect: 0 },
-          newMilestones: [],
-          levelChanged: false,
-        };
-      }
-
       const result = processTriggers(personaState, detected, persona);
       intimacy[persona] = result.after;
 

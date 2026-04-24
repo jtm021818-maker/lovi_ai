@@ -138,6 +138,9 @@ export const TRIGGER_WEIGHTS: Record<IntimacyTriggerType, Omit<IntimacyTrigger, 
   luna_mistake_forgive:{ trust: 4.0 },                     // 총 ~4.0
   relationship_update: { bond: 4.0, respect: 2.0 },        // 총 ~6.0
   anniversary_visit:   { bond: 2.5 },                      // 총 ~2.5
+
+  // 🌱 기본 턴 증가 (매 채팅마다 미세 누적)
+  chat_turn:           { bond: 0.08, trust: 0.05, openness: 0.05, respect: 0.02 }, // 총 ~0.2
 };
 
 // ============================================================
