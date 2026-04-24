@@ -66,9 +66,14 @@ export default function RoleplayMode({ initial, onComplete, onTurn }: RoleplayMo
       : [{ role: 'npc', content: scenario.opening.dialogue, spriteFrame: scenario.opening.spriteFrame, narration: scenario.opening.narration ?? undefined }]
   );
   const [choices, setChoices] = useState<string[]>([]);
+  const [pendingChoices, setPendingChoices] = useState<string[]>([]);
   const [customInput, setCustomInput] = useState('');
   const [customMode, setCustomMode] = useState(false);
   const [loading, setLoading] = useState(false);
+  // 가장 최근 NPC 턴 인덱스 (이것만 typing 애니 적용)
+  const [latestNpcIdx, setLatestNpcIdx] = useState<number>(
+    initial.history.length > 0 ? -1 : 0
+  );
   // 🆕 v82.7: 실시간 팝업 + 탭 일시정지 + 히스토리 누적
   const [coachFeedback, setCoachFeedback] = useState<{ feedback: string; tone: string } | null>(null);
   const [coachPaused, setCoachPaused] = useState(false);
@@ -117,8 +122,18 @@ export default function RoleplayMode({ initial, onComplete, onTurn }: RoleplayMo
         ]);
         return;
       }
-      setHistory([...nh, { role: 'npc', content: result.dialogue, spriteFrame: result.spriteFrame, narration: result.narration }]);
-      setChoices(result.choices);
+      const newHistory = [...nh, { role: 'npc' as const, content: result.dialogue, spriteFrame: result.spriteFrame, narration: result.narration }];
+      setHistory(newHistory);
+      setLatestNpcIdx(nh.length); // nh.length = 새 NPC 턴 인덱스
+
+      // NPC 버블 typing 애니 완료 후 선택지 등장 (버블 수 × 1.4s + 0.5s 여유)
+      const npcBubbleCount = result.dialogue.split('|||').filter(Boolean).length;
+      const choiceDelay = npcBubbleCount * 1400 + 500;
+      setPendingChoices(result.choices);
+      setTimeout(() => {
+        setChoices(result.choices);
+        setPendingChoices([]);
+      }, choiceDelay);
 
       // FX 연동
       if (isFxEnabled()) {
@@ -185,7 +200,7 @@ export default function RoleplayMode({ initial, onComplete, onTurn }: RoleplayMo
           let userTurnCount = 0;
           const nodes: React.ReactNode[] = [];
           history.forEach((turn, idx) => {
-            nodes.push(<TurnBubble key={`turn-${idx}`} turn={turn} scenario={scenario} badge={badge} />);
+            nodes.push(<TurnBubble key={`turn-${idx}`} turn={turn} scenario={scenario} badge={badge} isNew={idx === latestNpcIdx} />);
             if (turn.role === 'user') {
               userTurnCount += 1;
               const coachEntry = coachHistory.find((c) => c.afterUserTurn === userTurnCount);
@@ -344,18 +359,17 @@ export default function RoleplayMode({ initial, onComplete, onTurn }: RoleplayMo
 
 // ─────────────────────────────────────────────────────────
 
-function TurnBubble({ turn, scenario, badge }: { turn: HistoryTurn; scenario: RoleplayState['scenario']; badge: string }) {
+function TurnBubble({ turn, scenario, badge, isNew = false }: { turn: HistoryTurn; scenario: RoleplayState['scenario']; badge: string; isNew?: boolean }) {
   if (turn.role === 'user') {
-    // 🆕 v82.1: 유저 답장도 ||| 으로 여러 버블 가능
     const userBubbles = turn.content.split('|||').map((s) => s.trim()).filter(Boolean);
     return (
       <div className="space-y-1">
         {userBubbles.map((t, idx) => (
           <motion.div
             key={idx}
-            initial={{ opacity: 0, x: 10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: idx * 0.35 }}
+            initial={{ opacity: 0, x: 20, scale: 0.95 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            transition={{ delay: idx * 0.25, type: 'spring', stiffness: 340, damping: 26 }}
             className="flex justify-end"
           >
             <div className="max-w-[80%] px-3 py-2 rounded-2xl rounded-tr-sm bg-[#B56576] text-white text-[13px] leading-relaxed shadow-sm">
@@ -367,52 +381,116 @@ function TurnBubble({ turn, scenario, badge }: { turn: HistoryTurn; scenario: Ro
     );
   }
 
-  // 🆕 v82.1: NPC 대사도 ||| 분리 — 첫 버블만 아바타/이름, 나머지는 들여쓰기
   const npcBubbles = turn.content.split('|||').map((s) => s.trim()).filter(Boolean);
 
   return (
-    <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-1">
-      {/* Narration (italic, 회색) */}
+    <div className="space-y-1">
+      {/* Narration */}
       {turn.narration && (
-        <div className="text-[11px] text-[#6D4C41]/80 italic px-1 ml-10">
+        <motion.div
+          initial={isNew ? { opacity: 0, y: 4 } : false}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="text-[11px] text-[#6D4C41]/80 italic px-1 ml-10"
+        >
           {turn.narration}
-        </div>
+        </motion.div>
       )}
       {npcBubbles.map((t, idx) => (
-        <motion.div
+        <NpcBubble
           key={idx}
-          initial={{ opacity: 0, x: -10, y: 4 }}
-          animate={{ opacity: 1, x: 0, y: 0 }}
-          transition={{ delay: idx * 0.45, type: 'spring', stiffness: 320, damping: 26 }}
-          className="flex items-end gap-2"
-        >
-          {idx === 0 ? (
-            <div className="relative shrink-0">
-              <div className="w-8 h-8 rounded-full bg-[#F4EFE6] border border-pink-300 overflow-hidden">
-                <img src="/luna_fox_transparent.webp" alt="루나" className="w-full h-full object-cover" />
-              </div>
-              <motion.div
-                layoutId="luna-role-badge"
-                className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-full bg-pink-500 text-white text-[8px] font-black shadow-sm"
-              >
-                {badge}
-              </motion.div>
-            </div>
-          ) : (
-            <div className="w-8 shrink-0" aria-hidden />
-          )}
-          <div>
-            {idx === 0 && (
-              <motion.div layoutId="luna-name-tag" className="text-[10px] font-bold text-pink-600 ml-1 mb-0.5">
-                {scenario.role.name}
-              </motion.div>
-            )}
-            <div className="max-w-[85%] px-3 py-2 rounded-2xl rounded-tl-sm bg-white border border-pink-200 text-[13px] text-[#4E342E] leading-relaxed shadow-sm">
-              {t}
-            </div>
-          </div>
-        </motion.div>
+          text={t}
+          bubbleIdx={idx}
+          isNew={isNew}
+          badge={badge}
+          scenario={scenario}
+          showAvatar={idx === 0}
+        />
       ))}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+
+function NpcBubble({
+  text, bubbleIdx, isNew, badge, scenario, showAvatar,
+}: {
+  text: string;
+  bubbleIdx: number;
+  isNew: boolean;
+  badge: string;
+  scenario: RoleplayState['scenario'];
+  showAvatar: boolean;
+}) {
+  // isNew: dots → text; else: instant
+  const DOTS_MS = 900;
+  const STAGGER_MS = 1400;
+  const [showText, setShowText] = useState(!isNew);
+
+  useEffect(() => {
+    if (!isNew) return;
+    const timer = setTimeout(() => setShowText(true), bubbleIdx * STAGGER_MS + DOTS_MS);
+    return () => clearTimeout(timer);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <motion.div
+      initial={isNew ? { opacity: 0, x: -12, y: 6 } : false}
+      animate={{ opacity: 1, x: 0, y: 0 }}
+      transition={{ delay: isNew ? bubbleIdx * (STAGGER_MS / 1000) : 0, type: 'spring', stiffness: 300, damping: 24 }}
+      className="flex items-end gap-2"
+    >
+      {showAvatar ? (
+        <div className="relative shrink-0">
+          <div className="w-8 h-8 rounded-full bg-[#F4EFE6] border border-pink-300 overflow-hidden">
+            <img src="/luna_fox_transparent.webp" alt="루나" className="w-full h-full object-cover" />
+          </div>
+          <div className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-full bg-pink-500 text-white text-[8px] font-black shadow-sm">
+            {badge}
+          </div>
+        </div>
+      ) : (
+        <div className="w-8 shrink-0" aria-hidden />
+      )}
+      <div>
+        {showAvatar && (
+          <div className="text-[10px] font-bold text-pink-600 ml-1 mb-0.5">
+            {scenario.role.name}
+          </div>
+        )}
+        <div className="max-w-[85%] px-3 py-2 rounded-2xl rounded-tl-sm bg-white border border-pink-200 text-[13px] text-[#4E342E] leading-relaxed shadow-sm min-w-[48px] min-h-[36px] flex items-center">
+          <AnimatePresence mode="wait">
+            {!showText ? (
+              <motion.span
+                key="dots"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex gap-1 py-0.5"
+              >
+                {[0, 1, 2].map((i) => (
+                  <motion.span
+                    key={i}
+                    className="w-1.5 h-1.5 rounded-full bg-pink-400 inline-block"
+                    animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
+                    transition={{ duration: 0.7, repeat: Infinity, delay: i * 0.18, ease: 'easeInOut' }}
+                  />
+                ))}
+              </motion.span>
+            ) : (
+              <motion.span
+                key="text"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.25 }}
+              >
+                {text}
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
     </motion.div>
   );
 }

@@ -36,7 +36,6 @@ import MovieRecommendation from './events/MovieRecommendation';
 import BrowseTogether from './events/BrowseTogether';
 import LunaStrategy from './events/LunaStrategy';
 // 🆕 v81: BRIDGE 몰입 모드
-import ModeSelector from '@/components/modes/ModeSelector';
 import LunaStrategyDecision from '@/components/modes/LunaStrategyDecision';
 import ToneMode from '@/components/modes/tone/ToneMode';
 import IdeaMode from '@/components/modes/idea/IdeaMode';
@@ -456,11 +455,11 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
 
         if (isOverride) {
           return (
-            <ModeSelector
+            <LunaStrategy
               key={`event-${idx}-manual`}
-              opener={strategyData.opener}
-              situationSummary={strategyData.situationSummary}
-              onSelect={(mode) => handleModeEnter(mode, strategyData)}
+              event={event}
+              onSelect={handleSuggestionSelect}
+              disabled={isLoading}
             />
           );
         }

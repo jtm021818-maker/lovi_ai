@@ -44,7 +44,13 @@ export default function MessageDraft({ event, onSelect, disabled }: MessageDraft
       
       <div className="space-y-4 mb-4">
         {data.drafts.map((draft, idx) => (
-          <div key={idx} className="bg-gray-50 rounded-xl p-3 border border-gray-100 relative group">
+          <motion.div
+            key={idx}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 + idx * 0.3, type: 'spring', stiffness: 300, damping: 26 }}
+            className="bg-gray-50 rounded-xl p-3 border border-gray-100 relative group"
+          >
             <h5 className="text-[12px] font-bold text-pink-600 mb-2">{draft.intent}</h5>
             
             {/* 카카오톡 말풍선 스타일 */}
@@ -74,7 +80,7 @@ export default function MessageDraft({ event, onSelect, disabled }: MessageDraft
                 </>
               )}
             </button>
-          </div>
+          </motion.div>
         ))}
       </div>
 
