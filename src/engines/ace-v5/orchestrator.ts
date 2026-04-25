@@ -32,20 +32,33 @@ import type { AceV5Input, AceV5Output } from './types';
 // ============================================================
 
 /**
- * 좌뇌 complexity 와 위기/재분석 여부로 Gemini 3 thinking_level 결정.
- * 대부분 턴 'minimal'/'low' — 비용/속도 최적화.
- * 고복잡도 턴만 'medium'/'high' — 정확도 우선.
+ * 🆕 v90: 우뇌(ACE v5) thinkingLevel — 연애 상담 카톡 앱 특성에 맞게 재조정
+ *
+ * 우뇌의 역할 = 좌뇌가 만든 draft 를 카톡 스타일로 표현/연출 변환
+ *  (DELAY/TYPING/STICKER/FX 태그 부착, 말투 다듬기)
+ *  → reasoning 깊이 거의 불필요. 좌뇌가 이미 7D 분석 + 판단 + draft 다 함.
+ *
+ * 기존 분포의 문제:
+ *  - complexity 3 (대부분 턴) → 'low' = 매 턴 +0.5~1.5s reasoning 낭비
+ *  - complexity 5/위기/재분석 → 'high' = +3~8s 폭탄
+ *  - 우뇌 reasoning 강하면 좌뇌 draft 재의심 → REQUEST_REANALYSIS 빈발 → 더 느려짐
+ *
+ * v90 분포:
+ *  - 평소(complexity 1~4) → 'minimal' (reasoning 사실상 없음, 빠름)
+ *  - 위기/재분석/극도 복잡(c=5) → 'low' (만약을 위한 약간의 reasoning)
+ *
+ * 절감: 평균 1-2초/턴, 최악 3-7초. 품질 영향 거의 0 (좌뇌가 분석 본업).
  */
 function pickThinkingLevel(
   leftBrain: any,
   isReanalysis: boolean,
 ): 'minimal' | 'low' | 'medium' | 'high' {
-  if (isReanalysis) return 'high';
-  if (leftBrain?.derived_signals?.crisis_risk) return 'high';
+  // 위기 / 재분석 / 극도 복잡한 턴만 약간의 reasoning
+  if (isReanalysis) return 'low';
+  if (leftBrain?.derived_signals?.crisis_risk) return 'low';
   const complexity = leftBrain?.complexity ?? 3;
-  if (complexity >= 5) return 'high';
-  if (complexity === 4) return 'medium';
-  if (complexity === 3) return 'low';
+  if (complexity >= 5) return 'low';
+  // 그 외 모든 표현 변환 작업은 minimal — 좌뇌가 분석 끝냄
   return 'minimal';
 }
 
@@ -367,8 +380,9 @@ async function streamVoiceOnce(params: SingleCallParams, logCollector?: LogColle
     ? ANTHROPIC_MODELS.SONNET_4_6
     : GEMINI_MODELS.FLASH_3; // 🆕 v76: Gemini 3 Flash Preview (reasoning native)
 
-  // 🆕 v76: Gemini 3 thinking_level — complexity 기반 (caller 가 전달) 또는 기본 'low'
-  const thinkingLevel = params.thinkingLevel ?? 'low';
+  // 🆕 v90: Gemini 3 thinking_level — caller(pickThinkingLevel) 가 전달, fallback 도 'minimal'
+  //   기존 'low' fallback 은 인자 누락 시 매 턴 +0.5~1.5s reasoning 비용 발생 → 'minimal' 안전 기본값
+  const thinkingLevel = params.thinkingLevel ?? 'minimal';
 
   // 🆕 v64: 통일 디버그 로거 (engine + model + 프롬프트 + 유저 메시지)
   logEnginePrompt({
