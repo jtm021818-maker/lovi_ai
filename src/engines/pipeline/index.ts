@@ -67,6 +67,10 @@ import type { DiagnosisResult, DiagnosisAxesState } from '@/engines/relationship
 import { generateDiagnosisPrompt } from '@/engines/relationship-diagnosis/diagnosis-prompts';
 import { buildTurnPrompt, type TurnPromptContext } from '@/engines/tarot/prompts/turn-prompts';
 import { detectScenario as detectTarotScenario } from '@/engines/tarot/consultation/intake';
+// 🆕 v89: dynamic import → static import (모듈 해석 + Promise 오버헤드 제거, 매 턴 ~30~80ms 절감)
+import { loadScratchpad, saveScratchpad, updateFromTurn } from '@/engines/working-memory';
+import { shouldTriggerReflection, performReflection } from '@/engines/consolidation/reflection';
+import { applyIntimacyDeltaFromSignals } from '@/engines/intimacy/v77-core';
 
 /** 위기 대응 메시지 */
 const CRISIS_MESSAGE = `지금 많이 힘드시죠. 혼자가 아니에요. 💙
@@ -186,6 +190,96 @@ function computeLunaThinking(
   }
 }
 
+// 🆕 v89: 메타 태그 패턴 (hlrePost가 파싱할 것들 — 표시용 burst 에서 제거)
+const METADATA_TAG_RE_V89 = /\[(?:SITUATION_READ|LUNA_THOUGHT|PHASE_SIGNAL|SITUATION_CLEAR|MIND_READ_READY|STORY_READY|STRATEGY_READY|ACTION_PLAN|WARM_WRAP|TAROT_READY|PATTERN_MIRROR_READY|THINKING_DEEP|TONE_SELECT|DRAFT_CARD|ROLEPLAY_FEEDBACK|PANEL_REPORT|IDEA_REFINE|REQUEST_REANALYSIS|LEFT_BRAIN_HINT|RP_IN|RP_OUT|OPERATION_COMPLETE|SONG_READY|DATE_SPOT_READY|GIFT_READY|ACTIVITY_READY|ANNIVERSARY_READY|MOVIE_READY|BROWSE_READY)(?::[^\]]*)?\]/gi;
+
+// 🆕 v89: FX 태그 → 클라이언트 target 매핑
+const FX_TARGETS_V89: Record<string, 'screen' | 'bubble' | 'text' | 'avatar' | 'particle' | 'bg'> = {
+  'shake.soft': 'screen', 'shake.hard': 'screen',
+  'flash.white': 'screen', 'flash.pink': 'screen',
+  'tint.sepia': 'screen', 'tint.cool': 'screen',
+  'rain.sakura': 'bg', 'rain.tears': 'particle',
+  'bubble.wobble': 'bubble', 'bubble.bounce': 'bubble', 'bubble.deflate': 'bubble',
+  'bubble.glow': 'bubble', 'bubble.popIn': 'bubble', 'bubble.shimmer': 'bubble', 'bubble.burst': 'bubble',
+  'text.wave': 'text', 'text.shake': 'text', 'text.pulse': 'text',
+  'text.rainbow': 'text', 'text.scramble': 'text',
+  'avatar.bounce': 'avatar', 'avatar.shake': 'avatar', 'avatar.heartBeat': 'avatar',
+  'particle.hearts': 'particle', 'particle.sparkles': 'particle',
+  'particle.tears': 'particle', 'particle.fire': 'particle',
+  'particle.confetti': 'particle', 'particle.stars': 'particle',
+};
+
+const DELAY_MAP_V89: Record<string, [number, number]> = {
+  fast: [200, 500],   // 200~700ms
+  med:  [1000, 1500], // 1000~2500ms
+  slow: [3000, 3000], // 3000~6000ms
+};
+
+/**
+ * 🆕 v89: 단일 burst 파싱 — 순수 함수, 부작용 없음.
+ * incremental 처리를 위해 v79 inline parser 로직을 추출한 것.
+ *
+ * @param rawBurst 원본 burst 텍스트 (||| 로 분리된 한 조각)
+ * @param isFirstBurst 첫 burst 여부 (delay 기본값 결정 — 100ms vs 600ms)
+ */
+function parseBurstV89(rawBurst: string, isFirstBurst: boolean): {
+  delayMs: number;
+  fxIds: string[];
+  burstText: string;        // 표시용 (모든 태그 stripped)
+  sticker: string | null;
+  bufferSnippet: string;    // fullText 누적용 (메타 태그 보존, DELAY/TYPING/STICKER/FX/SILENCE 만 제거)
+} {
+  let burstText = rawBurst;
+  const burstOriginalForBuffer = burstText;
+
+  // [DELAY:fast|med|slow] 추출 — 유연한 매칭 (AI 변형 대응)
+  const delayMatch = burstText.match(/\[DELAY(?:[:\s]*(?:fast|med|slow))?\s*\]/i);
+  let delayMs = isFirstBurst ? 100 : 600;
+  if (delayMatch) {
+    const speedMatch = delayMatch[0].match(/fast|med|slow/i);
+    const speed = speedMatch ? speedMatch[0].toLowerCase() : 'med';
+    const [base, range] = DELAY_MAP_V89[speed];
+    delayMs = base + Math.floor(Math.random() * range);
+    burstText = burstText.replace(delayMatch[0], '');
+  }
+
+  burstText = burstText.replace(/\[TYPING\]/gi, '');
+
+  const stickerMatch = burstText.match(/\[STICKER:([a-z_]+)\]/i);
+  const sticker = stickerMatch ? stickerMatch[1].toLowerCase() : null;
+  if (stickerMatch) burstText = burstText.replace(stickerMatch[0], '');
+
+  // FX 태그 추출 (범위형 + 단일형)
+  const fxIds: string[] = [];
+  burstText = burstText.replace(/\[FX:([a-z_]+\.[a-z_]+)\]([\s\S]*?)\[\/FX\]/gi, (_f, id: string, inner: string) => {
+    fxIds.push(id.toLowerCase());
+    return inner;
+  });
+  burstText = burstText.replace(/\[FX:([a-z_]+\.[a-z_]+)\]/gi, (_f, id: string) => {
+    fxIds.push(id.toLowerCase());
+    return '';
+  });
+
+  burstText = burstText.replace(METADATA_TAG_RE_V89, '');
+  burstText = burstText
+    .replace(/\[(?:DELAY|TYPING|SILENCE|STICKER)(?::[^\]]*)?\]/gi, '')
+    .replace(/\[(?:DELAY|TYPING|SILENCE|STICKER)[^\]\n]*/gi, '')
+    .trim();
+
+  // bufferSnippet: 메타 태그 보존, DELAY/TYPING/STICKER/SILENCE/FX 만 제거
+  const bufferSnippet = burstOriginalForBuffer
+    .replace(/\[DELAY(?::[^\]]*)?\]/gi, '')
+    .replace(/\[DELAY[^\]\n]*/gi, '')
+    .replace(/\[TYPING\]/gi, '')
+    .replace(/\[STICKER:[a-z_]+\]/gi, '')
+    .replace(/\[SILENCE\]/gi, '')
+    .replace(/\[FX:[a-z_]+\.[a-z_]+\][\s\S]*?\[\/FX\]/gi, (_m) => _m.replace(/\[\/?FX[^\]]*\]/gi, ''))
+    .replace(/\[FX:[a-z_]+\.[a-z_]+\]/gi, '')
+    .replace(/\[\/FX\]/gi, '');
+
+  return { delayMs, fxIds, burstText, sticker, bufferSnippet };
+}
+
 export class CounselingPipeline {
   private stateEngine = StateAnalysisEngine.getInstance();
   private strategyEngine = StrategySelectionEngine.getInstance();
@@ -272,6 +366,7 @@ export class CounselingPipeline {
   > {
     const logCollector = new LogCollector();
     // 🆕 v31: Step 1 + Step 4를 병렬 실행 (상태분석과 RAG는 독립적 — ~200~500ms 절약)
+    // 🆕 v89: WM 로드도 같이 병렬 — 기존엔 dual-brain 직전에 직렬 로드(~50~100ms 블로킹)
     const tPipeStart = Date.now();
     resetCascadeLog(); // 🆕 v46: 이번 턴의 캐스케이드 로그 초기화
     const ragPromise = ragContext
@@ -280,11 +375,48 @@ export class CounselingPipeline {
           .catch(() => '')
       : Promise.resolve('');
 
-    const [stateResult, ragText] = await Promise.all([
+    // 🆕 v89: WM 사전 로드 — luna + dual-brain 모드일 때만 (다른 모드는 사용 안 함)
+    //   parallel 로드라 cold-start 비용 무시 가능, 잘못 로드해도 사용 안 하면 그만
+    const willUseDualBrain = DUAL_BRAIN_CONFIG.enabled && persona === 'luna';
+    const wmPromise = (willUseDualBrain && ragContext?.supabase && ragContext?.sessionId)
+      ? loadScratchpad(ragContext.supabase, ragContext.sessionId, ragContext.userId).catch((e: any) => {
+          console.warn('[Pipeline:v89] WM hoist load 실패 (무시):', e?.message);
+          return null;
+        })
+      : Promise.resolve(null);
+
+    // 🆕 v89: Limbic + ACC 도 파이프라인 시작에서 hoist (state+RAG+WM과 병렬)
+    //   기존: 메인 응답 직전에 직렬 블로킹 (~300~500ms — ACC 가 LLM 호출함)
+    //   신규: Promise.all 합류 → 추가 지연 0ms (다른 LLM 호출과 동시 실행)
+    //   주의: limbicOnTurn 후처리(stateResult.riskLevel 의존) 만 원래 위치 유지
+    const limbicAccPromise = ((LIMBIC_CONFIG.enabled || ACC_CONFIG.enabled) && ragContext?.userId && ragContext?.supabase)
+      ? Promise.all([
+          LIMBIC_CONFIG.enabled
+            ? limbicSessionStart({
+                supabase: ragContext.supabase,
+                userId: ragContext.userId,
+                isFirstMeeting: turnCount === 0,
+                daysSinceLastSession: 0,
+                totalSessions: turnCount,
+              }).catch((e: any) => { console.warn('[Pipeline:v89] Limbic hoist 실패:', e?.message); return null; })
+            : Promise.resolve(null),
+          ACC_CONFIG.enabled
+            ? analyzeAcc({
+                supabase: ragContext.supabase,
+                user_id: ragContext.userId,
+                user_utterance: userMessage,
+              }, logCollector).catch((e: any) => { console.warn('[Pipeline:v89] ACC hoist 실패:', e?.message); return null; })
+            : Promise.resolve(null),
+        ])
+      : Promise.resolve([null, null] as [any, any]);
+
+    const [stateResult, ragText, hoistedWorkingMemory, [hoistedLimbicResult, hoistedAccResult]] = await Promise.all([
       this.stateEngine.analyze(userMessage, chatHistory, context),
       ragPromise,
+      wmPromise,
+      limbicAccPromise,
     ]);
-    console.log(`[Perf] ⏱️ state+RAG 병렬: ${Date.now() - tPipeStart}ms`);
+    console.log(`[Perf] ⏱️ state+RAG+WM+Limbic+ACC 병렬: ${Date.now() - tPipeStart}ms (wm=${hoistedWorkingMemory ? 'Y' : 'N'}, lim=${hoistedLimbicResult ? 'Y' : 'N'}, acc=${hoistedAccResult ? 'Y' : 'N'})`);
 
     // 🆕 v9: 시나리오 sticky — 세션에 고정된 시나리오가 있으면 LLM 재감지 결과를 무시
     if (lockedScenario && lockedScenario !== RelationshipScenario.GENERAL) {
@@ -1504,25 +1636,9 @@ ${researchResult.insight}
 
       if (userId && supabase) {
         try {
-          // 병렬 실행
-          const [limbicResult, accResult] = await Promise.all([
-            LIMBIC_CONFIG.enabled
-              ? limbicSessionStart({
-                  supabase,
-                  userId,
-                  isFirstMeeting: turnCount === 0,
-                  daysSinceLastSession: 0,    // TODO: 세션 메타에서 가져오기
-                  totalSessions: turnCount,
-                })
-              : Promise.resolve(null),
-            ACC_CONFIG.enabled
-              ? analyzeAcc({
-                  supabase,
-                  user_id: userId,
-                  user_utterance: userMessage,
-                }, logCollector)
-              : Promise.resolve(null),
-          ]);
+          // 🆕 v89: 위 Promise.all 에서 hoist 한 결과 재사용 — 추가 LLM 호출 0
+          const limbicResult = hoistedLimbicResult;
+          const accResult = hoistedAccResult;
 
           // Limbic 컨텍스트 주입
           if (limbicResult) {
@@ -1552,9 +1668,9 @@ ${researchResult.insight}
 
             // 고심각도 (severity >= 0.7) 모순은 structured data 로도 주입
             // → 좌뇌가 strategic_shift = { requires_shift: true } 로 판단하게 유도
-            const highSev = accResult.detected_conflicts.filter(c => c.severity >= 0.7);
+            const highSev = accResult.detected_conflicts.filter((c: any) => c.severity >= 0.7);
             if (highSev.length > 0) {
-              const structured = highSev.map(c => ({
+              const structured = highSev.map((c: any) => ({
                 type: c.conflict_type,
                 previous: c.previous.content.slice(0, 80),
                 current: c.current.content.slice(0, 80),
@@ -1709,21 +1825,22 @@ ${researchResult.insight}
         //   (KBE 기본 OFF — 중간 재해석 없어 버그 원천 차단)
         let claudeBuffer = '';
 
-        // 🆕 v70: Working Memory scratchpad 로드 (세션 내 연속성)
-        let workingMemory: any = null;
-        if (ragContext?.supabase && ragContext?.sessionId) {
-          try {
-            const { loadScratchpad } = await import('@/engines/working-memory');
-            workingMemory = await loadScratchpad(
-              ragContext.supabase,
-              ragContext.sessionId,
-              ragContext.userId,
-            );
-            capturedWorkingMemory = workingMemory; // 🆕 v73: 재판단용 외부 캡쳐
-          } catch (e: any) {
-            console.warn('[Pipeline:v70] WM load 실패 (무시):', e?.message);
-          }
+        // 🆕 v89: WM 은 파이프라인 시작에서 hoist (state+RAG와 병렬) — 여기선 사용만
+        //   기존(v70): 이 시점에서 await loadScratchpad → 50~100ms 직렬 블로킹
+        //   신규(v89): 위 Promise.all 에 합류 → 추가 지연 0ms
+        let workingMemory: any = hoistedWorkingMemory;
+        if (workingMemory) {
+          capturedWorkingMemory = workingMemory; // 🆕 v73: 재판단용 외부 캡쳐
         }
+
+        // 🆕 v89: incremental burst 처리 — ||| 도착하는 즉시 burst yield
+        //   기존(v79): claudeBuffer 전체를 받은 후에 split('|||') → 첫 burst 표시까지 brain+voice 전체 시간 대기
+        //   신규(v89): 스트림 도중 ||| 만나면 그 앞 burst 즉시 처리 → TTFB 1~2초 단축
+        //   주의: useKBE=true 일 때는 KBE 가 claudeBuffer 전체를 재해석하므로 incremental 비활성
+        let pendingBurstBuffer = '';   // ||| 단위로 drain 되는 working buffer
+        let burstIndex = 0;            // 누적 yield 한 burst 수 (delay/구분자 결정)
+        let firstBurstAt: number | null = null;  // TTFB 측정용
+        const dualBrainStart = Date.now();
 
         try {
           for await (const chunk of executeDualBrain({
@@ -1743,8 +1860,49 @@ ${researchResult.insight}
             completedEvents: updatedCompletedEvents,
           }, logCollector)) {
             if (chunk.type === 'text') {
-              // 🆕 v79: 항상 버퍼링 (인라인 힌트 파싱 위해)
+              // 🆕 v79: 항상 버퍼링 (SILENCE 검출 + KBE 레거시 경로용)
               claudeBuffer += chunk.data;
+
+              // 🆕 v89: incremental burst drain (KBE 비활성 시에만)
+              if (!useKBE) {
+                pendingBurstBuffer += chunk.data;
+                let sepIdx: number;
+                while ((sepIdx = pendingBurstBuffer.indexOf('|||')) !== -1) {
+                  const rawBurst = pendingBurstBuffer.slice(0, sepIdx);
+                  pendingBurstBuffer = pendingBurstBuffer.slice(sepIdx + 3);
+
+                  const parsed = parseBurstV89(rawBurst, burstIndex === 0);
+                  // 빈 burst (SILENCE 만 있던 burst 등) 는 skip
+                  if (!parsed.burstText && !parsed.sticker && !parsed.bufferSnippet.trim()) {
+                    continue;
+                  }
+                  // ||| 구분자 (두 번째 이후 burst 앞에)
+                  if (burstIndex > 0 && fullText.length > 0) {
+                    fullText += '|||';
+                    yield { type: 'text', data: '|||' };
+                  }
+                  // 인간형 지연
+                  if (parsed.delayMs > 0) await new Promise((r) => setTimeout(r, parsed.delayMs));
+                  // FX 이벤트 먼저 (말풍선보다 화면 효과가 앞에 터지도록)
+                  for (const fxId of parsed.fxIds) {
+                    const target = FX_TARGETS_V89[fxId];
+                    if (!target) continue;
+                    yield { type: 'fx', data: { id: fxId, target } };
+                  }
+                  // 텍스트
+                  if (parsed.burstText) {
+                    yield { type: 'text', data: parsed.burstText };
+                  }
+                  // 스티커
+                  if (parsed.sticker) {
+                    yield { type: 'text', data: `[STICKER:${parsed.sticker}]` };
+                  }
+                  // fullText 누적 (메타 태그 보존)
+                  fullText += parsed.bufferSnippet + (parsed.sticker ? `[STICKER:${parsed.sticker}]` : '');
+                  if (firstBurstAt === null) firstBurstAt = Date.now() - dualBrainStart;
+                  burstIndex++;
+                }
+              }
             } else if (chunk.type === 'analysis') {
               capturedLeftBrainAnalysis = chunk.data;
             }
@@ -1753,13 +1911,18 @@ ${researchResult.insight}
           console.warn('[Pipeline] ⚠️ DualBrain 실패 — 레거시 단일 모델로 폴백:', err?.message);
           fullText = '';
           claudeBuffer = '';
+          pendingBurstBuffer = '';
+          burstIndex = 0;
+        }
+        if (firstBurstAt !== null) {
+          console.log(`[Pipeline:v89] ⚡ 첫 burst yield: dualBrain 시작 후 ${firstBurstAt}ms (incremental)`);
         }
 
         // 🆕 v70: Working Memory 턴 종료 후 업데이트 + 저장 (fire-and-forget)
+        // 🆕 v89: dynamic import → static (cold-start 비용 제거)
         let finalWorkingMemory: any = null;
         if (workingMemory && ragContext?.supabase && ragContext?.sessionId) {
           try {
-            const { updateFromTurn, saveScratchpad } = await import('@/engines/working-memory');
             const updatedWM = updateFromTurn(workingMemory, {
               turnIdx: turnCount,
               userMessage,
@@ -1780,7 +1943,7 @@ ${researchResult.insight}
             try {
               const signals = (capturedLeftBrainAnalysis as any)?.intimacy_signals;
               if (signals && ragContext?.userId) {
-                const { applyIntimacyDeltaFromSignals } = await import('@/engines/intimacy/v77-core');
+                // 🆕 v89: static import (위에서 import 됨)
                 const result = await applyIntimacyDeltaFromSignals(
                   ragContext.supabase,
                   ragContext.userId,
@@ -1799,9 +1962,9 @@ ${researchResult.insight}
         }
 
         // 🆕 v70: Reflection 트리거 (매 6턴, fire-and-forget)
+        // 🆕 v89: dynamic import → static
         if (finalWorkingMemory && ragContext?.supabase && ragContext?.sessionId) {
           try {
-            const { shouldTriggerReflection, performReflection } = await import('@/engines/consolidation/reflection');
             if (shouldTriggerReflection(turnCount)) {
               console.log(`[Memory:v70] 🧠 Reflection 트리거 (turn=${turnCount})`);
               const supa = ragContext.supabase;
@@ -1822,7 +1985,7 @@ ${researchResult.insight}
                       unresolved_points: result.unresolved_points ?? finalWorkingMemory.session_scratchpad.unresolved_points,
                     },
                   };
-                  const { saveScratchpad } = await import('@/engines/working-memory');
+                  // 🆕 v89: static import 사용
                   await saveScratchpad(supa, sid, updated);
                 })
                 .catch((e: any) => console.warn('[Pipeline:v70] Reflection 실패:', e?.message));
@@ -1892,132 +2055,35 @@ ${researchResult.insight}
               yield { type: 'text', data: claudeBuffer };
             }
           } else {
-            // 🆕 v79 기본 경로: 우뇌 인라인 힌트 파싱
-            //
-            // 메타 태그 (hlrePost 가 파싱할 것들) 는 fullText 에 보존, 표시용 버스트에선 제거
-            //   — SITUATION_READ/LUNA_THOUGHT/PHASE_SIGNAL/SITUATION_CLEAR
-            //   — MIND_READ_READY/STORY_READY/STRATEGY_READY/ACTION_PLAN/WARM_WRAP
-            //   — TAROT_READY/PATTERN_MIRROR_READY/THINKING_DEEP
-            //   — TONE_SELECT/DRAFT_CARD/ROLEPLAY_FEEDBACK/PANEL_REPORT/IDEA_REFINE
-            //   — REQUEST_REANALYSIS/LEFT_BRAIN_HINT/RP_IN/RP_OUT
-            const METADATA_TAG_RE = /\[(?:SITUATION_READ|LUNA_THOUGHT|PHASE_SIGNAL|SITUATION_CLEAR|MIND_READ_READY|STORY_READY|STRATEGY_READY|ACTION_PLAN|WARM_WRAP|TAROT_READY|PATTERN_MIRROR_READY|THINKING_DEEP|TONE_SELECT|DRAFT_CARD|ROLEPLAY_FEEDBACK|PANEL_REPORT|IDEA_REFINE|REQUEST_REANALYSIS|LEFT_BRAIN_HINT|RP_IN|RP_OUT|OPERATION_COMPLETE|SONG_READY|DATE_SPOT_READY|GIFT_READY|ACTIVITY_READY|ANNIVERSARY_READY|MOVIE_READY|BROWSE_READY)(?::[^\]]*)?\]/gi;
-
-            const rawBursts = claudeBuffer.split('|||');
-            const delayMap: Record<string, [number, number]> = {
-              fast: [200, 500],   // 200~700ms
-              med:  [1000, 1500], // 1000~2500ms
-              slow: [3000, 3000], // 3000~6000ms
-            };
-
-            for (let i = 0; i < rawBursts.length; i++) {
-              let burstText = rawBursts[i];
-              const burstOriginalForBuffer = burstText; // fullText 에는 메타 태그 포함된 원본
-
-              // [DELAY:fast|med|slow] 추출 — 유연한 매칭 (AI 변형 대응)
-              const delayMatch = burstText.match(/\[DELAY(?:[:\s]*(?:fast|med|slow))?\s*\]/i);
-              let delayMs = i === 0 ? 100 : 600;
-              if (delayMatch) {
-                const speedMatch = delayMatch[0].match(/fast|med|slow/i);
-                const speed = speedMatch ? speedMatch[0].toLowerCase() : 'med';
-                const [base, range] = delayMap[speed];
-                delayMs = base + Math.floor(Math.random() * range);
-                burstText = burstText.replace(delayMatch[0], '');
+            // 🆕 v89: incremental 모드 — 대부분의 burst 는 for-await 루프에서 이미 yield 됨.
+            //   여기서는 마지막 burst (||| 없이 종료된 잔여) 만 처리.
+            //   파싱 로직은 parseBurstV89 helper 로 단일화 (위 incremental 블록과 공유).
+            if (pendingBurstBuffer.length > 0) {
+              const parsed = parseBurstV89(pendingBurstBuffer, burstIndex === 0);
+              if (parsed.burstText || parsed.sticker || parsed.bufferSnippet.trim()) {
+                if (burstIndex > 0 && fullText.length > 0) {
+                  fullText += '|||';
+                  yield { type: 'text', data: '|||' };
+                }
+                if (parsed.delayMs > 0) await new Promise((r) => setTimeout(r, parsed.delayMs));
+                for (const fxId of parsed.fxIds) {
+                  const target = FX_TARGETS_V89[fxId];
+                  if (!target) continue;
+                  yield { type: 'fx', data: { id: fxId, target } };
+                }
+                if (parsed.burstText) {
+                  yield { type: 'text', data: parsed.burstText };
+                }
+                if (parsed.sticker) {
+                  yield { type: 'text', data: `[STICKER:${parsed.sticker}]` };
+                }
+                fullText += parsed.bufferSnippet + (parsed.sticker ? `[STICKER:${parsed.sticker}]` : '');
+                burstIndex++;
               }
-
-              // [TYPING] — 힌트만 제거 (UI 인디케이터 미연결)
-              burstText = burstText.replace(/\[TYPING\]/gi, '');
-
-              // [STICKER:name] 추출
-              const stickerMatch = burstText.match(/\[STICKER:([a-z_]+)\]/i);
-              const sticker = stickerMatch ? stickerMatch[1].toLowerCase() : null;
-              if (stickerMatch) burstText = burstText.replace(stickerMatch[0], '');
-
-              // 🆕 v79: [FX:id] / [FX:id]...[/FX] FX 태그 파싱
-              //   단일 발동: [FX:bubble.wobble], [FX:particle.hearts] 등
-              //   범위 발동: [FX:text.wave]ㅎㅎㅎ[/FX] (현재는 단일 발동으로 취급 — 버스트 전체 대상)
-              const fxIds: string[] = [];
-              // 범위형 — 내부 텍스트는 보존, 태그만 제거 + id 기록
-              burstText = burstText.replace(/\[FX:([a-z_]+\.[a-z_]+)\]([\s\S]*?)\[\/FX\]/gi, (_f, id: string, inner: string) => {
-                fxIds.push(id.toLowerCase());
-                return inner;
-              });
-              // 단일형
-              burstText = burstText.replace(/\[FX:([a-z_]+\.[a-z_]+)\]/gi, (_f, id: string) => {
-                fxIds.push(id.toLowerCase());
-                return '';
-              });
-
-              // 메타 태그 제거 (표시용)
-              burstText = burstText.replace(METADATA_TAG_RE, '');
-
-              // 🆕 v80: catch-all — 잔여 인라인 힌트 태그 완전 제거 (AI 변형/오타 방어)
-              //   닫힌 태그: [DELAY:뭐든], [TYPING], [SILENCE], [STICKER:뭐든]
-              //   열린 태그: [DELAY... (닫는 ] 없이 비정상 종료)
-              burstText = burstText
-                .replace(/\[(?:DELAY|TYPING|SILENCE|STICKER)(?::[^\]]*)?\]/gi, '')
-                .replace(/\[(?:DELAY|TYPING|SILENCE|STICKER)[^\]\n]*/gi, '')
-                .trim();
-
-              // fullText 에는 메타 태그 포함해서 누적 (hlre.postProcess 파싱용)
-              // — DELAY/TYPING/FX 는 유지 불필요, 제거 (하위 HLRE/UI 에 노출되면 안 됨)
-              const bufferSnippet = burstOriginalForBuffer
-                .replace(/\[DELAY(?::[^\]]*)?\]/gi, '')
-                .replace(/\[DELAY[^\]\n]*/gi, '')
-                .replace(/\[TYPING\]/gi, '')
-                .replace(/\[STICKER:[a-z_]+\]/gi, '')
-                .replace(/\[SILENCE\]/gi, '')
-                // 🆕 v79 fix: FX 태그 제거 (범위형 + 단일형) — UI 노출 방지
-                .replace(/\[FX:[a-z_]+\.[a-z_]+\][\s\S]*?\[\/FX\]/gi, (_m, ) => _m.replace(/\[\/?FX[^\]]*\]/gi, ''))
-                .replace(/\[FX:[a-z_]+\.[a-z_]+\]/gi, '')
-                .replace(/\[\/FX\]/gi, '');
-
-              if (!burstText && !sticker && !bufferSnippet.trim()) continue;
-
-              // 지연
-              if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
-
-              // ||| 구분자 (첫 버스트 빼고)
-              if (i > 0 && fullText.length > 0) {
-                fullText += '|||';
-                yield { type: 'text', data: '|||' };
-              }
-
-              // 🆕 v79: FX 이벤트 발동 — 텍스트 yield 직전에 screen 효과 먼저 터지게
-              //   (쉬는 타이밍 → 화면 flash/shake → 말풍선 등장 순서)
-              const FX_TARGETS: Record<string, 'screen' | 'bubble' | 'text' | 'avatar' | 'particle' | 'bg'> = {
-                'shake.soft': 'screen', 'shake.hard': 'screen',
-                'flash.white': 'screen', 'flash.pink': 'screen',
-                'tint.sepia': 'screen', 'tint.cool': 'screen',
-                'rain.sakura': 'bg', 'rain.tears': 'particle',
-                'bubble.wobble': 'bubble', 'bubble.bounce': 'bubble', 'bubble.deflate': 'bubble',
-                'bubble.glow': 'bubble', 'bubble.popIn': 'bubble', 'bubble.shimmer': 'bubble', 'bubble.burst': 'bubble',
-                'text.wave': 'text', 'text.shake': 'text', 'text.pulse': 'text',
-                'text.rainbow': 'text', 'text.scramble': 'text',
-                'avatar.bounce': 'avatar', 'avatar.shake': 'avatar', 'avatar.heartBeat': 'avatar',
-                'particle.hearts': 'particle', 'particle.sparkles': 'particle',
-                'particle.tears': 'particle', 'particle.fire': 'particle',
-                'particle.confetti': 'particle', 'particle.stars': 'particle',
-              };
-              for (const fxId of fxIds) {
-                const target = FX_TARGETS[fxId];
-                if (!target) continue;
-                yield { type: 'fx', data: { id: fxId, target } };
-              }
-
-              // 표시용 yield
-              if (burstText) {
-                yield { type: 'text', data: burstText };
-              }
-              if (sticker) {
-                const stickerTag = `[STICKER:${sticker}]`;
-                yield { type: 'text', data: stickerTag };
-              }
-
-              // fullText 누적 (메타 태그 포함, 후처리 파싱용)
-              fullText += bufferSnippet + (sticker ? `[STICKER:${sticker}]` : '');
+              pendingBurstBuffer = '';
             }
 
-            console.log(`[Pipeline] 💬 인라인 파싱 완료: ${rawBursts.length}개 버스트 → ${fullText.length}자 (표시+메타)`);
+            console.log(`[Pipeline] 💬 v89 incremental: 총 ${burstIndex}개 burst → ${fullText.length}자 (표시+메타)`);
           }
         }
       }

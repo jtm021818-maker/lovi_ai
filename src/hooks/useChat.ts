@@ -20,6 +20,8 @@ import { calcTypingDelay, calcBubbleGapDelay } from '@/engines/human-like/adapti
 import type { LunaEmotion } from '@/engines/human-like/luna-emotion-core';
 // 🆕 v88: 루나 대화형 "같이 찾기" 블록 큐
 import { useBrowseStreamQueue } from './useBrowseStreamQueue';
+// 🆕 v90: dynamic import → static import (sendMessage 호출마다 모듈 해석 오버헤드 제거)
+import { useModeStore } from '@/engines/bridge-modes/mode-store';
 
 interface UseChatReturn {
   messages: ChatMessage[];
@@ -349,7 +351,6 @@ export function useChat(sessionId: string): UseChatReturn {
       abortRef.current = new AbortController();
 
       // 🆕 v81: BRIDGE 몰입 모드 활성 여부 — Phase Manager bypass 용
-      const { useModeStore } = await import('@/engines/bridge-modes/mode-store');
       const activeMode = useModeStore.getState().activeMode;
 
       const fetchPromise = fetch('/api/chat/stream', {
