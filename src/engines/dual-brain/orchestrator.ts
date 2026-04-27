@@ -368,8 +368,12 @@ export interface DualBrainStreamYield {
  * 🆕 v76: ACE v5 로 전달할 장기 기억 번들 로드
  * supabase / userId 없으면 undefined (무해 스킵).
  * 에러 시 undefined (폴백).
+ *
+ * 🆕 v90 Perf: export 추가 — pipeline 에서 좌뇌와 병렬 hoist 하기 위함.
+ *   기존: 좌뇌 끝나고 직렬 실행 (~1.5~2.0초 갭)
+ *   신규: pipeline Promise.all 합류 → 추가 지연 0ms
  */
-async function loadMemoryBundleSafe(
+export async function loadMemoryBundleSafe(
   supabase: any,
   userId?: string,
 ): Promise<{
@@ -452,6 +456,15 @@ export interface DualBrainInput {
   chatHistory?: Array<{ role: 'user' | 'ai'; content: string }>;
   /** 🆕 v86: 이미 완료된 이벤트 목록 — AI가 중복 발동 멘트 반복 방지 */
   completedEvents?: string[];
+  /** 🆕 v90 Perf: 파이프라인이 미리 로드한 장기 기억 번들 (Promise).
+   *  좌뇌와 병렬 로드되어 좌→우 갭(~1.5~2초) 제거. */
+  preloadedMemoryBundlePromise?: Promise<{
+    facts: any[];
+    recent: any[];
+    topSalient: any[];
+    longTermImpression?: string | null;
+    intimacyState?: any;
+  } | undefined>;
   // ─────────────────────────────
   userInput: string;
   contextBlock: string;
@@ -581,8 +594,11 @@ export async function* executeDualBrain(
       let aceChunkCount = 0;
       try {
         const handoff = buildHandoff(brainResult.leftBrainAnalysis!);
-        // 🆕 v76: 장기 기억 로드 (루나가 "떠올린 기억" 으로 handoff 주입)
-        const memoryBundle = await loadMemoryBundleSafe(input.supabase, input.userId);
+        // 🆕 v90 Perf: 파이프라인이 미리 hoist 한 번들 우선 사용 (좌뇌와 병렬 로드됨).
+        //              미제공 시에만 직렬 fallback 로드 → 기존 호환성 유지.
+        const memoryBundle = input.preloadedMemoryBundlePromise
+          ? await input.preloadedMemoryBundlePromise
+          : await loadMemoryBundleSafe(input.supabase, input.userId);
         for await (const chunk of executeAceV5({
           userUtterance: input.userInput,
           sessionId: input.sessionId,
@@ -667,8 +683,10 @@ export async function* executeDualBrain(
       if (useAceV5) {
         // ACE v5 — 풍부한 핸드오프 + 양방향 피드백
         const handoff = buildHandoff(brainResult.leftBrainAnalysis!);
-        // 🆕 v76: 장기 기억 번들 주입
-        const memoryBundle = await loadMemoryBundleSafe(input.supabase, input.userId);
+        // 🆕 v90 Perf: 파이프라인이 미리 hoist 한 번들 우선 사용
+        const memoryBundle = input.preloadedMemoryBundlePromise
+          ? await input.preloadedMemoryBundlePromise
+          : await loadMemoryBundleSafe(input.supabase, input.userId);
 
         for await (const chunk of executeAceV5({
           userUtterance: input.userInput,

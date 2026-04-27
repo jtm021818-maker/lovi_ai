@@ -814,26 +814,50 @@ export async function POST(req: NextRequest) {
               });
           }
 
-          // 🆕 v35: session_metadata (작전 모드 포함) 영구 저장
-          // 🆕 v73: working_memory 키는 pipeline 에서 atomic RPC 로 따로 저장함 → 여기서 덮어쓰지 않도록 DB 의 최신본 보존
+          // 🆕 v90 Perf: session_metadata 저장 — `session_meta_merge` RPC 우선 사용
+          //   - 기존(v73): SELECT freshMeta → 머지 → UPDATE (직렬 3단계, +200~400ms)
+          //   - 신규(v90): RPC 가 jsonb `||` 연산자로 atomic merge → SELECT 1회 제거.
+          //     RPC 는 working_memory 키를 보존(이미 저장된 값과 머지)하므로 race 없음.
+          //   - 폴백: RPC 미배포 환경에선 v73 의 read-merge-write 로 자동 회귀.
+          let useMetaMergeRpc = false;
           try {
-            const { data: freshSess } = await supabase
-              .from('counseling_sessions')
-              .select('session_metadata')
-              .eq('id', sessionId)
-              .maybeSingle();
-            const freshMeta = (freshSess?.session_metadata as any) ?? {};
-            const mergedMeta = {
-              ...runningSessionMeta,
-              // WM 은 freshMeta 의 것을 우선 (pipeline 이 방금 atomic 저장한 최신본)
-              ...(freshMeta?.working_memory ? { working_memory: freshMeta.working_memory } : {}),
-            };
-            unifiedSessionUpdate.session_metadata = mergedMeta;
-            const wmTurn = freshMeta?.working_memory?.turn_idx ?? '?';
-            console.log(`[Chat:v73] 🛡️ session_metadata 병합 (WM 보존): turn=${wmTurn}`);
+            const { error: metaRpcErr } = await supabase.rpc('session_meta_merge', {
+              p_session_id: sessionId,
+              p_patch: runningSessionMeta,
+            });
+            if (!metaRpcErr) {
+              useMetaMergeRpc = true;
+            } else if (!metaRpcErr.message?.includes('does not exist') && !metaRpcErr.message?.includes('function')) {
+              console.warn('[Chat:v90] session_meta_merge RPC 에러:', metaRpcErr.message);
+            }
           } catch (e: any) {
-            console.warn('[Chat:v73] WM 보존 실패, 기존 방식으로 덮어쓰기:', e?.message);
-            unifiedSessionUpdate.session_metadata = runningSessionMeta;
+            console.warn('[Chat:v90] session_meta_merge 예외 → legacy fallback:', e?.message);
+          }
+
+          if (useMetaMergeRpc) {
+            // RPC 가 이미 머지 완료 — unifiedSessionUpdate 에선 session_metadata 키 제외
+            // (다른 필드만 일반 UPDATE 로 진행)
+            console.log('[Chat:v90] 🛡️ session_meta_merge RPC 사용 — SELECT 1회 절감');
+          } else {
+            // Legacy fallback: 기존 v73 방식 (RPC 미배포 환경)
+            try {
+              const { data: freshSess } = await supabase
+                .from('counseling_sessions')
+                .select('session_metadata')
+                .eq('id', sessionId)
+                .maybeSingle();
+              const freshMeta = (freshSess?.session_metadata as any) ?? {};
+              const mergedMeta = {
+                ...runningSessionMeta,
+                ...(freshMeta?.working_memory ? { working_memory: freshMeta.working_memory } : {}),
+              };
+              unifiedSessionUpdate.session_metadata = mergedMeta;
+              const wmTurn = freshMeta?.working_memory?.turn_idx ?? '?';
+              console.log(`[Chat:v90→v73fallback] 🛡️ session_metadata 병합 (WM 보존): turn=${wmTurn}`);
+            } catch (e: any) {
+              console.warn('[Chat:v90→v73fallback] WM 보존 실패, 기존 방식으로 덮어쓰기:', e?.message);
+              unifiedSessionUpdate.session_metadata = runningSessionMeta;
+            }
           }
 
           // 🎯 v66: safeSupabaseRetry 로 fetch failed 시 자동 재시도

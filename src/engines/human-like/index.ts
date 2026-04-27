@@ -467,6 +467,14 @@ export class HumanLikeEngine {
     previousSessionContext?: string,
     strategyMode?: import('@/types/engine.types').StrategyMode | null,
   ): string {
+    // 🆕 v90 Perf: 방어 가드 — minifier 환경에서 일부 helper 가 undefined 배열에 .length 접근 시 TypeError.
+    //   pipeline 의 catch 가 fallback prompt 로 빠져버려 HLRE 가 작동 안 하던 버그 차단.
+    const safe = <T>(v: T[] | undefined | null): T[] => Array.isArray(v) ? v : [];
+    if (!Array.isArray(this.userMessages)) this.userMessages = safe(this.userMessages as any);
+    if (!Array.isArray(this.recentActionTypes)) this.recentActionTypes = safe(this.recentActionTypes as any);
+    if (!Array.isArray(this.lunaRecentSummaries)) this.lunaRecentSummaries = safe(this.lunaRecentSummaries as any);
+    completedEvents = safe(completedEvents);
+
     const parts: string[] = [];
 
     // ========== Layer 1: 루나의 존재 ==========

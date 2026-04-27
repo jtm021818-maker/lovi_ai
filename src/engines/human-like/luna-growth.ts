@@ -30,8 +30,13 @@ export function detectPatterns(
 ): UserPattern[] {
   const patterns: UserPattern[] = [];
 
+  // 🆕 v90 Perf: 방어 가드 (minifier 환경에서 undefined 진입 시 TypeError 방지)
+  const _allSessionThemes = Array.isArray(allSessionThemes) ? allSessionThemes : [];
+  const _userMessages = Array.isArray(userMessages) ? userMessages : [];
+  void emotionalTriggers; // 현재 미사용. 시그니처 유지.
+
   // 갈등 회피 패턴 ("괜찮아" 반복)
-  const suppressCount = userMessages.filter(m => /괜찮|별거.*아닌|그냥.*됐|뭐/.test(m)).length;
+  const suppressCount = _userMessages.filter(m => /괜찮|별거.*아닌|그냥.*됐|뭐/.test(m)).length;
   if (suppressCount >= 3) {
     patterns.push({
       name: '감정 억압',
@@ -43,7 +48,7 @@ export function detectPatterns(
 
   // 같은 주제 반복 (3회+)
   const themeCounts: Record<string, number> = {};
-  for (const theme of allSessionThemes) {
+  for (const theme of _allSessionThemes) {
     themeCounts[theme] = (themeCounts[theme] ?? 0) + 1;
   }
   for (const [theme, count] of Object.entries(themeCounts)) {
@@ -58,7 +63,7 @@ export function detectPatterns(
   }
 
   // 양보 패턴 ("내가 잘못" "내가 먼저")
-  const yieldCount = userMessages.filter(m => /내가.*잘못|내.*탓|먼저.*양보|내가.*참/.test(m)).length;
+  const yieldCount = _userMessages.filter(m => /내가.*잘못|내.*탓|먼저.*양보|내가.*참/.test(m)).length;
   if (yieldCount >= 2) {
     patterns.push({
       name: '과도한 양보',

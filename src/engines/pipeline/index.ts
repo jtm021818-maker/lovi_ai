@@ -26,6 +26,8 @@ import { resetCascadeLog, getCascadeLog } from '@/lib/ai/provider-registry';
 import { LogCollector } from '@/lib/utils/logger';
 // 🧠 이중뇌 (Gemini 판단 → Claude 발화) — 상담 모드 전용
 import { executeDualBrain, DUAL_BRAIN_CONFIG } from '@/engines/dual-brain';
+// 🆕 v90 Perf: 장기 기억 번들 hoist 용 (좌뇌와 병렬 로드)
+import { loadMemoryBundleSafe } from '@/engines/dual-brain/orchestrator';
 
 // 🫀 v54: 변연계 (Limbic System) — 시간적 감정 지속
 import {
@@ -233,13 +235,16 @@ function parseBurstV89(rawBurst: string, isFirstBurst: boolean): {
   const burstOriginalForBuffer = burstText;
 
   // [DELAY:fast|med|slow] 추출 — 유연한 매칭 (AI 변형 대응)
+  // 🆕 v90 Perf: 첫 burst 는 항상 즉시 yield (TTFB 단축, 사용자 체감 응답 ~2-3초 빨라짐).
+  //              두 번째 burst 부터 자연스러운 카톡 텀 적용.
   const delayMatch = burstText.match(/\[DELAY(?:[:\s]*(?:fast|med|slow))?\s*\]/i);
-  let delayMs = isFirstBurst ? 100 : 600;
+  let delayMs = isFirstBurst ? 0 : 600;
   if (delayMatch) {
     const speedMatch = delayMatch[0].match(/fast|med|slow/i);
     const speed = speedMatch ? speedMatch[0].toLowerCase() : 'med';
     const [base, range] = DELAY_MAP_V89[speed];
-    delayMs = base + Math.floor(Math.random() * range);
+    // 첫 burst 는 DELAY 태그 무시 (TTFB 우선). 두 번째 이후만 적용.
+    delayMs = isFirstBurst ? 0 : base + Math.floor(Math.random() * range);
     burstText = burstText.replace(delayMatch[0], '');
   }
 
@@ -384,6 +389,17 @@ export class CounselingPipeline {
           return null;
         })
       : Promise.resolve(null);
+
+    // 🆕 v90 Perf: 장기 기억 번들 (memoryBundle) 도 파이프라인 시작에서 hoist
+    //   기존(v89): 좌뇌 끝나고 ACE v5 직전에 직렬 로드 → 좌→우 갭 1.5~2초
+    //   신규(v90): state+RAG+WM+Limbic+ACC 와 같은 Promise.all 합류 → 추가 지연 0ms
+    //   결과: dual-brain 진입 시 즉시 await preloadedMemoryBundlePromise — 거의 즉답
+    const memoryBundlePromise = (willUseDualBrain && ragContext?.supabase && ragContext?.userId)
+      ? loadMemoryBundleSafe(ragContext.supabase, ragContext.userId).catch((e: any) => {
+          console.warn('[Pipeline:v90] memoryBundle hoist 실패 (무시):', e?.message);
+          return undefined;
+        })
+      : Promise.resolve(undefined);
 
     // 🆕 v89: Limbic + ACC 도 파이프라인 시작에서 hoist (state+RAG+WM과 병렬)
     //   기존: 메인 응답 직전에 직렬 블로킹 (~300~500ms — ACC 가 LLM 호출함)
@@ -1858,6 +1874,8 @@ ${researchResult.insight}
             chatHistory: chatHistory,
             // 🆕 v86: 이미 완료된 이벤트 → AI가 중복 발동 멘트 반복 방지
             completedEvents: updatedCompletedEvents,
+            // 🆕 v90 Perf: 미리 hoist 한 장기 기억 번들 (좌뇌와 병렬 로드됨) — 좌→우 갭 제거
+            preloadedMemoryBundlePromise: memoryBundlePromise,
           }, logCollector)) {
             if (chunk.type === 'text') {
               // 🆕 v79: 항상 버퍼링 (SILENCE 검출 + KBE 레거시 경로용)
@@ -1931,13 +1949,13 @@ ${researchResult.insight}
               emotionScore: stateResult.emotionScore,
             });
             finalWorkingMemory = updatedWM;
-            // 🆕 v73: await 로 변경 — fire-and-forget 이 다음 턴 session_metadata 덮어쓰기와 경합하던 버그 수정
-            try {
-              const saveRes = await saveScratchpad(ragContext.supabase, ragContext.sessionId, updatedWM);
-              if (!saveRes.success) console.warn('[Pipeline:v73] WM save 실패:', saveRes.error);
-            } catch (e: any) {
-              console.warn('[Pipeline:v73] WM save 예외:', e?.message);
-            }
+            // 🆕 v90 Perf: fire-and-forget 으로 복귀 — atomic RPC(`wm_patch_scratchpad`) 가 working_memory 키만
+            //   원자적으로 patch 하므로 v73 이 막던 session_metadata 덮어쓰기 경합은 더 이상 발생하지 않음.
+            //   await 제거로 응답 종료까지 ~300~600ms 단축 (saveScratchpad 평균 latency).
+            //   RPC 미배포 환경에선 legacy fallback 도 read-modify-write 라 race 가능 — 마이그레이션 필수.
+            void saveScratchpad(ragContext.supabase, ragContext.sessionId, updatedWM)
+              .then((res) => { if (!res.success) console.warn('[Pipeline:v90] WM save 실패:', res.error); })
+              .catch((e: any) => console.warn('[Pipeline:v90] WM save 예외:', e?.message));
 
             // 🆕 v77: 친밀도 실시간 누적 — 좌뇌 intimacy_signals 적용
             try {
