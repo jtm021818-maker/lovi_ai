@@ -268,6 +268,7 @@ export default function ChatListPage() {
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'completed'>('all');
   const [swipedId, setSwipedId] = useState<string | null>(null);
   const [touchStartX, setTouchStartX] = useState(0);
+  const [touchStartY, setTouchStartY] = useState(0);
   const router = useRouter();
 
   useEffect(() => {
@@ -421,11 +422,15 @@ export default function ChatListPage() {
                       onClick={() => !isSwiped && router.push(`/chat/${session.id}`)}
                       onTouchStart={(e) => {
                         setTouchStartX(e.touches[0].clientX);
+                        setTouchStartY(e.touches[0].clientY);
                       }}
                       onTouchMove={(e) => {
-                        const diff = touchStartX - e.touches[0].clientX;
-                        if (diff > 50) setSwipedId(session.id);
-                        else if (diff < -20) setSwipedId(null);
+                        const diffX = touchStartX - e.touches[0].clientX;
+                        const diffY = Math.abs(e.touches[0].clientY - touchStartY);
+                        // 수직 이동이 더 크면 스크롤 의도 → 스와이프 무시
+                        if (diffY > Math.abs(diffX)) return;
+                        if (diffX > 50) setSwipedId(session.id);
+                        else if (diffX < -20) setSwipedId(null);
                       }}
                       onTouchEnd={() => {}}
                     >

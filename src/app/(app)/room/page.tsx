@@ -35,31 +35,53 @@ import { SPIRITS } from '@/data/spirits';
 
 const ROOM_W = 320;
 const ROOM_H = 480;
+const DEFAULT_ROOM: RoomState = { placedSpirits: [], furniture: {}, theme: 'default' };
+
+function readCache<T>(key: string, fallback: T): T {
+  if (typeof window === 'undefined') return fallback;
+  try { return JSON.parse(localStorage.getItem(key) ?? 'null') ?? fallback; }
+  catch { return fallback; }
+}
 
 export default function RoomPage() {
-  const [ownedSpirits, setOwnedSpirits] = useState<UserSpirit[]>([]);
-  const [room, setRoom] = useState<RoomState>({ placedSpirits: [], furniture: {}, theme: 'default' });
-  const [loaded, setLoaded] = useState(false);
+  const [ownedSpirits, setOwnedSpirits] = useState<UserSpirit[]>(() => readCache('room_spirits', []));
+  const [room, setRoom] = useState<RoomState>(() => readCache('room_state', DEFAULT_ROOM));
+  // 캐시가 있으면 즉시 loaded — 숫자 깜빡임 없음
+  const [loaded, setLoaded] = useState(() =>
+    typeof window !== 'undefined' &&
+    !!localStorage.getItem('room_spirits') &&
+    !!localStorage.getItem('room_state')
+  );
   const [editMode, setEditMode] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
   const [showDex, setShowDex] = useState(false);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const roomInnerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    Promise.all([
-      fetch('/api/spirits/list').then((r) => r.json()),
-      fetch('/api/room/placement').then((r) => r.json()),
-    ])
-      .then(([spiritsData, roomData]) => {
-        setOwnedSpirits(spiritsData.owned ?? []);
-        setRoom(roomData);
+    // 두 fetch 독립 처리 — 먼저 온 것부터 즉시 반영
+    fetch('/api/spirits/list')
+      .then((r) => r.json())
+      .then((data) => {
+        const owned = data.owned ?? [];
+        setOwnedSpirits(owned);
+        try { localStorage.setItem('room_spirits', JSON.stringify(owned)); } catch {}
+      })
+      .catch(() => {});
+
+    fetch('/api/room/placement')
+      .then((r) => r.json())
+      .then((data) => {
+        setRoom(data);
         setLoaded(true);
+        try { localStorage.setItem('room_state', JSON.stringify(data)); } catch {}
       })
       .catch(() => setLoaded(true));
   }, []);
 
   // 자동 저장 (300ms debounce)
   const persistRoom = useCallback((r: RoomState) => {
+    try { localStorage.setItem('room_state', JSON.stringify(r)); } catch {}
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
       fetch('/api/room/placement', {
@@ -160,6 +182,7 @@ export default function RoomPage() {
           <AmbientFireflies count={6} width={ROOM_W} height={ROOM_H} />
 
           {/* 배치된 정령 */}
+          <div ref={roomInnerRef} className="absolute inset-0" style={{ width: ROOM_W, height: ROOM_H }}>
           <AnimatePresence>
             {room.placedSpirits
               .filter((p, i, arr) => arr.findIndex((q) => q.spiritId === p.spiritId) === i)
@@ -171,7 +194,8 @@ export default function RoomPage() {
                     key={p.spiritId}
                     drag={editMode}
                     dragMomentum={false}
-                    dragConstraints={{ left: 0, top: 0, right: ROOM_W, bottom: ROOM_H }}
+                    dragElastic={0}
+                    dragConstraints={roomInnerRef}
                     onDragEnd={(_e, info) => {
                       const nx = Math.max(0, Math.min(1, (p.x * ROOM_W + info.offset.x) / ROOM_W));
                       const ny = Math.max(0, Math.min(1, (p.y * ROOM_H + info.offset.y) / ROOM_H));
@@ -203,6 +227,7 @@ export default function RoomPage() {
                 );
               })}
           </AnimatePresence>
+          </div>
 
           {/* 빈 방 엠프티 스테이트 */}
           {loaded && room.placedSpirits.length === 0 && (
