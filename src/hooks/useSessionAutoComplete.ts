@@ -78,6 +78,25 @@ export function useSessionAutoComplete({ sessionId, turnCount, disabled = false,
     inFlightRef.current = false;
   }, [sessionId]);
 
+  // 🆕 v90: 채팅 페이지 진입 시 1번 stale 세션 회수
+  //   → 어제 그냥 탭 닫고 끝낸 세션들이 status='active' 로 남아있으면
+  //     memory_profile/summary 가 비어있어 다음 세션 루나 치매.
+  //   → 마운트 시 자동 회수해서 다음 턴부터 정상 컨텍스트 보장.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/sessions/salvage-stale', { method: 'POST' });
+        if (cancelled || !res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        if (data?.salvaged?.length) {
+          console.log(`[AutoComplete] 🛟 stale 세션 ${data.salvaged.length}개 회수`);
+        }
+      } catch {/* 회수 실패해도 새 세션 진행에는 영향 X */}
+    })();
+    return () => { cancelled = true; };
+  }, []); // 마운트 시 1회만
+
   // 자동 트리거 비활성 모드면 위 manual 만 노출
   useEffect(() => {
     if (disabled) return;

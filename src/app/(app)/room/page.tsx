@@ -15,7 +15,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getSpirit } from '@/data/spirits';
-import { getSpiritCharImg } from '@/data/spirit-sprites';
 import type { RoomState } from '@/types/room.types';
 import type { UserSpirit, SpiritId } from '@/types/spirit.types';
 
@@ -26,6 +25,7 @@ import SpiritSlot from '@/components/room/SpiritSlot';
 import EditFab from '@/components/room/EditFab';
 import DexFab from '@/components/room/DexFab';
 import DexModal from '@/components/dex/DexModal';
+import SpiritSprite from '@/components/spirit/SpiritSprite';
 import { SPIRITS } from '@/data/spirits';
 
 /**
@@ -182,23 +182,18 @@ export default function RoomPage() {
                     exit={{ scale: 0, opacity: 0 }}
                     transition={{ type: 'spring', stiffness: 300, damping: 24 }}
                     onClick={() => editMode && removeSpirit(p.spiritId)}
-                    className="absolute select-none z-30"
+                    className="absolute select-none z-30 flex items-center justify-center"
                     style={{
-                      left: p.x * ROOM_W - 18,
-                      top: p.y * ROOM_H - 18,
-                      width: 36,
-                      height: 36,
-                      fontSize: 28,
-                      textAlign: 'center',
-                      lineHeight: '36px',
-                      filter: `drop-shadow(0 2px 4px ${sp.themeColor}88)`,
+                      left: p.x * ROOM_W - 36,
+                      top: p.y * ROOM_H - 48,
+                      width: 72,
+                      height: 96,
+                      filter: `drop-shadow(0 3px 6px ${sp.themeColor}aa)`,
                       cursor: editMode ? 'pointer' : 'default',
                     }}
                   >
-                    {getSpiritCharImg(sp.id)
-                      ? <img src={getSpiritCharImg(sp.id)!} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} draggable={false} />
-                      : sp.emoji
-                    }
+                    <SpiritSprite spirit={sp} state="idle" size={72} emojiSize={56} />
+
                     {editMode && (
                       <div className="absolute -top-1 -right-2 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center font-black shadow-md">
                         ×

@@ -17,7 +17,24 @@
 import type { SpiritId } from '@/types/spirit.types';
 import type { SpiritSpriteSheet } from '@/types/spirit-sprite.types';
 
-export const SPIRIT_SPRITES: Partial<Record<SpiritId, SpiritSpriteSheet>> = {};
+export const SPIRIT_SPRITES: Partial<Record<SpiritId, SpiritSpriteSheet>> = {
+  // ☁️ 구름토끼 미미 — 1800×2400, 5열 × 5행 = 25프레임 (360×480/frame)
+  // 시트 자체가 "깨어있음 → 졸림 → 잠 → 다시 깨어남" 한 사이클로 디자인됨.
+  // 5개 상태 모두 같은 25프레임 루프 공유 (공용 모션).
+  cloud_bunny: {
+    src: '/splite/room/mimi_sprite.png',
+    frameWidth: 360,
+    frameHeight: 480,
+    totalCols: 5,
+    states: {
+      idle:   { startFrame: 0, frames: 25, fps: 8 },
+      walk:   { startFrame: 0, frames: 25, fps: 8 },
+      react:  { startFrame: 0, frames: 25, fps: 8 },
+      arrive: { startFrame: 0, frames: 25, fps: 8 },
+      sleep:  { startFrame: 0, frames: 25, fps: 8 },
+    },
+  },
+};
 
 export function getSpiritSprite(id: SpiritId): SpiritSpriteSheet | undefined {
   return SPIRIT_SPRITES[id];
