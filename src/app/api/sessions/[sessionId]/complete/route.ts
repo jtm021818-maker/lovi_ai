@@ -4,6 +4,8 @@ import { extractSessionMemory, mergeMemory, createEmptyProfile, type UserMemoryP
 import { saveMemory, decayMemories, extractKeywordsForMemory } from '@/engines/human-like/memory-engine';
 import { getIntimacyLevel } from '@/engines/human-like/user-model';
 import { loadUserModel, learnFromSession, saveUserModel } from '@/engines/human-like/user-model';
+import { generateLLMSummary } from '@/engines/memory/generate-summary';
+import { extractLunaMemoryCard } from '@/engines/memory/extract-luna-memory-card';
 
 /**
  * PATCH /api/sessions/[sessionId]/complete
@@ -11,7 +13,7 @@ import { loadUserModel, learnFromSession, saveUserModel } from '@/engines/human-
  * 세션 종료 + AI 요약 생성
  */
 export async function PATCH(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
   const supabase = await createServerSupabaseClient();
@@ -22,10 +24,17 @@ export async function PATCH(
 
   const { sessionId } = await params;
 
-  // 1. 세션 정보 로드
+  // 🆕 v90: useSessionAutoComplete 가 보내는 reason ('manual'|'hidden'|'unload'|'idle')
+  let reason: string | null = null;
+  try {
+    const body = await request.json().catch(() => null);
+    if (body && typeof body.reason === 'string') reason = body.reason;
+  } catch {/* body 없어도 OK */}
+
+  // 1. 세션 정보 로드 (status 포함 — 중복 호출 방어)
   const { data: session } = await supabase
     .from('counseling_sessions')
-    .select('locked_scenario, emotion_baseline, current_phase_v2, turn_count, emotion_accumulator')
+    .select('status, locked_scenario, emotion_baseline, current_phase_v2, turn_count, emotion_accumulator')
     .eq('id', sessionId)
     .eq('user_id', user.id)
     .single();
@@ -34,13 +43,32 @@ export async function PATCH(
     return NextResponse.json({ error: 'Session not found' }, { status: 404 });
   }
 
-  // 2. 마지막 5개 메시지 로드 (요약용)
-  const { data: recentMessages } = await supabase
+  // 🆕 v90: 이미 완료된 세션이면 추출 skip (중복 방어)
+  if (session.status === 'completed') {
+    console.log(`[Complete] ⏭️  이미 완료됨: ${sessionId} (reason=${reason})`);
+    return NextResponse.json({ ok: true, alreadyCompleted: true });
+  }
+
+  // 🆕 v90: 빈 세션(2턴 미만)은 메모리 추출 가치 없음 — completed 만 마크
+  if ((session.turn_count ?? 0) < 2) {
+    await supabase
+      .from('counseling_sessions')
+      .update({ status: 'completed', ended_at: new Date().toISOString() })
+      .eq('id', sessionId)
+      .eq('user_id', user.id);
+    console.log(`[Complete] 🪶 빈 세션 마크만: ${sessionId} (${session.turn_count}턴, reason=${reason})`);
+    return NextResponse.json({ ok: true, skipped: 'empty_session' });
+  }
+
+  // 2. 메시지 로드 — LLM summary 용 (최근 30개, 시간순)
+  const { data: orderedMessages } = await supabase
     .from('messages')
     .select('sender_type, content, created_at')
     .eq('session_id', sessionId)
-    .order('created_at', { ascending: false })
-    .limit(5);
+    .order('created_at', { ascending: true })
+    .limit(50);
+
+  const recentMessages = orderedMessages?.slice(-5).slice().reverse(); // 기존 코드 호환
 
   // 3. 감정 점수 (마지막 AI 메시지의 sentiment_score 또는 기본값)
   const { data: lastEmotionMsg } = await supabase
@@ -62,14 +90,33 @@ export async function PATCH(
     `${m.sender_type === 'user' ? '나' : 'AI'}: ${(m.content as string).slice(0, 40)}`
   ).join(' → ') || '';
 
-  const summary = generateSummary({
+  // 🆕 v90: LLM 기반 풍부한 요약 (200~400자, 1인칭 시점) — 실패 시 규칙 기반 fallback
+  let summary: string;
+  const llmSummary = await generateLLMSummary({
     scenario: scenarioLabel,
     phase: phaseLabel,
     turnCount: session.turn_count ?? 0,
     emotionStart: session.emotion_baseline,
     emotionEnd,
-    lastMessages: msgSummary,
+    messages: (orderedMessages ?? []).map((m) => ({
+      role: m.sender_type as string,
+      content: m.content as string,
+    })),
   });
+  if (llmSummary) {
+    summary = llmSummary;
+    console.log(`[Complete] 📝 LLM summary (${summary.length}자)`);
+  } else {
+    summary = generateSummary({
+      scenario: scenarioLabel,
+      phase: phaseLabel,
+      turnCount: session.turn_count ?? 0,
+      emotionStart: session.emotion_baseline,
+      emotionEnd,
+      lastMessages: msgSummary,
+    });
+    console.log(`[Complete] 📝 fallback summary`);
+  }
 
   // 🆕 v20: 숙제 데이터 추출 (emotion_accumulator → 다음 세션에서 참조)
   const accumulatorData = session.emotion_accumulator as any;
@@ -128,8 +175,39 @@ export async function PATCH(
 
       const existingMemory: UserMemoryProfile = (profileData?.memory_profile as UserMemoryProfile) ?? createEmptyProfile();
 
-      // 메모리 추출 (LLM 호출 1회 — Gemini haiku)
-      const extraction = await extractSessionMemory(sessionMsgs, session.locked_scenario ?? undefined, existingMemory);
+      // 🆕 v90: 메모리 추출 + LunaMemory 카드 동시 생성 (병렬)
+      const [extraction, lunaCard] = await Promise.all([
+        extractSessionMemory(sessionMsgs, session.locked_scenario ?? undefined, existingMemory),
+        extractLunaMemoryCard({ messages: sessionMsgs, scenario: session.locked_scenario ?? undefined }),
+      ]);
+
+      // 🆕 v90: LunaMemory 카드 → luna_memories 테이블 (루나의 방 추억 탭에 표시됨)
+      if (lunaCard) {
+        try {
+          // 현재 day_number 계산 (luna_life.birth_date 기준)
+          const { data: lifeRow } = await supabase
+            .from('luna_life')
+            .select('birth_date')
+            .eq('user_id', user.id)
+            .single();
+          let dayNumber = 1;
+          if (lifeRow?.birth_date) {
+            const birth = new Date(lifeRow.birth_date as string);
+            const diffMs = Date.now() - birth.getTime();
+            dayNumber = Math.max(1, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+          }
+          await supabase.from('luna_memories').insert({
+            user_id: user.id,
+            title: lunaCard.title,
+            content: lunaCard.content,
+            day_number: dayNumber,
+          });
+          console.log(`[LunaMemory] ✨ 카드 생성: D${dayNumber} "${lunaCard.title}"`);
+        } catch (err) {
+          console.warn('[LunaMemory] 저장 실패:', err);
+        }
+      }
+
       if (!extraction) return;
 
       // 기존 메모리에 머지
@@ -205,6 +283,22 @@ export async function PATCH(
         })
         .eq('id', user.id);
       console.log(`[Memory] ✅ 친밀도 업데이트: 세션 ${newCount}회, 레벨 ${newLevel}`);
+
+      // 🆕 v90: relationship_phase 진화 (new → bonding → deep → veteran)
+      const phase = newCount < 3 ? 'new' : newCount < 10 ? 'bonding' : newCount < 30 ? 'deep' : 'veteran';
+      try {
+        await supabase.from('luna_identity_with_user').upsert(
+          {
+            user_id: user.id,
+            relationship_phase: phase,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id' },
+        );
+        console.log(`[Memory] 🌱 관계 단계: ${phase} (세션 ${newCount}회)`);
+      } catch (e) {
+        console.warn('[Memory] relationship_phase 업데이트 실패 (무시):', e);
+      }
     } catch (e) {
       console.warn('[Memory] 친밀도 업데이트 실패 (무시):', e);
     }

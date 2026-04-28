@@ -56,6 +56,18 @@ export interface UserMemoryProfile {
   lastVisitDate?: string;
   badges?: { id: string; earnedAt: string }[];
 
+  /**
+   * 🆕 v90: 다음 세션에서 자연스럽게 물어볼 거리 (시간순, 최근 5개)
+   * 세션 종료 시 추출되는 nextSessionHook 을 누적 → formatMemoryForPrompt 에서 주입
+   */
+  nextSessionHooks?: { date: string; hook: string }[];
+
+  /**
+   * 🆕 v90: 루나가 이 유저에 대해 형성한 인상 (최근 1개만 유지)
+   * mergeMemory 에서 lunaImpression 누적 → 프롬프트에 "내가 본 너" 주입
+   */
+  lunaImpression?: string;
+
   lastUpdated: string;
   totalSessions: number;
 }
@@ -239,6 +251,18 @@ export function mergeMemory(
     }
   }
 
+  // 🆕 v90: nextSessionHook 누적 (시간순, 최근 5개)
+  if (extraction.nextSessionHook?.trim()) {
+    const hooks = merged.nextSessionHooks ?? [];
+    hooks.push({ date: sessionDate, hook: extraction.nextSessionHook.trim().slice(0, 200) });
+    merged.nextSessionHooks = hooks.slice(-5);
+  }
+
+  // 🆕 v90: 루나의 인상 갱신 (최근 1개만)
+  if (extraction.lunaImpression?.trim()) {
+    merged.lunaImpression = extraction.lunaImpression.trim().slice(0, 300);
+  }
+
   // 메타 업데이트
   merged.lastUpdated = new Date().toISOString();
   merged.totalSessions = (merged.totalSessions ?? 0) + 1;
@@ -315,6 +339,24 @@ export function formatMemoryForPrompt(memory: UserMemoryProfile): string {
 
   // 총 세션 수
   parts.push(`- 총 ${memory.totalSessions}번째 상담`);
+
+  // 🆕 v90: 루나의 인상 (있을 때만)
+  if (memory.lunaImpression) {
+    parts.push('');
+    parts.push(`[내가 본 너 (루나의 인상)]`);
+    parts.push(`- ${memory.lunaImpression}`);
+  }
+
+  // 🆕 v90: 다음에 자연스럽게 물어볼 거리 (이전 세션들에서 추출됨)
+  const hooks = memory.nextSessionHooks ?? [];
+  if (hooks.length > 0) {
+    parts.push('');
+    parts.push('[지난번에 끝나면서 다음에 물어보려 했던 것]');
+    for (const h of hooks.slice(-3)) {
+      parts.push(`- (${h.date.slice(5, 10)}) ${h.hook}`);
+    }
+    parts.push('→ 자연스러우면 한 번 물어봐. "어 그거 어떻게 됐어?" 식으로. 강요 X.');
+  }
 
   parts.push('');
   parts.push('→ 이 정보를 자연스럽게 대화에 녹여. 데이터 나열하지 말고 "저번에 그랬잖아" 식으로.');

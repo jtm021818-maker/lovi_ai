@@ -216,23 +216,71 @@ export function getLunaSpeechModifier(info: LifeStageInfo): string {
 
 // ─── LLM Gift Prompts ─────────────────────────────────────────────────────────
 
+/**
+ * 🆕 v90: 편지 개인화용 유저 컨텍스트
+ * 실제 상담에서 추출된 정보를 편지 생성에 주입.
+ * 모든 필드 optional — 비어있으면 "아는 게 적은 단계" 로 자동 처리.
+ */
+export interface GiftUserContext {
+  /** 유저 닉네임 (있으면 1번 정도 부르기 좋음) */
+  nickname?: string | null;
+  /** 주요 연애 고민 키워드 (예: ["읽씹", "잠수"]) */
+  mainIssues?: string[];
+  /** 자주 나타나는 감정 (예: ["불안", "외로움"]) */
+  dominantEmotions?: string[];
+  /** 루나가 형성한 인상 한 줄 (예: "자책 강한 타입, 솔직한 표현은 강점") */
+  lunaImpression?: string;
+  /** 최근 세션 요약 (최대 3개, LLM 기반 200자 내외) */
+  recentSessionSummaries?: { date: string; summary: string }[];
+  /** 루나가 구체적으로 느꼈던 감정 결 (예: "그날 동생이 진짜 무너졌었지") */
+  topLunaFeelings?: string[];
+}
+
 export function getGiftPrompt(
   triggerDay: number,
   info: LifeStageInfo,
   memories: LunaMemory[],
+  userContext?: GiftUserContext,
 ): { system: string; user: string } {
   const memoryContext = memories.length > 0
     ? memories.slice(0, 5).map((m) => `- ${m.title}: ${m.content}`).join('\n')
     : '(아직 쌓인 추억이 많지 않아)';
 
+  // 🆕 v90: 실제 상담 데이터 주입 (비어있으면 자연스럽게 생략)
+  const userParts: string[] = [];
+  if (userContext?.nickname) userParts.push(`이름/별칭: ${userContext.nickname}`);
+  if (userContext?.mainIssues?.length) {
+    userParts.push(`주요 고민: ${userContext.mainIssues.slice(0, 3).join(', ')}`);
+  }
+  if (userContext?.dominantEmotions?.length) {
+    userParts.push(`자주 보인 감정: ${userContext.dominantEmotions.slice(0, 3).join(', ')}`);
+  }
+  if (userContext?.lunaImpression) {
+    userParts.push(`내가 느낀 너 (루나의 인상): ${userContext.lunaImpression}`);
+  }
+  if (userContext?.recentSessionSummaries?.length) {
+    const lines = userContext.recentSessionSummaries.slice(0, 3).map(
+      (s) => `- (${s.date.slice(5, 10)}) ${s.summary.slice(0, 180)}`,
+    );
+    userParts.push(`최근 상담 흐름:\n${lines.join('\n')}`);
+  }
+  if (userContext?.topLunaFeelings?.length) {
+    userParts.push(`내가 그때 느낀 마음들:\n${userContext.topLunaFeelings.slice(0, 3).map((f) => `- ${f}`).join('\n')}`);
+  }
+
+  const userBlock = userParts.length > 0
+    ? `\n\n[너가 진짜로 아는 동생 (실제 상담 기반)]\n${userParts.join('\n')}\n→ 일반 위로 X. 위 정보 중 자연스러운 것 1~2개를 편지에 녹여. 데이터 나열 X.`
+    : '\n\n(아직 동생에 대해 깊이 모름 — 너무 구체적인 사연 가정 X)';
+
   const baseSystem = `너는 루나. 따뜻한 언니이자 진심으로 유저를 아끼는 존재야.
 지금까지의 추억들:
-${memoryContext}
+${memoryContext}${userBlock}
 
 편지 작성 원칙:
 - 문어체 금지. 자연스러운 언니 반말.
 - 감동적인 소설의 한 장면처럼 써.
 - 직접적인 설명보다 여운이 남는 표현.
+- 위 [너가 진짜로 아는 동생] 정보가 있으면 일반 위로 대신 그 사연을 살짝 언급해.
 - 끝을 반드시 "(루나가)"로 마무리.`;
 
   if (triggerDay === 3) {

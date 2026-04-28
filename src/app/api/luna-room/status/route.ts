@@ -84,19 +84,63 @@ async function generateAndStoreGift(
   triggerDay: number,
   info: ReturnType<typeof getLifeStageInfo>,
 ) {
-  const { data: memoriesRaw } = await supabase
-    .from('luna_memories')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(6);
+  // 🆕 v90: 추억 + 실제 상담 데이터 병렬 로드 → 편지에 진짜 사연 녹이기
+  const [
+    { data: memoriesRaw },
+    { data: profile },
+    { data: recentSessions },
+    { data: topMemories },
+  ] = await Promise.all([
+    supabase
+      .from('luna_memories')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(6),
+    supabase
+      .from('user_profiles')
+      .select('memory_profile, nickname')
+      .eq('id', userId)
+      .single(),
+    supabase
+      .from('counseling_sessions')
+      .select('session_summary, created_at')
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .not('session_summary', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(3),
+    supabase
+      .from('user_memories')
+      .select('luna_feeling')
+      .eq('user_id', userId)
+      .not('luna_feeling', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(3),
+  ]);
 
   const memories = (memoriesRaw ?? []).map((m: any) => ({
     id: m.id, title: m.title, content: m.content, dayNumber: m.day_number, createdAt: m.created_at,
   }));
 
+  // memory_profile JSONB → GiftUserContext 빌드
+  const mp = (profile?.memory_profile as any) ?? {};
+  const userContext = {
+    nickname: profile?.nickname ?? mp?.basicInfo?.nickname ?? null,
+    mainIssues: mp?.relationshipContext?.mainIssues ?? [],
+    dominantEmotions: mp?.emotionPatterns?.dominantEmotions ?? [],
+    lunaImpression: mp?.lunaImpression ?? undefined,
+    recentSessionSummaries: (recentSessions ?? []).map((s: any) => ({
+      date: s.created_at,
+      summary: s.session_summary,
+    })),
+    topLunaFeelings: (topMemories ?? [])
+      .map((m: any) => m.luna_feeling)
+      .filter(Boolean) as string[],
+  };
+
   const scheduleEntry = GIFT_SCHEDULE.find((g: { day: number }) => g.day === triggerDay);
-  const { system, user: userPrompt } = getGiftPrompt(triggerDay, info, memories);
+  const { system, user: userPrompt } = getGiftPrompt(triggerDay, info, memories, userContext);
 
   try {
     const result = await generateWithCascade(

@@ -268,17 +268,28 @@ export async function POST(req: NextRequest) {
 
       // ① 메모리 프로필은 이제 turnCount 조건 밖에서 처리됨 (ACE v4)
 
-      // ② 이전 세션 처리
+      // ② 이전 세션 처리 (🆕 v90: emotion_end + 마지막 5턴 carry-over)
       const prevSessions = prevSessionsResult.data;
       if (prevSessions && prevSessions.length > 0) {
         const sessionParts: string[] = [];
         for (const prev of prevSessions.slice(0, 3)) {
           const date = prev.created_at ? new Date(prev.created_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' }) : '';
-          const summary = prev.session_summary ? prev.session_summary.slice(0, 60) : '';
+          // 🆕 v90: summary 60자 → 200자 (LLM summary 활용)
+          const summary = prev.session_summary ? prev.session_summary.slice(0, 200) : '';
           const scenario = prev.locked_scenario ?? '';
           sessionParts.push(`  ${date}: ${scenario ? scenario + ' — ' : ''}${summary}`);
         }
         const latest = prevSessions[0];
+
+        // 🆕 v90: 직전 세션 종료 감정 점수 → 추세 텍스트
+        if (latest.emotion_end != null) {
+          const start = latest.emotion_baseline ?? 5;
+          const end = Number(latest.emotion_end);
+          const delta = end - start;
+          const trend = delta >= 1 ? '회복' : delta <= -1 ? '악화' : '비슷';
+          sessionParts.push(`  → 지난 세션 끝 감정: ${end.toFixed(1)}/10 (${trend} 추세, 시작 ${start.toFixed(1)})`);
+        }
+
         if (latest.homework_data) {
           const hw = latest.homework_data as any;
           if (hw.homeworks && Array.isArray(hw.homeworks) && hw.homeworks.length > 0) {
@@ -290,6 +301,65 @@ export async function POST(req: NextRequest) {
           previousSessionContext += `\n\n→ 첫 인사에서 이전 기억을 자연스럽게 언급해. "저번에 그거 어떻게 됐어?" 식으로.`;
           console.log(`[Chat] 📎 이전 세션 ${prevSessions.length}개 로드 완료`);
         }
+
+        // 🆕 v90: 직전 세션 마지막 5턴 carry-over — RC-2 해결
+        // chatHistory 가 현재 세션만 있으면 첫 턴에 컨텍스트 빈약 → 직전 마지막 발화 직접 보여줌
+        try {
+          const { data: latestSessionRow } = await supabase
+            .from('counseling_sessions')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('status', 'completed')
+            .neq('id', sessionId)
+            .order('ended_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (latestSessionRow?.id) {
+            const { data: tailMsgs } = await supabase
+              .from('messages')
+              .select('sender_type, content')
+              .eq('session_id', latestSessionRow.id)
+              .order('created_at', { ascending: false })
+              .limit(6);
+
+            if (tailMsgs && tailMsgs.length > 0) {
+              const tailLines = tailMsgs
+                .reverse()
+                .map((m) => `  ${m.sender_type === 'user' ? '동생' : '나'}: ${(m.content as string).slice(0, 120)}`)
+                .join('\n');
+              previousSessionContext += `\n\n[지난 세션 마지막 대화 (이어가기 참고용)]\n${tailLines}`;
+              console.log(`[Chat] 🔁 직전 세션 마지막 ${tailMsgs.length}턴 carry-over`);
+            }
+          }
+        } catch (err) {
+          console.warn('[Chat] 직전 세션 tail 로드 실패:', err);
+        }
+      }
+
+      // 🆕 v90: 관계 단계 (new → bonding → deep → veteran) — 톤 가이드 주입
+      try {
+        const { data: identityRow } = await supabase
+          .from('luna_identity_with_user')
+          .select('relationship_phase')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        const phase = identityRow?.relationship_phase as string | undefined;
+        if (phase) {
+          const phaseGuide: Record<string, string> = {
+            new: '아직 너랑 막 알아가는 중이야. 살짝 조심스러운 톤. 너무 가깝게 굴지 X.',
+            bonding: '점점 편해지는 중. 가벼운 농담 가끔 OK. 너 이름/별명 자연스럽게 부르기 OK.',
+            deep: '진심 토로 가능. 자기 개방 빈번 OK. "나도 전에~" 자기 이야기 자유롭게.',
+            veteran: '오래된 친구 톤. 묻지 않아도 알 정도. 짧은 한마디로 위로 가능. "야 또 그 얘기야 ㅋㅋ" 같은 친밀감.',
+          };
+          const guide = phaseGuide[phase];
+          if (guide) {
+            previousSessionContext += `\n\n[너희 관계 단계: ${phase}]\n→ ${guide}`;
+            console.log(`[Chat] 🌱 관계 단계: ${phase}`);
+          }
+        }
+      } catch (err) {
+        console.warn('[Chat] luna_identity 로드 실패 (무시):', err);
       }
 
       // 라운지 + 감정 체크인

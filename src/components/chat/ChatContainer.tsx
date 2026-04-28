@@ -12,6 +12,7 @@ import InlineSuggestions from './InlineSuggestions';
 import PanelBubble from './PanelBubble';
 import { useChat } from '@/hooks/useChat';
 import { useLunaVoice } from '@/hooks/useLunaVoice';
+import { useSessionAutoComplete } from '@/hooks/useSessionAutoComplete';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
 import { CalmingTimer } from '@/components/nudge/CalmingTimer';
@@ -151,6 +152,14 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
   const [isPremium, setIsPremium] = useState(true); // 기본 true로 깜빡임 방지
   const FREE_DAILY_LIMIT = 5;
   const userMsgCount = messages.filter(m => m.senderType === 'user').length;
+
+  // 🆕 v90: 세션 자동 종료 트리거 (visibility/unload/idle/manual)
+  //   → memory_profile, user_memories, session_summary 자동 갱신 보장
+  const { manualComplete: completeSessionNow } = useSessionAutoComplete({
+    sessionId,
+    turnCount: userMsgCount,
+    disabled: sessionStatus === 'completed',
+  });
   const remaining = isPremium ? Infinity : Math.max(0, FREE_DAILY_LIMIT - userMsgCount);
   const isLimitReached = !isPremium && remaining <= 0;
 
@@ -603,6 +612,21 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
               </motion.div>
               <IntimacyDeltaHint delta={intimacyDelta} />
             </div>
+          )}
+
+          {/* 🆕 v90: "상담 마치기" — 메모리 즉시 추출 트리거 (자동 트리거 보완) */}
+          {sessionStatus !== 'completed' && userMsgCount >= 3 && (
+            <button
+              onClick={() => {
+                if (confirm('이번 상담을 마칠까? 루나가 추억을 정리해 둘게.')) {
+                  completeSessionNow();
+                }
+              }}
+              className="ml-2 px-2.5 py-1.5 rounded-2xl bg-white/60 hover:bg-white/90 border border-white/50 shadow-sm text-[10.5px] font-bold text-[#795548] transition-colors"
+              title="상담을 마치고 루나가 기억하게 하기"
+            >
+              마치기
+            </button>
           )}
 
         </div>
