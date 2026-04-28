@@ -117,7 +117,7 @@ export default function DexCard({ spirit, owned, onClick, index }: Props) {
               animate={spirit.rarity === 'L' || spirit.rarity === 'UR' ? { y: [0, -2, 0] } : {}}
               transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
             >
-              <SpiritSprite spirit={spirit} size={64} emojiSize={38} playing={false} />
+              <SpiritSprite spirit={spirit} size={64} emojiSize={38} />
             </motion.div>
           ) : (
             <div

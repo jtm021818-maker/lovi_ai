@@ -146,7 +146,7 @@ function DetailBody({ spirit, owned, onClose }: {
           transition={{ type: 'spring', stiffness: 220, damping: 16 }}
         >
           {isOwned ? (
-            <SpiritSprite spirit={spirit} size={88} emojiSize={72} playing={false} />
+            <SpiritSprite spirit={spirit} size={88} emojiSize={72} />
           ) : (
             <span
               className="text-[72px]"
@@ -281,7 +281,7 @@ function DetailBody({ spirit, owned, onClose }: {
                 }}
               >
                 <div className="flex items-center justify-center">
-                  <SpiritSprite spirit={p} size={36} playing={false} />
+                  <SpiritSprite spirit={p} size={36} />
                 </div>
                 <div className="text-[8.5px] font-bold text-[#3a2418] truncate max-w-full mt-0.5">
                   {p.name}

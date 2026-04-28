@@ -95,7 +95,7 @@ export default function GachaPullAnimation({ results, onFinish }: Props) {
                   <div className="absolute -top-2 -right-2 px-1.5 py-0.5 rounded-full bg-pink-500 text-[8px] font-black">NEW</div>
                 )}
                 <div className="mb-1 flex items-center justify-center">
-                  {sp ? <SpiritSprite spirit={sp} size={44} playing={false} /> : null}
+                  {sp ? <SpiritSprite spirit={sp} size={44} /> : null}
                 </div>
                 <div className="text-[9px] font-bold">{sp?.name}</div>
                 <div className="text-[8px] opacity-80">{r.rarity}</div>
@@ -127,7 +127,7 @@ export default function GachaPullAnimation({ results, onFinish }: Props) {
                     <div className="absolute -top-1 -right-1 px-1 py-0.5 rounded-full bg-pink-500 text-[7px] font-black">N</div>
                   )}
                   <div className="flex items-center justify-center">
-                    {sp ? <SpiritSprite spirit={sp} size={32} playing={false} /> : null}
+                    {sp ? <SpiritSprite spirit={sp} size={32} /> : null}
                   </div>
                   <div className="text-[8px] font-bold truncate max-w-full px-1">{sp?.name}</div>
                   <div className="text-[7px] opacity-80">{r.rarity}</div>
