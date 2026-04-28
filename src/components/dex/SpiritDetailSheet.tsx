@@ -280,7 +280,9 @@ function DetailBody({ spirit, owned, onClose }: {
                   border: `1px solid ${p.themeColor}55`,
                 }}
               >
-                <div className="text-[22px]">{p.emoji}</div>
+                <div className="flex items-center justify-center">
+                  <SpiritSprite spirit={p} size={36} playing={false} />
+                </div>
                 <div className="text-[8.5px] font-bold text-[#3a2418] truncate max-w-full mt-0.5">
                   {p.name}
                 </div>

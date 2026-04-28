@@ -15,6 +15,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getSpirit } from '@/data/spirits';
+import { getSpiritCharImg } from '@/data/spirit-sprites';
 import type { RoomState } from '@/types/room.types';
 import type { UserSpirit, SpiritId } from '@/types/spirit.types';
 
@@ -239,7 +240,10 @@ export default function RoomPage() {
                       cursor: editMode ? 'pointer' : 'default',
                     }}
                   >
-                    {sp.emoji}
+                    {getSpiritCharImg(sp.id)
+                      ? <img src={getSpiritCharImg(sp.id)!} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} draggable={false} />
+                      : sp.emoji
+                    }
                     {editMode && (
                       <div className="absolute -top-1 -right-2 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center font-black shadow-md">
                         ×

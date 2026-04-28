@@ -8,6 +8,7 @@ import { useEffect, useState, use } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { getSpirit } from '@/data/spirits';
+import SpiritSprite from '@/components/spirit/SpiritSprite';
 import { getBondDialogue } from '@/data/bond-dialogues';
 import { getBackstory } from '@/data/backstories';
 import { calcLvProgress, calcNextLvXp, BOND_LV_XP_TABLE } from '@/engines/spirits/bond-engine';
@@ -54,7 +55,9 @@ export default function SpiritDetail({ params }: { params: Promise<{ spiritId: s
             boxShadow: `0 0 60px ${spirit.themeColor}55`,
           }}
         >
-          <div className="text-8xl">{spirit.emoji}</div>
+          <div className="flex items-center justify-center">
+            <SpiritSprite spirit={spirit} size={100} playing={false} />
+          </div>
           <div className="mt-4 text-white font-extrabold text-xl drop-shadow">{spirit.name}</div>
           <div className="text-white/90 text-[11px] font-bold mt-1">[{spirit.rarity}] {spirit.personality}</div>
         </motion.div>

@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { SPIRITS } from '@/data/spirits';
+import SpiritSprite from '@/components/spirit/SpiritSprite';
 import type { UserSpirit, SpiritRarity } from '@/types/spirit.types';
 
 const RARITY_ORDER: SpiritRarity[] = ['L', 'UR', 'SR', 'R', 'N'];
@@ -85,7 +86,9 @@ export default function SpiritsPage() {
                             MAX
                           </div>
                         )}
-                        <div className="text-3xl">{s.emoji}</div>
+                        <div className="flex items-center justify-center">
+                          <SpiritSprite spirit={s} size={40} playing={false} />
+                        </div>
                         <div className="text-[9px] font-bold text-[#4E342E] mt-0.5 truncate max-w-full">{s.name}</div>
                         <div className="text-[7px] text-[#A1887F]">Lv.{us.bondLv}</div>
                         {us.count > 1 && (
