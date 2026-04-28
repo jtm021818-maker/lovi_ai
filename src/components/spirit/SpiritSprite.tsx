@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import type { SpiritMaster } from '@/types/spirit.types';
 import type { SpiritAnimState, SpiritSpriteSheet } from '@/types/spirit-sprite.types';
-import { getSpiritSprite } from '@/data/spirit-sprites';
+import { getSpiritSprite, getSpiritCharImg } from '@/data/spirit-sprites';
 import { useSpriteAnimation } from '@/hooks/useSpriteAnimation';
 
 // 모듈 레벨 로드 캐시 (LunaSprite 동일 패턴)
@@ -74,8 +74,19 @@ export default function SpiritSprite({
     return () => { cancelled = true; };
   }, [sheet]);
 
-  // 스프라이트 시트 없음 → 이모지 fallback
+  // 스프라이트 시트 없음 → charImg → 이모지 순서로 fallback
   if (!sheet) {
+    const charImg = getSpiritCharImg(spirit.id);
+    if (charImg) {
+      return (
+        <CharImgDisplay
+          src={charImg}
+          themeColor={spirit.themeColor}
+          size={size ?? 48}
+          className={className}
+        />
+      );
+    }
     return (
       <EmojiFallback
         emoji={spirit.emoji}
@@ -191,6 +202,43 @@ function SpriteRenderer({
           }}
         />
       </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────
+
+function CharImgDisplay({
+  src,
+  themeColor,
+  size,
+  className,
+}: {
+  src: string;
+  themeColor: string;
+  size: number;
+  className?: string;
+}) {
+  return (
+    <div
+      className={className}
+      style={{
+        width: size,
+        height: size,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        filter: `drop-shadow(0 2px 6px ${themeColor}88)`,
+        flexShrink: 0,
+      }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt=""
+        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+        draggable={false}
+      />
     </div>
   );
 }

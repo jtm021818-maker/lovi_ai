@@ -10,7 +10,6 @@
 import { motion } from 'framer-motion';
 import type { SpiritMaster } from '@/types/spirit.types';
 import SpiritSprite from '@/components/spirit/SpiritSprite';
-import { hasSpiritSprite } from '@/data/spirit-sprites';
 
 interface Props {
   /** v85.4: 전체 정령 객체 전달 (스프라이트 지원용). 없으면 emoji만 사용 */
@@ -24,7 +23,6 @@ interface Props {
 }
 
 export default function SpiritSlot({ spirit, emoji, themeColor, bondLv, name, onSelect, delayIndex = 0 }: Props) {
-  const useSprite = spirit && hasSpiritSprite(spirit.id);
   return (
     <motion.button
       onClick={onSelect}
@@ -64,8 +62,8 @@ export default function SpiritSlot({ spirit, emoji, themeColor, bondLv, name, on
           background: `radial-gradient(circle at 50% 40%, ${themeColor}55 0%, transparent 70%)`,
         }}
       />
-      {/* 정령 — 스프라이트 있으면 idle 애니메이션, 없으면 이모지 */}
-      {useSprite && spirit ? (
+      {/* 정령 — 스프라이트/이미지/이모지 자동 선택 */}
+      {spirit ? (
         <span
           className="relative"
           style={{ filter: `drop-shadow(0 2px 6px ${themeColor}cc)` }}

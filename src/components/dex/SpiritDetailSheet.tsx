@@ -18,6 +18,7 @@ import type { SpiritMaster, UserSpirit, SpiritRarity } from '@/types/spirit.type
 import { SPIRITS } from '@/data/spirits';
 import { INTERACTIONS } from '@/data/interactions';
 import RarityBadge, { RARITY_META } from './RarityBadge';
+import SpiritSprite from '@/components/spirit/SpiritSprite';
 
 interface Props {
   spirit: SpiritMaster | null;
@@ -137,19 +138,23 @@ function DetailBody({ spirit, owned, onClose }: {
           <RarityBadge rarity={rarity} size="sm" showName />
         </div>
 
-        {/* 대형 이모지 */}
+        {/* 대형 이미지 */}
         <motion.div
-          className="text-[72px] leading-none mb-2 select-none"
+          className="leading-none mb-2 select-none flex items-center justify-center"
           initial={{ scale: 0.6, rotate: -10 }}
           animate={{ scale: 1, rotate: 0 }}
           transition={{ type: 'spring', stiffness: 220, damping: 16 }}
-          style={
-            isOwned
-              ? { filter: `drop-shadow(0 6px 20px ${spirit.themeColor}99)` }
-              : { filter: 'brightness(0) invert(0.3)', opacity: 0.7 }
-          }
         >
-          {isOwned ? spirit.emoji : '❓'}
+          {isOwned ? (
+            <SpiritSprite spirit={spirit} size={88} emojiSize={72} playing={false} />
+          ) : (
+            <span
+              className="text-[72px]"
+              style={{ filter: 'brightness(0) invert(0.3)', opacity: 0.7 }}
+            >
+              ❓
+            </span>
+          )}
         </motion.div>
 
         {/* 이름 */}

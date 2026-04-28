@@ -42,3 +42,23 @@ export function getSpiritSprite(id: SpiritId): SpiritSpriteSheet | undefined {
 export function hasSpiritSprite(id: SpiritId): boolean {
   return id in SPIRIT_SPRITES;
 }
+
+// ─── 정적 캐릭터 이미지 (스프라이트 시트 없는 정령용) ─────────────
+export const SPIRIT_CHAR_IMGS: Partial<Record<SpiritId, string>> = {
+  fire_goblin:  '/char_img/도깨비 불꽃.png',
+  book_worm:    '/char_img/책벌레 노리.png',
+  letter_fairy: '/char_img/편지요정 루미.png',
+  tear_drop:    '/char_img/슬프니.png',
+  cloud_bunny:  '/char_img/구름토끼 미미.png',
+  wind_sprite:  '/char_img/산들이.png',
+  seed_spirit:  '/char_img/새싹이.png',
+  drum_imp:     '/char_img/북이.png',
+};
+
+export function getSpiritCharImg(id: SpiritId): string | undefined {
+  return SPIRIT_CHAR_IMGS[id];
+}
+
+export function hasSpiritCharImg(id: SpiritId): boolean {
+  return id in SPIRIT_CHAR_IMGS;
+}
