@@ -32,40 +32,6 @@ import { SPIRITS } from '@/data/spirits';
  * 🆕 v83.1: Spirit personality-based idle motion.
  * 각 정령이 성격에 맞게 방에서 놀고 있는 느낌.
  */
-type MotionPattern = {
-  y?: number[];       // 세로 움직임
-  x?: number[];       // 좌우 움직임
-  rotate?: number[];  // 회전
-  scale?: number[];   // 크기 변화
-  duration: number;
-};
-
-function getSpiritMotion(id: SpiritId): MotionPattern {
-  switch (id) {
-    case 'fire_goblin':    return { scale: [1, 1.15, 1], rotate: [-3, 3, -3], duration: 0.8 };
-    case 'moon_rabbit':    return { y: [0, -14, 0], duration: 1.4 };
-    case 'cherry_leaf':    return { rotate: [-5, 5, -5], y: [0, -3, 0], duration: 3.2 };
-    case 'tear_drop':      return { y: [0, 4, 0], scale: [1, 0.95, 1], duration: 2 };
-    case 'cloud_bunny':    return { y: [0, -6, 0], x: [0, 3, -3, 0], duration: 3.8 };
-    case 'wind_sprite':    return { x: [-6, 6, -6], rotate: [-8, 8, -8], duration: 1.6 };
-    case 'seed_spirit':    return { scale: [1, 1.08, 1], duration: 2.4 };
-    case 'drum_imp':       return { y: [0, -4, 0, -4, 0], duration: 0.6 };
-    case 'book_worm':      return { rotate: [0, 2, 0], duration: 3.5 };
-    case 'letter_fairy':   return { y: [0, -5, 0], rotate: [-3, 3, -3], duration: 2.6 };
-    case 'clown_harley':   return { rotate: [0, 360], duration: 4 };
-    case 'rose_fairy':     return { y: [0, -4, 0], scale: [1, 1.05, 1], duration: 2.2 };
-    case 'ice_prince':     return { y: [0, -2, 0], duration: 4 };
-    case 'forest_mom':     return { scale: [1, 1.03, 1], duration: 5 };
-    case 'lightning_bird': return { x: [0, 8, -8, 0], y: [0, -3, 3, 0], duration: 0.5 };
-    case 'butterfly_meta': return { x: [0, 8, 0, -8, 0], y: [0, -8, 0, -8, 0], rotate: [0, 10, -10, 0], duration: 3.5 };
-    case 'peace_dove':     return { y: [0, -5, 0], x: [0, 3, -3, 0], duration: 2.8 };
-    case 'book_keeper':    return { rotate: [0, -3, 3, 0], duration: 4 };
-    case 'queen_elena':    return { scale: [1, 1.06, 1], y: [0, -2, 0], duration: 3 };
-    case 'star_dust':      return { scale: [1, 1.2, 0.9, 1], rotate: [0, 180, 360], duration: 2 };
-    case 'guardian_eddy':  return { scale: [1, 1.1, 1], y: [0, -3, 0], duration: 3 };
-    default:               return { y: [0, -4, 0], duration: 2 };
-  }
-}
 
 const ROOM_W = 320;
 const ROOM_H = 480;
@@ -200,10 +166,6 @@ export default function RoomPage() {
               .map((p) => {
                 const sp = getSpirit(p.spiritId);
                 if (!sp) return null;
-                const motion$ = getSpiritMotion(p.spiritId);
-                const idleAnim: any = editMode
-                  ? { scale: 1, opacity: 1 }
-                  : { scale: motion$.scale ?? 1, opacity: 1, y: motion$.y ?? 0, x: motion$.x ?? 0, rotate: motion$.rotate ?? 0 };
                 return (
                   <motion.div
                     key={p.spiritId}
@@ -216,16 +178,9 @@ export default function RoomPage() {
                       moveSpirit(p.spiritId, nx, ny);
                     }}
                     initial={{ scale: 0, opacity: 0 }}
-                    animate={idleAnim}
+                    animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0, opacity: 0 }}
-                    transition={{
-                      y: { duration: motion$.duration, repeat: Infinity, ease: 'easeInOut' },
-                      x: { duration: motion$.duration, repeat: Infinity, ease: 'easeInOut' },
-                      rotate: { duration: motion$.duration, repeat: Infinity, ease: 'easeInOut' },
-                      scale: editMode
-                        ? { type: 'spring', stiffness: 300 }
-                        : { duration: motion$.duration, repeat: Infinity, ease: 'easeInOut' },
-                    }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 24 }}
                     onClick={() => editMode && removeSpirit(p.spiritId)}
                     className="absolute select-none z-30"
                     style={{
