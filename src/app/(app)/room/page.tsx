@@ -138,7 +138,7 @@ export default function RoomPage() {
 
   const placedIds = new Set(room.placedSpirits.map((p) => p.spiritId));
   const drawerList = ownedSpirits.filter((u) => !placedIds.has(u.spiritId));
-  const drawerLabel = `SPIRITS · ${drawerList.length}`;
+  const drawerLabel = `정령 · ${drawerList.length}`;
   const drawerClosedHint = drawerList.length === 0
     ? '지금은 비어있어'
     : `${drawerList.length}마리 자고 있어 — 톡, 열어봐`;

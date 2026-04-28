@@ -17,23 +17,7 @@
 import type { SpiritId } from '@/types/spirit.types';
 import type { SpiritSpriteSheet } from '@/types/spirit-sprite.types';
 
-export const SPIRIT_SPRITES: Partial<Record<SpiritId, SpiritSpriteSheet>> = {
-  moon_rabbit: {
-    src: '/splite/moon_rabit_sprite_myroom.webp',
-    frameWidth: 128,
-    frameHeight: 172,
-    totalCols: 6,
-    displayScale: 0.375,   // 128 × 0.375 ≈ 48px (방에서 자연스러운 크기)
-    pixelated: false,
-    states: {
-      idle:   { startFrame: 0,  frames: 12, fps: 8 },
-      walk:   { startFrame: 12, frames: 16, fps: 12 },
-      react:  { startFrame: 28, frames: 10, fps: 14, once: true },
-      arrive: { startFrame: 38, frames: 6,  fps: 12, once: true },
-      sleep:  { startFrame: 44, frames: 4,  fps: 6 },
-    },
-  },
-};
+export const SPIRIT_SPRITES: Partial<Record<SpiritId, SpiritSpriteSheet>> = {};
 
 export function getSpiritSprite(id: SpiritId): SpiritSpriteSheet | undefined {
   return SPIRIT_SPRITES[id];

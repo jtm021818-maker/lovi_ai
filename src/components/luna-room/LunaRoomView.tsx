@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import type { LifeStageInfo, LunaGift, LunaMemory } from '@/lib/luna-life';
 import LunaParticles from './LunaParticles';
 import LunaEnvelope from './LunaEnvelope';
+import LunaChat from './LunaChat';
 
 interface Props {
   ageDays: number;
@@ -109,6 +110,7 @@ export default function LunaRoomView({
   const router = useRouter();
   const [tab, setTab] = useState<'main' | 'inbox' | 'memories'>('main');
   const [selectedGift, setSelectedGift] = useState<LunaGift | null>(null);
+  const [showChat, setShowChat] = useState(false);
 
   const { bgGradient, accentColor, textColor, particleType, name, subtitle, daysRemaining, showCountdown } = stage;
   const isDark = stage.stage === 'twilight' || stage.stage === 'star';
@@ -253,7 +255,7 @@ export default function LunaRoomView({
               {!isDeceased ? (
                 <motion.button
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => router.push('/chat')}
+                  onClick={() => setShowChat(true)}
                   className="mt-2 px-8 py-3 rounded-full text-[14px] font-bold text-white shadow-lg"
                   style={{
                     background: `linear-gradient(135deg, ${accentColor} 0%, ${accentColor}CC 100%)`,
@@ -349,6 +351,17 @@ export default function LunaRoomView({
             isDark={isDark}
             onClose={() => setSelectedGift(null)}
             onOpen={handleOpenGift}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* 루나 대화 채팅 시트 */}
+      <AnimatePresence>
+        {showChat && (
+          <LunaChat
+            key="luna-chat"
+            accentColor={accentColor}
+            onClose={() => setShowChat(false)}
           />
         )}
       </AnimatePresence>

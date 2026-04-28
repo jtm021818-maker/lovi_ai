@@ -68,7 +68,7 @@ export default function SpiritSlot({ spirit, emoji, themeColor, bondLv, name, on
           className="relative"
           style={{ filter: `drop-shadow(0 2px 6px ${themeColor}cc)` }}
         >
-          <SpiritSprite spirit={spirit} state="idle" size={26} />
+          <SpiritSprite spirit={spirit} state="idle" size={38} />
         </span>
       ) : (
         <span
