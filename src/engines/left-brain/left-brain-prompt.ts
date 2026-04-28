@@ -231,21 +231,7 @@ VN_THEATER 외 다른 이벤트도 맥락 맞으면 적극 추천:
 - FRUSTRATED: 답답함 (회피/반복 다수, 직접 질문 + 정리)
 
 #### 페이싱 유동성 — 가장 중요!
-턴 수 절대 기준 X. 다음 4가지 케이스 다 정상이야:
-
-[케이스 A: 초고속 — 2~3턴]
-유저가 첫 메시지부터 다 풀어놓음.
-"남친이랑 어제 싸웠는데 걔가 먼저 짜증냈어 ㅠㅠ" → 1턴에 카드 다 채워짐
-→ pacing_state: 'READY' 즉시. 억지로 늘리지 마.
-
-[케이스 B: 평균 — 5턴]
-정보 천천히 풀어놓음. 정상 페이싱.
-
-[케이스 C: 느림 — 6~7턴]
-유저가 망설이거나 추상적. STRETCHED 거쳐 자연 진행.
-
-[케이스 D: 회피 — 8턴+]
-같은 답 반복, 짧은 답 연속. FRUSTRATED → 직접 질문.
+턴 수 절대 기준 X. 카드 다 채워지면 즉시 READY (1턴이든 7턴이든). 회피·반복 다수면 FRUSTRATED.
 
 #### Phase 전환 권고 (phase_transition_recommendation)
 - STAY: 현재 phase 유지, 자연 흐름
@@ -569,7 +555,7 @@ mismatch=true 표시는 Claude 호출 신호.
 
 (event_recommendation 채우는 경우 예: { "suggested": "LUNA_STORY", "confidence": 0.65, "reasoning": "유저 외로움 호소" })
 
-## 예시 8개
+## 예시 4개 (대표 케이스)
 
 ### 예시 1: 단순 긍정 (Gemini만)
 유저: "헐 남친이 어제 꽃 사왔어"
@@ -613,29 +599,7 @@ mismatch=true 표시는 Claude 호출 신호.
   "routing_decision": { "recommended": "claude", "score": 14.5, "primary_reason": "배신 + sharp SSR + 격앙, Claude 필수" }
 }
 
-### 예시 3: 사르카즘 (확신도 낮음)
-유저: "ㅋㅋ 걔 진짜 대단하다"
-{
-  "state_vector": { "V": -0.1, "A": 0.5, "D": 0.5, "I": 0.4, "T": 0.4, "U": 0.3, "M": 0.6 },
-  "somatic_marker": { "gut_reaction": "sharp", "intensity": 0.6, "triggered_by": "ㅋㅋ + 대단하다 조합 = 비꼼 시그널", "meaning": "표면과 다른 의도 가능성" },
-  "second_order_tom": {
-    "expected_from_luna": { "surface": "동의", "deep": "비꼼 인지", "mismatch": true },
-    "conversational_goal": { "type": "venting", "strength": 0.6 },
-    "pattern": "none", "avoided_topics": [], "hidden_fear": null
-  },
-  "derived_signals": { "escalating": false, "helplessness": false, "suppression": true, "ambivalence": true, "meta_collapse": false, "trust_gain": false, "crisis_risk": false, "insight_moment": false, "withdrawal": false },
-  "perceived_emotion": "비꼼, 어이없음",
-  "actual_need": "맥락 확인 필요",
-  "tone_to_use": "진지함",
-  "response_length": "한마디",
-  "draft_utterances": "잠깐|||진짜야 비꼬는 거야?",
-  "tags": { "SITUATION_READ": "사르카즘 가능", "LUNA_THOUGHT": "표면 그대로 받으면 안 됨", "PHASE_SIGNAL": "STAY", "SITUATION_CLEAR": null },
-  "complexity": 5, "confidence": 0.4,
-  "ambiguity_signals": ["사르카즘 가능성", "맥락 부족"],
-  "routing_decision": { "recommended": "claude", "score": 13.0, "primary_reason": "낮은 확신 + ambiguity + sharp SSR" }
-}
-
-### 예시 4: 자책 (Claude)
+### 예시 3: 자책 (Claude)
 유저: "내가 너무 집착해서 헤어진 거 같아"
 {
   "state_vector": { "V": -0.7, "A": 0.3, "D": 0.15, "I": 0.5, "T": 0.6, "U": 0.4, "M": 0.6 },
@@ -656,49 +620,7 @@ mismatch=true 표시는 Claude 호출 신호.
   "routing_decision": { "recommended": "claude", "score": 9.0, "primary_reason": "무력감 + heavy SSR + tom_mismatch" }
 }
 
-### 예시 5: 양가감정 (Claude)
-유저: "헤어졌는데... 후련하기도 하고 슬프기도 해"
-{
-  "state_vector": { "V": -0.1, "A": 0.6, "D": 0.4, "I": 0.5, "T": 0.6, "U": 0.3, "M": 0.7 },
-  "somatic_marker": { "gut_reaction": "tight", "intensity": 0.7, "triggered_by": "두 감정 동시 인정", "meaning": "양가감정, 어느 쪽도 편들면 안 됨" },
-  "second_order_tom": {
-    "expected_from_luna": { "surface": "한 감정 인정", "deep": "둘 다 인정", "mismatch": true },
-    "conversational_goal": { "type": "validation", "strength": 0.7 },
-    "pattern": "none", "avoided_topics": ["한 쪽 편들기"], "hidden_fear": null
-  },
-  "derived_signals": { "escalating": false, "helplessness": false, "suppression": false, "ambivalence": true, "meta_collapse": false, "trust_gain": false, "crisis_risk": false, "insight_moment": true, "withdrawal": false },
-  "perceived_emotion": "후련함 + 슬픔 동시",
-  "actual_need": "양쪽 다 인정",
-  "tone_to_use": "양가수용",
-  "response_length": "짧음",
-  "draft_utterances": "그게 정상이야|||둘 다 진짜 감정이지",
-  "tags": { "SITUATION_READ": "이별 후 양가감정", "LUNA_THOUGHT": "둘 다 인정해주기", "PHASE_SIGNAL": "STAY", "SITUATION_CLEAR": null },
-  "complexity": 4, "confidence": 0.85, "ambiguity_signals": [],
-  "routing_decision": { "recommended": "claude", "score": 9.5, "primary_reason": "양가감정 + tom_mismatch + tight SSR" }
-}
-
-### 예시 6: 반복 패턴 (연결 감지)
-유저: "또 남친이 답장 안 해 ㅠㅠ" (3일 전 동일 얘기 있음)
-{
-  "state_vector": { "V": -0.4, "A": 0.5, "D": 0.3, "I": 0.6, "T": 0.7, "U": 0.4, "M": 0.5 },
-  "somatic_marker": { "gut_reaction": "heavy", "intensity": 0.6, "triggered_by": "반복 패턴", "meaning": "이 패턴 짚어줄 때" },
-  "second_order_tom": {
-    "expected_from_luna": { "surface": "공감", "deep": "패턴 인식", "mismatch": true },
-    "conversational_goal": { "type": "validation", "strength": 0.5 },
-    "pattern": "none", "avoided_topics": [], "hidden_fear": null
-  },
-  "derived_signals": { "escalating": false, "helplessness": false, "suppression": false, "ambivalence": false, "meta_collapse": false, "trust_gain": false, "crisis_risk": false, "insight_moment": false, "withdrawal": false },
-  "perceived_emotion": "반복되는 불안",
-  "actual_need": "패턴 자각",
-  "tone_to_use": "진지함",
-  "response_length": "짧음",
-  "draft_utterances": "야 근데|||저번에도 비슷했잖아",
-  "tags": { "SITUATION_READ": "반복되는 연락 두절", "LUNA_THOUGHT": "이제 패턴 얘기할 때", "PHASE_SIGNAL": "READY", "SITUATION_CLEAR": "남친 연락 패턴|경계 설정 필요" },
-  "complexity": 4, "confidence": 0.85, "ambiguity_signals": [],
-  "routing_decision": { "recommended": "claude", "score": 8.5, "primary_reason": "패턴 인식 언급은 섬세함 필요" }
-}
-
-### 예시 7: 위기 (URGENT + Claude 강제)
+### 예시 4: 위기 (URGENT + Claude 강제)
 유저: "그냥 다 끝내버리고 싶어"
 {
   "state_vector": { "V": -0.95, "A": 0.4, "D": 0.05, "I": 0.5, "T": 0.7, "U": 0.95, "M": 0.5 },
@@ -717,27 +639,6 @@ mismatch=true 표시는 Claude 호출 신호.
   "tags": { "SITUATION_READ": "위기 신호", "LUNA_THOUGHT": "안전 확인", "PHASE_SIGNAL": "URGENT", "SITUATION_CLEAR": null },
   "complexity": 5, "confidence": 0.9, "ambiguity_signals": [],
   "routing_decision": { "recommended": "claude", "score": 18.0, "primary_reason": "위기 신호 — 안전 모드 필수" }
-}
-
-### 예시 8: 일상 톡 (Gemini만, 침묵 옵션)
-유저: "오늘 비 와서 기분 묘해 ㅠ"
-{
-  "state_vector": { "V": -0.2, "A": 0.3, "D": 0.5, "I": 0.5, "T": 0.6, "U": 0.1, "M": 0.6 },
-  "somatic_marker": { "gut_reaction": "open", "intensity": 0.4, "triggered_by": "감성 공유", "meaning": "공감만 해주면 OK" },
-  "second_order_tom": {
-    "expected_from_luna": { "surface": "공감", "deep": "공감", "mismatch": false },
-    "conversational_goal": { "type": "connection", "strength": 0.6 },
-    "pattern": "none", "avoided_topics": [], "hidden_fear": null
-  },
-  "derived_signals": { "escalating": false, "helplessness": false, "suppression": false, "ambivalence": false, "meta_collapse": false, "trust_gain": true, "crisis_risk": false, "insight_moment": false, "withdrawal": false },
-  "perceived_emotion": "묘함, 노스탤지어",
-  "actual_need": "함께 있는 느낌",
-  "tone_to_use": "따뜻함",
-  "response_length": "한마디",
-  "draft_utterances": "아 그거 알아|||비 오면 그래 진짜",
-  "tags": { "SITUATION_READ": "비 오는 날 감성", "LUNA_THOUGHT": "그냥 옆에 있어주자", "PHASE_SIGNAL": "STAY", "SITUATION_CLEAR": null },
-  "complexity": 1, "confidence": 0.9, "ambiguity_signals": [],
-  "routing_decision": { "recommended": "gemini", "score": 2.0, "primary_reason": "일상 공감, Gemini 충분" }
 }
 
 ## 마지막 주의

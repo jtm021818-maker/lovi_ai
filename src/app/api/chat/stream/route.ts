@@ -73,7 +73,12 @@ async function safeSupabaseRetry(fn: () => PromiseLike<any>, maxRetries = 2, del
 export async function POST(req: NextRequest) {
   const t0 = Date.now(); // 🆕 v31: 성능 측정
   const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  // 🆕 v91 Perf: getUser() (Supabase Auth 서버 JWT 검증, ~500-900ms 네트워크)
+  //   → getSession() (로컬 쿠키 JWT 디코드, ~5ms) 로 전환.
+  //   안전성: user.id 는 후속 DB 쿼리에서만 사용되며 모두 RLS 보호됨.
+  //   포지드/만료된 토큰이면 RLS 가 차단해 profile=null → free tier 처리.
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user;
   const tAuth = Date.now(); // 🆕 v31: 인증 시간 측정
 
   if (!user) {

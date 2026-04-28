@@ -4,9 +4,9 @@
  * 흐름:
  *   1. 좌뇌 분석 → 핸드오프 빌드
  *   2. ACE v5 시스템 프롬프트 + 동적 컨텍스트 조립
- *   3. Claude 스트리밍 호출
- *   4. 스트리밍 중 [REQUEST_REANALYSIS] 감지 시 좌뇌 재분석
- *   5. 재호출 (최대 1회)
+ *   3. Claude/Gemini 스트리밍 호출
+ *   4. 🆕 v91: 진짜 스트리밍 — head-buffer (REQUEST_REANALYSIS / 사고누설 감지) 통과 시 chunk 즉시 yield
+ *   5. 스트림 중 [REQUEST_REANALYSIS] 감지 시 좌뇌 재분석 → Claude 재호출 (스트리밍)
  *   6. 메타 발화 제거 + 태그 첨부
  */
 
@@ -101,6 +101,22 @@ function passSelfExpression(llm: any): {
 }
 
 // ============================================================
+// 🆕 v91: head-buffer 상수 — 진짜 스트리밍 안전망
+// ============================================================
+
+/** head-buffer 도입 임계 (이 길이/조건 충족 시 스트리밍 시작) */
+const HEAD_BUFFER_LIMIT = 80;
+
+/**
+ * 사고 노출(reasoning leak) 패턴 — 응답 시작에 나오면 스트리밍 중단하고 폴백
+ * (validateAceResponse 의 REASONING_LEAK_PATTERNS 와 매칭)
+ */
+const EARLY_LEAK_RE = /(트랙\s*[A-Da-d]\b|후보\s*\d|좌뇌\s*(말대로|분석|직감|확신)|머릿속에서|[🫀🧠🔍💬])/;
+
+/** 재분석 요청 패턴 — head-buffer 에서 검출 즉시 abort */
+const REANALYSIS_HEAD_RE = /^\s*\[REQUEST_REANALYSIS/i;
+
+// ============================================================
 // 메인 스트리밍 함수
 // ============================================================
 
@@ -113,7 +129,7 @@ export interface AceV5StreamYield {
  * ACE v5 실행 (스트리밍)
  *
  * yield:
- *   { type: 'text', data: chunk }      - 텍스트 청크
+ *   { type: 'text', data: chunk }      - 텍스트 청크 (🆕 v91: 진짜 스트리밍)
  *   { type: 'meta', data: AceV5Output } - 최종 메타 (마지막에 1회)
  */
 export async function* executeAceV5(
@@ -139,110 +155,165 @@ export async function* executeAceV5(
   const handoffText = formatHandoffForPrompt(handoff, input.completedEvents);
 
   // ────────────────────────────────────────
-  // 2단계: 1차 우뇌 호출 (model 선택, 기본 gemini)
+  // 2단계: 1차 우뇌 호출 — 🆕 v91: head-buffer 스트리밍
   // ────────────────────────────────────────
   const selectedModel: 'gemini' | 'claude' = input.model ?? 'gemini';
-  const firstCallResult = await streamVoiceOnce({
+  const isReanalysis = input.alreadyReanalyzed === true;
+
+  const firstCallParams: SingleCallParams = {
     userUtterance: input.userUtterance,
     handoffText,
     recentLunaActions: input.recentLunaActions,
     intimacyLevel: input.intimacyLevel,
     phase: input.phase,
-    isReanalysis: input.alreadyReanalyzed === true,
+    isReanalysis,
     model: selectedModel,
-    onChunk: undefined,
     metaAwareness: (input.leftBrain as any)?.meta_awareness ?? null,
     previousLunaText: input.previousLunaText ?? null,
     selfExpression: passSelfExpression((input.leftBrain as any)?.self_expression),
-    thinkingLevel: pickThinkingLevel(input.leftBrain, input.alreadyReanalyzed === true),
-    // 🆕 v78: 치매 방지 — 우뇌가 직접 대화 히스토리 봄
+    thinkingLevel: pickThinkingLevel(input.leftBrain, isReanalysis),
     chatHistory: input.chatHistory,
-  }, logCollector);
+  };
 
-  // ────────────────────────────────────────
-  // 3단계: 재요청 감지
-  // ────────────────────────────────────────
-  const reanalysisCheck = detectReanalysisRequest(firstCallResult.fullText);
+  let buffer = '';
+  let streamingMode = false;
+  let aborted = false;
+  let firstCallFullText = '';
+  let firstCallLatency = 0;
+  let firstCallTokensIn = 0;
+  let firstCallTokensOut = 0;
 
-  let finalText: string;
-  let voiceLatencyMs = firstCallResult.latencyMs;
-  let reanalysisRequested = false;
-  let reanalysisReason: string | undefined;
-  let totalTokensIn = firstCallResult.tokensIn;
-  let totalTokensOut = firstCallResult.tokensOut;
-
-  if (reanalysisCheck.detected && !input.alreadyReanalyzed) {
-    // ────────────────────────────────────────
-    // 4단계: 좌뇌 재분석 (강화 모드)
-    // ────────────────────────────────────────
-    reanalysisRequested = true;
-    reanalysisReason = reanalysisCheck.reason;
-    const msg = `[ACEv5] ↩️ 재요청 감지: ${reanalysisReason}`;
-    if (logCollector) logCollector.log(msg);
-    else console.log(msg);
-
-    const refinedAnalysis = await analyzeLeftBrain({
-      userUtterance: input.userUtterance,
-      sessionId: input.sessionId,
-      turnIdx: input.turnIdx,
-      recentTrajectory: [],   // TODO: 세션 스토어 연동
-      phase: input.phase,
-      intimacyLevel: input.intimacyLevel,
-    }, logCollector);
-
-    if (refinedAnalysis.analysis) {
-      // 재핸드오프
-      const refinedHandoff = buildHandoff(refinedAnalysis.analysis);
-      // claudeConcern을 핸드오프 텍스트에 prepend
-      const refinedHandoffText =
-        `### ⚠️ 우뇌 의심사항 반영\n${reanalysisCheck.reason}\n\n` +
-        formatHandoffForPrompt(refinedHandoff, input.completedEvents);
-
-      // 5단계: 재호출 (재분석은 Claude 강제 — 더 깊은 사고)
-      const secondCallResult = await streamVoiceOnce({
-        userUtterance: input.userUtterance,
-        handoffText: refinedHandoffText,
-        recentLunaActions: input.recentLunaActions,
-        intimacyLevel: input.intimacyLevel,
-        phase: input.phase,
-        isReanalysis: true,
-        model: 'claude',    // 재요청은 Claude 로 고정
-        onChunk: undefined,
-        metaAwareness: (refinedAnalysis.analysis as any)?.meta_awareness ?? null,
-        previousLunaText: input.previousLunaText ?? null,
-        selfExpression: passSelfExpression((refinedAnalysis.analysis as any)?.self_expression),
-        thinkingLevel: 'high',  // 재분석은 high
-        // 🆕 v78: 치매 방지 — 재분석에도 히스토리 전달
-        chatHistory: input.chatHistory,
-      }, logCollector);
-
-      finalText = secondCallResult.fullText;
-      voiceLatencyMs += secondCallResult.latencyMs;
-      totalTokensIn += secondCallResult.tokensIn;
-      totalTokensOut += secondCallResult.tokensOut;
-    } else {
-      // 재분석 실패 → 원본 핸드오프로 응답 생성 (최후 수단)
-      finalText = reanalysisCheck.cleanText || handoff.draft;
+  for await (const ev of streamVoiceOnceGen(firstCallParams, logCollector)) {
+    if (ev.type === 'final') {
+      firstCallFullText = ev.data.fullText;
+      firstCallLatency = ev.data.latencyMs;
+      firstCallTokensIn = ev.data.tokensIn;
+      firstCallTokensOut = ev.data.tokensOut;
+      break;
     }
-  } else {
-    // 재요청 없음 → 1차 응답 그대로
-    finalText = reanalysisCheck.cleanText;
+    if (aborted) continue;
+
+    if (!streamingMode) {
+      buffer += ev.data;
+      // head-buffer 안전 검출
+      if (REANALYSIS_HEAD_RE.test(buffer) || EARLY_LEAK_RE.test(buffer)) {
+        aborted = true;
+        continue;
+      }
+      // 첫 ||| 도착 OR 임계 도달 → 스트리밍 시작 (첫 글자 즉시 노출)
+      if (buffer.includes('|||') || buffer.length >= HEAD_BUFFER_LIMIT) {
+        streamingMode = true;
+        yield { type: 'text', data: buffer };
+        buffer = '';
+      }
+    } else {
+      yield { type: 'text', data: ev.data };
+    }
+  }
+
+  // 매우 짧은 응답: 스트리밍 시작 못했고 abort 도 아닌 경우 — 마지막 flush
+  if (!streamingMode && !aborted && buffer.length > 0) {
+    streamingMode = true;
+    yield { type: 'text', data: buffer };
+    buffer = '';
   }
 
   // ────────────────────────────────────────
-  // 6단계: 메타 발화 제거 + 검증
+  // 3단계: 후처리 분기 — abort vs 정상 스트리밍
   // ────────────────────────────────────────
+  let finalText: string;
+  let voiceLatencyMs = firstCallLatency;
+  let totalTokensIn = firstCallTokensIn;
+  let totalTokensOut = firstCallTokensOut;
+  let reanalysisRequested = false;
+  let reanalysisReason: string | undefined;
+
+  if (aborted) {
+    // 4단계: REQUEST_REANALYSIS or 사고누설 감지 → 원래 처리 경로
+    const reanalysisCheck = detectReanalysisRequest(firstCallFullText);
+
+    if (reanalysisCheck.detected && !input.alreadyReanalyzed) {
+      reanalysisRequested = true;
+      reanalysisReason = reanalysisCheck.reason;
+      const msg = `[ACEv5] ↩️ 재요청 감지: ${reanalysisReason}`;
+      if (logCollector) logCollector.log(msg);
+      else console.log(msg);
+
+      const refinedAnalysis = await analyzeLeftBrain({
+        userUtterance: input.userUtterance,
+        sessionId: input.sessionId,
+        turnIdx: input.turnIdx,
+        recentTrajectory: [],
+        phase: input.phase,
+        intimacyLevel: input.intimacyLevel,
+      }, logCollector);
+
+      if (refinedAnalysis.analysis) {
+        const refinedHandoff = buildHandoff(refinedAnalysis.analysis);
+        const refinedHandoffText =
+          `### ⚠️ 우뇌 의심사항 반영\n${reanalysisCheck.reason}\n\n` +
+          formatHandoffForPrompt(refinedHandoff, input.completedEvents);
+
+        // 🆕 v91: 재분석 호출도 스트리밍 (head-buffer 없이 — 재분석은 신뢰)
+        let secondText = '';
+        let secondLatency = 0;
+        let secondTokensIn = 0;
+        let secondTokensOut = 0;
+        for await (const ev of streamVoiceOnceGen({
+          ...firstCallParams,
+          handoffText: refinedHandoffText,
+          isReanalysis: true,
+          model: 'claude',
+          metaAwareness: (refinedAnalysis.analysis as any)?.meta_awareness ?? null,
+          selfExpression: passSelfExpression((refinedAnalysis.analysis as any)?.self_expression),
+          thinkingLevel: 'high',
+        }, logCollector)) {
+          if (ev.type === 'final') {
+            secondText = ev.data.fullText;
+            secondLatency = ev.data.latencyMs;
+            secondTokensIn = ev.data.tokensIn;
+            secondTokensOut = ev.data.tokensOut;
+          } else {
+            // 재분석 응답은 즉시 chunk 흘림
+            yield { type: 'text', data: ev.data };
+          }
+        }
+        finalText = secondText;
+        voiceLatencyMs += secondLatency;
+        totalTokensIn += secondTokensIn;
+        totalTokensOut += secondTokensOut;
+      } else {
+        // 재분석 실패 → 깨끗한 텍스트 또는 draft 폴백
+        finalText = reanalysisCheck.cleanText.length >= 5 ? reanalysisCheck.cleanText : (handoff.draft || '...');
+        const cleaned = cleanResponseText(finalText);
+        finalText = cleaned.text;
+        yield { type: 'text', data: finalText };
+      }
+    } else {
+      // 사고누설 감지 → handoff.draft 강제 폴백
+      console.warn(`[ACEv5:v91] 🚨 head-buffer abort → 좌뇌 draft 폴백 ("${handoff.draft?.slice(0, 40)}")`);
+      finalText = handoff.draft || '...';
+      yield { type: 'text', data: finalText };
+    }
+  } else {
+    // 정상 스트리밍 완료 — 끝에서 검증 + 태그 추가
+    finalText = firstCallFullText;
+  }
+
+  // ────────────────────────────────────────
+  // 5단계: 후처리 — 검증 / 힌트 추출 / 태그 첨부
+  // ────────────────────────────────────────
+  // 정상 스트리밍이면 firstCallFullText 그대로, abort 폴백이면 위에서 finalText 갱신됨
   const cleaned = cleanResponseText(finalText);
   const validation = validateAceResponse(cleaned.text);
   const correction = detectSelfCorrection(cleaned.text);
 
-  if (!validation.passed) {
+  if (!validation.passed && aborted) {
+    // abort 경로에서만 폴백 가능 (정상 스트리밍은 이미 사용자 화면에 송출됨)
     const msg = `[ACEv5] ⚠️ 품질 검증 실패: ${validation.issues.join(', ')}`;
     if (logCollector) logCollector.log(msg);
     else console.warn(msg);
 
-    // 🆕 v73: reasoning_leak (사고 노출) 감지 시 무조건 좌뇌 draft 로 폴백
-    //   cleaned.text 에 🫀/트랙/후보 등 사고 흔적이 남아 있으면 유저 노출 → 치명
     const hasLeak = validation.issues.some((i) => i.includes('reasoning_leak'));
     if (hasLeak) {
       console.warn(`[ACEv5:v73] 🚨 reasoning_leak → 좌뇌 draft 강제 폴백 ("${handoff.draft?.slice(0, 40)}")`);
@@ -262,33 +333,44 @@ export async function* executeAceV5(
   const leftBrainHints = hintExtraction.hints;
 
   // ────────────────────────────────────────
-  // 7단계: 태그 첨부
+  // 6단계: 태그 첨부
+  //   - 정상 스트리밍: 본문은 이미 송출됨 → 태그 suffix 만 별도 yield (본문에 이미 들어있는 태그는 dedupe)
+  //   - abort 폴백: finalText 만 yield 했으므로 태그도 별도 yield 해서 pipeline 메타 파싱 보장
   // ────────────────────────────────────────
   const finalWithTags = appendTagsToResponse(finalText, handoff.tags);
 
-  // ────────────────────────────────────────
-  // 8단계: 텍스트 yield (한 번에)
-  // ACE v5는 진정한 스트리밍이 아닌 "버퍼링 후 전송"
-  // (재요청 감지 위해 어차피 끝까지 받아야 함)
-  // ────────────────────────────────────────
-  // 🆕 v63: ACE 출력 디버그 — 빈 응답 케이스 추적
+  if (streamingMode && !aborted) {
+    // 스트리밍 본문(firstCallFullText)에 이미 들어있는 태그는 제외하고 누락분만 yield
+    const tagSuffix = appendTagsToResponse(firstCallFullText, handoff.tags).slice(firstCallFullText.trim().length);
+    if (tagSuffix.length > 0) {
+      yield { type: 'text', data: tagSuffix };
+    }
+  } else if (aborted) {
+    // 폴백 응답에 태그 suffix 추가 — pipeline 이 SITUATION_READ/LUNA_THOUGHT/PHASE_SIGNAL 메타 파싱
+    const tagSuffix = appendTagsToResponse(finalText, handoff.tags).slice(finalText.trim().length);
+    if (tagSuffix.length > 0) {
+      yield { type: 'text', data: tagSuffix };
+    }
+  }
+
+  // 🆕 v63: ACE 출력 디버그
   console.log('[ACE:finalText]', {
     model: input.model,
     finalTextLen: finalText?.length ?? 0,
     finalWithTagsLen: finalWithTags?.length ?? 0,
     reanalysisRequested,
+    aborted,
+    streamingMode,
     isEmpty: !finalWithTags || finalWithTags.trim().length === 0,
   });
-  yield { type: 'text', data: finalWithTags };
 
   // ────────────────────────────────────────
-  // 9단계: 메타
+  // 7단계: 메타
   // ────────────────────────────────────────
   const meta: AceV5Output = {
     fullText: finalWithTags,
     reanalysisRequested,
     reanalysisReason,
-    // 🆕 v57: 우뇌가 다음 턴 좌뇌에 남기는 힌트
     left_brain_hints_for_next_turn: leftBrainHints.length > 0 ? leftBrainHints : undefined,
     meta: {
       latencyMs: Date.now() - overallStart,
@@ -310,7 +392,7 @@ export async function* executeAceV5(
 }
 
 // ============================================================
-// Claude 1회 호출 (스트리밍)
+// Voice 호출 (스트리밍 generator) — 🆕 v91
 // ============================================================
 
 interface SingleCallParams {
@@ -322,7 +404,6 @@ interface SingleCallParams {
   isReanalysis: boolean;
   /** 🆕 v56: 우뇌 모델 선택 */
   model: 'gemini' | 'claude';
-  onChunk?: (chunk: string) => void;
   /** 🆕 v73+74: 메타-자각 (+ too_many_questions) */
   metaAwareness?: {
     user_meta_complaint: boolean;
@@ -353,12 +434,22 @@ interface SingleCallResult {
   tokensOut: number;
 }
 
+type StreamGenYield =
+  | { type: 'chunk'; data: string }
+  | { type: 'final'; data: SingleCallResult };
+
 /**
- * ACE v5 1회 우뇌 호출 (스트리밍).
- * model='gemini' → Gemini 2.5 Flash (90% 상황, 저비용)
+ * 🆕 v91: ACE v5 1회 우뇌 호출 (진짜 스트리밍 generator).
+ * 각 chunk 를 즉시 yield → caller 가 head-buffer 또는 즉시 송출 결정.
+ * 종료 시 'final' 로 누적 결과 1회 yield.
+ *
+ * model='gemini' → Gemini 3 Flash (90% 상황, 저비용, reasoning native)
  * model='claude' → Claude Sonnet 4.6 (10% 고복잡도)
  */
-async function streamVoiceOnce(params: SingleCallParams, logCollector?: LogCollector): Promise<SingleCallResult> {
+async function* streamVoiceOnceGen(
+  params: SingleCallParams,
+  _logCollector?: LogCollector,
+): AsyncGenerator<StreamGenYield> {
   const t0 = Date.now();
 
   const userMessage = buildAceV5UserMessage({
@@ -371,20 +462,16 @@ async function streamVoiceOnce(params: SingleCallParams, logCollector?: LogColle
     metaAwareness: params.metaAwareness ?? null,
     previousLunaText: params.previousLunaText ?? null,
     selfExpression: params.selfExpression ?? null,
-    // 🆕 v78: 대화 히스토리 — 우뇌가 직접 맥락 봄 (치매 방지)
     chatHistory: params.chatHistory,
   });
 
   const provider = params.model === 'claude' ? 'anthropic' : 'gemini';
   const modelId = params.model === 'claude'
     ? ANTHROPIC_MODELS.SONNET_4_6
-    : GEMINI_MODELS.FLASH_3; // 🆕 v76: Gemini 3 Flash Preview (reasoning native)
+    : GEMINI_MODELS.FLASH_3;
 
-  // 🆕 v90: Gemini 3 thinking_level — caller(pickThinkingLevel) 가 전달, fallback 도 'minimal'
-  //   기존 'low' fallback 은 인자 누락 시 매 턴 +0.5~1.5s reasoning 비용 발생 → 'minimal' 안전 기본값
   const thinkingLevel = params.thinkingLevel ?? 'minimal';
 
-  // 🆕 v64: 통일 디버그 로거 (engine + model + 프롬프트 + 유저 메시지)
   logEnginePrompt({
     engine: 'ACE_V5_RIGHT_BRAIN',
     model: modelId,
@@ -404,9 +491,9 @@ async function streamVoiceOnce(params: SingleCallParams, logCollector?: LogColle
     ACE_V5_SYSTEM_PROMPT,
     [{ role: 'user' as const, content: userMessage }],
     'sonnet',
-    600,                            // 응답은 짧게
+    600,
     modelId,
-    undefined,                      // onRetry
+    undefined,
     provider === 'gemini' ? { thinkingLevel, includeThoughts: false } : undefined,
   );
 
@@ -414,15 +501,18 @@ async function streamVoiceOnce(params: SingleCallParams, logCollector?: LogColle
   for await (const chunk of stream) {
     if (typeof chunk === 'string') {
       fullText += chunk;
-      params.onChunk?.(chunk);
+      yield { type: 'chunk', data: chunk };
     }
   }
 
-  return {
-    fullText,
-    latencyMs: Date.now() - t0,
-    tokensIn: estimateTokens(ACE_V5_SYSTEM_PROMPT) + estimateTokens(userMessage),
-    tokensOut: estimateTokens(fullText),
+  yield {
+    type: 'final',
+    data: {
+      fullText,
+      latencyMs: Date.now() - t0,
+      tokensIn: estimateTokens(ACE_V5_SYSTEM_PROMPT) + estimateTokens(userMessage),
+      tokensOut: estimateTokens(fullText),
+    },
   };
 }
 
