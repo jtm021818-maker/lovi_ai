@@ -46,14 +46,29 @@ export function hasSpiritSprite(id: SpiritId): boolean {
 
 // ─── 정적 캐릭터 이미지 (스프라이트 시트 없는 정령용) ─────────────
 export const SPIRIT_CHAR_IMGS: Partial<Record<SpiritId, string>> = {
-  fire_goblin:  '/char_img/도깨비 불꽃.png',
-  book_worm:    '/char_img/책벌레 노리.png',
-  letter_fairy: '/char_img/편지요정 루미.png',
-  tear_drop:    '/char_img/슬프니.png',
-  cloud_bunny:  '/char_img/구름토끼 미미.png',
-  wind_sprite:  '/char_img/산들이.png',
-  seed_spirit:  '/char_img/새싹이.png',
-  drum_imp:     '/char_img/북이.png',
+  // N (8) — 전부 이미지 보유
+  fire_goblin:    '/char_img/도깨비 불꽃.png',
+  book_worm:      '/char_img/책벌레 노리.png',
+  letter_fairy:   '/char_img/편지요정 루미.png',
+  tear_drop:      '/char_img/슬프니.png',
+  cloud_bunny:    '/char_img/구름토끼 미미.png',
+  wind_sprite:    '/char_img/산들이.png',
+  seed_spirit:    '/char_img/새싹이.png',
+  drum_imp:       '/char_img/북이.png',
+  // R (6) — 전부 이미지 보유
+  cherry_leaf:    '/char_img/벚잎이.png',
+  moon_rabbit:    '/char_img/달빛토끼.png',
+  clown_harley:   '/char_img/광대 할리.png',
+  rose_fairy:     '/char_img/로제.png',
+  ice_prince:     '/char_img/얼음왕자.png',
+  forest_mom:     '/char_img/숲 엄마.png',
+  // SR (4) — 3종 이미지 보유 (열쇠지기 클리, 번개새 핏치, 변화나비 메타, 평화비둘기)
+  lightning_bird: '/char_img/번개새 핏치.png',
+  butterfly_meta: '/char_img/변화나비 메타.png',
+  peace_dove:     '/char_img/평화비둘기.png',
+  book_keeper:    '/char_img/열쇠지기 클리.png',
+  // UR (2) — 미보유 (queen_elena, star_dust)
+  // L (1) — 미보유 (guardian_eddy)
 };
 
 export function getSpiritCharImg(id: SpiritId): string | undefined {
