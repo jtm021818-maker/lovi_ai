@@ -14,8 +14,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import LunaRoomView from '@/components/luna-room/LunaRoomView';
-import type { LifeStageInfo, LunaGift, LunaMemory } from '@/lib/luna-life';
+import LunaRoomDiorama from '@/components/luna-room/LunaRoomDiorama';
+import type { LifeStageInfo, LunaGift, LunaMemory, LunaLiveState } from '@/lib/luna-life';
 
 interface StatusData {
   initialized: boolean;
@@ -26,6 +26,10 @@ interface StatusData {
   unopenedGifts: number;
   gifts: LunaGift[];
   recentMemories: LunaMemory[];
+  allMemories: LunaMemory[];
+  pinnedMemories: LunaMemory[];
+  liveState: LunaLiveState;
+  petAvailable: boolean;
 }
 
 // ─── Init screen ─────────────────────────────────────────────────────────────
@@ -155,7 +159,27 @@ export default function LunaRoomPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ giftId }),
       });
-      // Refresh status to update unopened count
+      fetchStatus();
+    } catch { /* ignore */ }
+  };
+
+  const handlePet = async () => {
+    try {
+      const res = await fetch('/api/luna-room/pet', { method: 'POST' });
+      const data = await res.json();
+      return data as { ok: boolean; whisper?: string; cooldownSeconds?: number };
+    } catch {
+      return { ok: false };
+    }
+  };
+
+  const handleMemoryPin = async (memoryId: string, pinned: boolean, frameStyle?: string) => {
+    try {
+      await fetch('/api/luna-room/memory/pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memoryId, pinned, frameStyle }),
+      });
       fetchStatus();
     } catch { /* ignore */ }
   };
@@ -168,15 +192,20 @@ export default function LunaRoomPage() {
 
   return (
     <AnimatePresence mode="wait">
-      <LunaRoomView
+      <LunaRoomDiorama
         key="room"
         ageDays={status.ageDays}
         stage={status.stage}
+        liveState={status.liveState}
         unopenedGifts={status.unopenedGifts}
         gifts={status.gifts}
-        memories={status.recentMemories}
+        pinnedMemories={status.pinnedMemories ?? []}
+        allMemories={status.allMemories ?? status.recentMemories ?? []}
         isDeceased={status.isDeceased}
+        petAvailable={status.petAvailable ?? false}
         onGiftOpen={handleGiftOpen}
+        onPet={handlePet}
+        onMemoryPin={handleMemoryPin}
       />
     </AnimatePresence>
   );

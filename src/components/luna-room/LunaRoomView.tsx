@@ -1,5 +1,11 @@
 'use client';
 
+/**
+ * @deprecated v100 (2026-04-29) — replaced by LunaRoomDiorama.
+ * Keep this file as fallback reference until 2026-05-15, then delete.
+ * 새 화면: src/components/luna-room/LunaRoomDiorama.tsx
+ */
+
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';

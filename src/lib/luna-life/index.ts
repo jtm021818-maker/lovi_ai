@@ -36,7 +36,22 @@ export interface LunaMemory {
   content: string;
   dayNumber: number;
   createdAt: string;
+  /** v100: 사용자/시스템이 액자선반에 고정한 추억 */
+  isPinned?: boolean;
+  /** v100: 'wood' | 'gold' | 'pastel' | 'film' */
+  frameStyle?: string;
 }
+
+// v100: mood/activity engine re-exports
+export type {
+  LunaMood,
+  LunaActivity,
+  LunaTimeBand,
+  LunaWeather,
+  LunaLiveState,
+} from './mood';
+export { computeLiveStateLocal } from './mood';
+export { ACTIVITY_LABELS, WHISPERS_BY_MOOD, pickWhisperLocal } from './whispers';
 
 export interface LunaGift {
   id: string;

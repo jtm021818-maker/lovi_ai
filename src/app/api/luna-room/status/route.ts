@@ -7,7 +7,15 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { getAgeDays, getLifeStageInfo, pendingGiftDay, getGiftPrompt, GIFT_SCHEDULE } from '@/lib/luna-life';
+import {
+  getAgeDays,
+  getLifeStageInfo,
+  pendingGiftDay,
+  getGiftPrompt,
+  GIFT_SCHEDULE,
+  computeLiveStateLocal,
+  pickWhisperLocal,
+} from '@/lib/luna-life';
 import { generateWithCascade, GEMINI_MODELS } from '@/lib/ai/provider-registry';
 
 export async function GET(_req: NextRequest) {
@@ -44,19 +52,71 @@ export async function GET(_req: NextRequest) {
       .eq('user_id', user.id);
   }
 
-  // Fetch gifts + memories
-  const [{ data: gifts }, { data: memories }] = await Promise.all([
+  // Fetch gifts + memories + pinned memories + recent sessions for mood signal
+  const since24hISO = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const [
+    { data: gifts },
+    { data: memories },
+    { data: pinned },
+    { count: recentSessionCount },
+  ] = await Promise.all([
     supabase.from('luna_gifts').select('*').eq('user_id', user.id).order('trigger_day', { ascending: true }),
-    supabase.from('luna_memories').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(5),
+    supabase.from('luna_memories').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(30),
+    supabase
+      .from('luna_memories')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('is_pinned', true)
+      .order('created_at', { ascending: false })
+      .limit(12),
+    supabase
+      .from('counseling_sessions')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .gte('created_at', since24hISO),
   ]);
 
   const unopened = (gifts ?? []).filter((g: any) => !g.opened_at).length;
+  const isDeceased = ageDays >= 100;
+
+  // ── v100: live mood/activity state ───────────────────────────────────────
+  const liveState = computeLiveStateLocal({
+    ageDays,
+    stage: info.stage,
+    serverNowMs: Date.now(),
+    recentSessionWithin24h: (recentSessionCount ?? 0) > 0,
+    recentMessageCount24h: recentSessionCount ?? 0,
+    isDeceased,
+  });
+
+  // whisper: 캐시된 게 있으면 그것, 없으면 결정형 풀
+  const cachedWhisperUntilMs = life.cached_whisper_until
+    ? new Date(life.cached_whisper_until).getTime()
+    : 0;
+  const useCached = life.cached_whisper && cachedWhisperUntilMs > Date.now();
+  liveState.whisper = useCached
+    ? life.cached_whisper
+    : pickWhisperLocal(liveState.mood, ageDays + Math.floor(Date.now() / (60 * 60 * 1000)));
+
+  // ── v100: pet cooldown (4h) ──────────────────────────────────────────────
+  const lastPettedMs = life.last_petted_at ? new Date(life.last_petted_at).getTime() : 0;
+  const petAvailable = !isDeceased && Date.now() - lastPettedMs > 4 * 60 * 60 * 1000;
+
+  const mapMemory = (m: any) => ({
+    id: m.id,
+    title: m.title,
+    content: m.content,
+    dayNumber: m.day_number,
+    createdAt: m.created_at,
+    isPinned: !!m.is_pinned,
+    frameStyle: m.frame_style ?? 'wood',
+  });
 
   return NextResponse.json({
     initialized: true,
     ageDays,
     birthDate: life.birth_date,
-    isDeceased: ageDays >= 100,
+    isDeceased,
     stage: info,
     unopenedGifts: unopened,
     gifts: (gifts ?? []).map((g: any) => ({
@@ -68,13 +128,11 @@ export async function GET(_req: NextRequest) {
       openedAt: g.opened_at,
       createdAt: g.created_at,
     })),
-    recentMemories: (memories ?? []).map((m: any) => ({
-      id: m.id,
-      title: m.title,
-      content: m.content,
-      dayNumber: m.day_number,
-      createdAt: m.created_at,
-    })),
+    recentMemories: (memories ?? []).slice(0, 5).map(mapMemory),
+    allMemories: (memories ?? []).map(mapMemory),
+    pinnedMemories: (pinned ?? []).map(mapMemory),
+    liveState,
+    petAvailable,
   });
 }
 
