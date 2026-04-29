@@ -2,13 +2,13 @@
  * 🧚 v83: Spirit Master Data — 20 spirits
  *
  * Rarity distribution:
- *   N × 8, R × 6, SR × 4, UR × 2, L × 0 (unlock-only, future: guardian_eddy)
+ *   N × 7, R × 6, SR × 5, UR × 2, L × 0 (unlock-only, future: guardian_eddy)
  */
 
 import type { SpiritMaster } from '@/types/spirit.types';
 
 export const SPIRITS: SpiritMaster[] = [
-  // ═══════════════════════ N (8) ═══════════════════════
+  // ═══════════════════════ N (7) ═══════════════════════
   {
     id: 'fire_goblin',
     emoji: '🔥',
@@ -34,19 +34,6 @@ export const SPIRITS: SpiritMaster[] = [
     abilityEnhanced: '분석 카드 1개 추가',
     backstoryPreview: '도서관에서 잠든 대학생의 이성적 판단력이 모인 정령.',
     themeColor: '#92400E',
-  },
-  {
-    id: 'letter_fairy',
-    emoji: '💌',
-    name: '편지요정 루미',
-    rarity: 'N',
-    personality: '말 조리 있게 잘하는 편지요정',
-    speechStyle: '부드러운 존대',
-    abilityCategory: '초안 생성',
-    abilityShort: '초안 생성 시 톤 3안 → 4안',
-    abilityEnhanced: '톤 intensity 자동 조정',
-    backstoryPreview: '부치지 못한 편지 100통의 정령. 네 마음을 대신 써줘.',
-    themeColor: '#F472B6',
   },
   {
     id: 'tear_drop',
@@ -75,19 +62,6 @@ export const SPIRITS: SpiritMaster[] = [
     themeColor: '#93C5FD',
   },
   {
-    id: 'wind_sprite',
-    emoji: '🍃',
-    name: '산들이',
-    rarity: 'N',
-    personality: '자유로운 쾌활함',
-    speechStyle: '빠르고 쾌활',
-    abilityCategory: '분위기 환기',
-    abilityShort: '대화 분위기 전환 트리거 +20%',
-    abilityEnhanced: '턴 속도 +20%',
-    backstoryPreview: '봄바람에 섞여 들어온 정령. 무거운 공기 걷어줘.',
-    themeColor: '#86EFAC',
-  },
-  {
     id: 'seed_spirit',
     emoji: '🌱',
     name: '새싹이',
@@ -113,20 +87,46 @@ export const SPIRITS: SpiritMaster[] = [
     backstoryPreview: '북 치던 아이의 손목에서 떨어져 나온 정령.',
     themeColor: '#D97706',
   },
+  {
+    id: 'peace_dove',
+    emoji: '🕊️',
+    name: '평화비둘기',
+    rarity: 'N',
+    personality: '관계 회복의 손',
+    speechStyle: '부드러운 존대',
+    abilityCategory: '재회 조언',
+    abilityShort: '재회 시나리오 특별 조언',
+    abilityEnhanced: '재회 성공 🏆 뱃지',
+    backstoryPreview: '다툰 뒤 먼저 용기 낸 사람의 편지를 물고 온 비둘기.',
+    themeColor: '#FCA5A5',
+  },
 
   // ═══════════════════════ R (6) ═══════════════════════
   {
-    id: 'cherry_leaf',
-    emoji: '🌸',
-    name: '벚잎이',
+    id: 'letter_fairy',
+    emoji: '💌',
+    name: '편지요정 루미',
     rarity: 'R',
-    personality: '여리고 감성적',
-    speechStyle: '시적, 조용',
-    abilityCategory: '이별 공명',
-    abilityShort: '이별 상담 특별 카드 출현',
-    abilityEnhanced: '이별 위기 시 자동 위로',
-    backstoryPreview: '첫사랑이 전학 간 날 터진 여학생의 감정.',
-    themeColor: '#F9A8D4',
+    personality: '말 조리 있게 잘하는 편지요정',
+    speechStyle: '부드러운 존대',
+    abilityCategory: '초안 생성',
+    abilityShort: '초안 생성 시 톤 3안 → 4안',
+    abilityEnhanced: '톤 intensity 자동 조정',
+    backstoryPreview: '부치지 못한 편지 100통의 정령. 네 마음을 대신 써줘.',
+    themeColor: '#F472B6',
+  },
+  {
+    id: 'wind_sprite',
+    emoji: '🍃',
+    name: '산들이',
+    rarity: 'R',
+    personality: '자유로운 쾌활함',
+    speechStyle: '빠르고 쾌활',
+    abilityCategory: '분위기 환기',
+    abilityShort: '대화 분위기 전환 트리거 +20%',
+    abilityEnhanced: '턴 속도 +20%',
+    backstoryPreview: '봄바람에 섞여 들어온 정령. 무거운 공기 걷어줘.',
+    themeColor: '#86EFAC',
   },
   {
     id: 'moon_rabbit',
@@ -168,19 +168,6 @@ export const SPIRITS: SpiritMaster[] = [
     themeColor: '#EC4899',
   },
   {
-    id: 'ice_prince',
-    emoji: '❄️',
-    name: '얼음왕자',
-    rarity: 'R',
-    personality: '시크, 거리감',
-    speechStyle: '단답',
-    abilityCategory: '진정',
-    abilityShort: '흥분 상태 자동 진정 (감정 격화 방지)',
-    abilityEnhanced: '위기 모드 회피',
-    backstoryPreview: '상처받은 뒤 마음 닫은 사람의 냉정함이 왕자가 됨.',
-    themeColor: '#7DD3FC',
-  },
-  {
     id: 'forest_mom',
     emoji: '🌳',
     name: '숲 엄마',
@@ -194,7 +181,33 @@ export const SPIRITS: SpiritMaster[] = [
     themeColor: '#65A30D',
   },
 
-  // ═══════════════════════ SR (4) ═══════════════════════
+  // ═══════════════════════ SR (5) ═══════════════════════
+  {
+    id: 'cherry_leaf',
+    emoji: '🌸',
+    name: '벚잎이',
+    rarity: 'SR',
+    personality: '여리고 감성적',
+    speechStyle: '시적, 조용',
+    abilityCategory: '이별 공명',
+    abilityShort: '이별 상담 특별 카드 출현',
+    abilityEnhanced: '이별 위기 시 자동 위로',
+    backstoryPreview: '첫사랑이 전학 간 날 터진 여학생의 감정.',
+    themeColor: '#F9A8D4',
+  },
+  {
+    id: 'ice_prince',
+    emoji: '❄️',
+    name: '얼음왕자',
+    rarity: 'SR',
+    personality: '시크, 거리감',
+    speechStyle: '단답',
+    abilityCategory: '진정',
+    abilityShort: '흥분 상태 자동 진정 (감정 격화 방지)',
+    abilityEnhanced: '위기 모드 회피',
+    backstoryPreview: '상처받은 뒤 마음 닫은 사람의 냉정함이 왕자가 됨.',
+    themeColor: '#7DD3FC',
+  },
   {
     id: 'lightning_bird',
     emoji: '⚡',
@@ -220,19 +233,6 @@ export const SPIRITS: SpiritMaster[] = [
     abilityEnhanced: 'ACTION_PLAN 카드 2개',
     backstoryPreview: '알에서 애벌레, 번데기, 나비로 — 자기 자신을 다시 빚은 존재.',
     themeColor: '#C084FC',
-  },
-  {
-    id: 'peace_dove',
-    emoji: '🕊️',
-    name: '평화비둘기',
-    rarity: 'SR',
-    personality: '관계 회복의 손',
-    speechStyle: '부드러운 존대',
-    abilityCategory: '재회 조언',
-    abilityShort: '재회 시나리오 특별 조언',
-    abilityEnhanced: '재회 성공 🏆 뱃지',
-    backstoryPreview: '다툰 뒤 먼저 용기 낸 사람의 편지를 물고 온 비둘기.',
-    themeColor: '#FCA5A5',
   },
   {
     id: 'book_keeper',
