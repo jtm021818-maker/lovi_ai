@@ -77,6 +77,16 @@ export async function POST(req: NextRequest) {
   const message: string = body.message?.trim() ?? '';
   const history: Array<{ role: 'user' | 'luna'; text: string }> = body.history ?? [];
 
+  // v101: 추억 회상에서 진입한 경우 — system prompt에 그 추억 컨텍스트 주입
+  interface MemoryCtx {
+    title?: string;
+    content?: string;
+    dayNumber?: number;
+    lunaThought?: string | null;
+    recall?: string | null;
+  }
+  const memoryContext: MemoryCtx | undefined = body.memoryContext;
+
   if (!message) {
     return NextResponse.json({ error: 'empty message' }, { status: 400 });
   }
@@ -111,12 +121,25 @@ export async function POST(req: NextRequest) {
         .join('\n')
     : '';
 
+  // v101: 추억 회상 컨텍스트 (있으면 system 에 추가)
+  const memoryBlock = memoryContext && memoryContext.title && memoryContext.content
+    ? [
+        `\n[지금 동생이 보고 있는 추억 액자 — 이 추억을 회상하며 대화 시작]`,
+        `D+${memoryContext.dayNumber ?? '?'} "${memoryContext.title}"`,
+        memoryContext.content,
+        memoryContext.lunaThought ? `(그때 내 속마음: ${memoryContext.lunaThought})` : '',
+        memoryContext.recall ? `(방금 내가 회상한 한마디: ${memoryContext.recall})` : '',
+        `→ 이 추억을 자연스럽게 이어 받아 대화해. 동생이 그 순간을 묻거나 떠올리면 1인칭으로 회상하듯.`,
+      ].filter(Boolean).join('\n')
+    : '';
+
   // ── 시스템 프롬프트 조합 ──
   const systemFull = [
     SYSTEM_PROMPT,
     userName ? `\n유저 이름: ${userName}` : '',
     memoryText ? `\n${memoryText}` : '',
     sessionContext ? `\n[최근 상담 요약]\n${sessionContext}` : '',
+    memoryBlock,
   ]
     .filter(Boolean)
     .join('\n');

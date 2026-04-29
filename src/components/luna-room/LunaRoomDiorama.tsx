@@ -21,6 +21,7 @@ import MailboxSlot from './MailboxSlot';
 import MailboxLetterScatter from './MailboxLetterScatter';
 import MemoryShelf from './MemoryShelf';
 import MemoryGallery from './MemoryGallery';
+import MemoryRecallModal from './MemoryRecallModal';
 import WhisperBubble from './WhisperBubble';
 import ActionPills from './ActionPills';
 
@@ -61,6 +62,9 @@ export default function LunaRoomDiorama({
   const [showLetterShelf, setShowLetterShelf] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
+  // v101: 추억 회상 모달
+  const [recallMemory, setRecallMemory] = useState<LunaMemory | null>(null);
+  const [chatMemoryContext, setChatMemoryContext] = useState<{ memory: LunaMemory; recall: string | null } | null>(null);
   const [whisper, setWhisper] = useState(liveState.whisper);
   const [petAvailable, setPetAvailable] = useState(petAvailableInit);
   const [toast, setToast] = useState<string | null>(null);
@@ -233,6 +237,7 @@ export default function LunaRoomDiorama({
               pinnedMemories={pinnedMemories}
               totalMemoryCount={allMemories.length}
               onOpenGallery={() => setShowGallery(true)}
+              onSelectMemory={(m) => setRecallMemory(m)}
               accentColor={accentColor}
               isDark={isDark}
             />
@@ -349,7 +354,30 @@ export default function LunaRoomDiorama({
           <LunaChat
             key="luna-chat"
             accentColor={accentColor}
-            onClose={() => setShowChat(false)}
+            onClose={() => {
+              setShowChat(false);
+              setChatMemoryContext(null);
+            }}
+            memoryContext={chatMemoryContext ?? undefined}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* v101: 추억 회상 모달 */}
+      <AnimatePresence>
+        {recallMemory && (
+          <MemoryRecallModal
+            key={`recall-${recallMemory.id}`}
+            memory={recallMemory}
+            accentColor={accentColor}
+            isDark={isDark}
+            onClose={() => setRecallMemory(null)}
+            onTalkMore={(m, recall) => {
+              setChatMemoryContext({ memory: m, recall });
+              setRecallMemory(null);
+              setShowChat(true);
+            }}
+            onPin={onMemoryPin}
           />
         )}
       </AnimatePresence>

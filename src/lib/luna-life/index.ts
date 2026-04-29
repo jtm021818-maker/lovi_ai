@@ -40,6 +40,15 @@ export interface LunaMemory {
   isPinned?: boolean;
   /** v100: 'wood' | 'gold' | 'pastel' | 'film' */
   frameStyle?: string;
+  /** v101: 이미지 URL (Pollinations 외부 또는 내부 storage) */
+  imageUrl?: string | null;
+  /** v101: 작성 시점 루나의 1인칭 속마음 (회상 컨텍스트) */
+  lunaThought?: string | null;
+  /** v101: 도착 예정 시각 — UI는 delivered_at 기준으로 노출 판단 */
+  scheduledFor?: string | null;
+  deliveredAt?: string | null;
+  /** v101: 'auto' | 'judge' | 'manual' */
+  source?: string;
 }
 
 // v100: mood/activity engine re-exports
@@ -61,6 +70,11 @@ export interface LunaGift {
   content: string;
   openedAt: string | null;
   createdAt: string;
+  /** v101: 도착 예정 시각 — null이면 즉시 도착 */
+  scheduledFor?: string | null;
+  deliveredAt?: string | null;
+  /** v101: 'scheduled' | 'judge' */
+  source?: string;
 }
 
 // ─── Stage metadata ──────────────────────────────────────────────────────────

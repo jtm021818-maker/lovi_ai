@@ -6,26 +6,43 @@
  * - /api/room/luna-chat 단일 호출 (무료 Gemini/Groq)
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import type { LunaMemory } from '@/lib/luna-life';
 
 interface Message {
   role: 'user' | 'luna';
   text: string;
 }
 
+interface MemoryContext {
+  memory: LunaMemory;
+  recall: string | null;
+}
+
 interface Props {
   onClose: () => void;
   accentColor?: string;
+  /** v101: 추억 회상에서 진입 — 첫 메시지가 이 추억 컨텍스트 */
+  memoryContext?: MemoryContext;
 }
 
-const INITIAL_MESSAGE: Message = {
+const DEFAULT_INITIAL: Message = {
   role: 'luna',
   text: '왔어? 😊 오늘 어때~',
 };
 
-export default function LunaChat({ onClose, accentColor = '#c084fc' }: Props) {
-  const [history, setHistory] = useState<Message[]>([INITIAL_MESSAGE]);
+export default function LunaChat({ onClose, accentColor = '#c084fc', memoryContext }: Props) {
+  const initial: Message[] = useMemo(() => {
+    if (!memoryContext) return [DEFAULT_INITIAL];
+    const recall = memoryContext.recall?.trim();
+    const text = recall && recall.length > 0
+      ? recall
+      : `D+${memoryContext.memory.dayNumber} "${memoryContext.memory.title}"... 그날 떠올라?`;
+    return [{ role: 'luna', text }];
+  }, [memoryContext]);
+
+  const [history, setHistory] = useState<Message[]>(initial);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -48,7 +65,19 @@ export default function LunaChat({ onClose, accentColor = '#c084fc' }: Props) {
       const res = await fetch('/api/room/luna-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, history: next.slice(-20) }),
+        body: JSON.stringify({
+          message: msg,
+          history: next.slice(-20),
+          memoryContext: memoryContext
+            ? {
+                title: memoryContext.memory.title,
+                content: memoryContext.memory.content,
+                dayNumber: memoryContext.memory.dayNumber,
+                lunaThought: memoryContext.memory.lunaThought ?? null,
+                recall: memoryContext.recall,
+              }
+            : undefined,
+        }),
       });
       const data = await res.json();
       setHistory((prev) => [

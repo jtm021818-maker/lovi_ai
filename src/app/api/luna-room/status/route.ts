@@ -52,7 +52,16 @@ export async function GET(_req: NextRequest) {
       .eq('user_id', user.id);
   }
 
+  // 🆕 v101: 도착 시각이 된 콘텐츠 일괄 마킹 (luna_mark_delivered RPC)
+  const nowISO = new Date().toISOString();
+  try {
+    await supabase.rpc('luna_mark_delivered', { p_user: user.id, p_now: nowISO });
+  } catch (e) {
+    console.warn('[Status] luna_mark_delivered 실패 (무시):', (e as Error)?.message);
+  }
+
   // Fetch gifts + memories + pinned memories + recent sessions for mood signal
+  // 🆕 v101: delivered_at IS NOT NULL 만 노출 (도착한 것만)
   const since24hISO = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const [
     { data: gifts },
@@ -60,13 +69,25 @@ export async function GET(_req: NextRequest) {
     { data: pinned },
     { count: recentSessionCount },
   ] = await Promise.all([
-    supabase.from('luna_gifts').select('*').eq('user_id', user.id).order('trigger_day', { ascending: true }),
-    supabase.from('luna_memories').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(30),
+    supabase
+      .from('luna_gifts')
+      .select('*')
+      .eq('user_id', user.id)
+      .not('delivered_at', 'is', null)
+      .order('trigger_day', { ascending: true }),
+    supabase
+      .from('luna_memories')
+      .select('*')
+      .eq('user_id', user.id)
+      .not('delivered_at', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(30),
     supabase
       .from('luna_memories')
       .select('*')
       .eq('user_id', user.id)
       .eq('is_pinned', true)
+      .not('delivered_at', 'is', null)
       .order('created_at', { ascending: false })
       .limit(12),
     supabase
@@ -110,6 +131,12 @@ export async function GET(_req: NextRequest) {
     createdAt: m.created_at,
     isPinned: !!m.is_pinned,
     frameStyle: m.frame_style ?? 'wood',
+    // v101
+    imageUrl: m.image_url ?? null,
+    lunaThought: m.luna_thought ?? null,
+    scheduledFor: m.scheduled_for ?? null,
+    deliveredAt: m.delivered_at ?? null,
+    source: m.source ?? 'auto',
   });
 
   return NextResponse.json({
@@ -127,6 +154,10 @@ export async function GET(_req: NextRequest) {
       content: g.content,
       openedAt: g.opened_at,
       createdAt: g.created_at,
+      // v101
+      scheduledFor: g.scheduled_for ?? null,
+      deliveredAt: g.delivered_at ?? null,
+      source: g.source ?? 'scheduled',
     })),
     recentMemories: (memories ?? []).slice(0, 5).map(mapMemory),
     allMemories: (memories ?? []).map(mapMemory),

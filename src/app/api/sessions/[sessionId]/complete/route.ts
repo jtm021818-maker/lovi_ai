@@ -6,6 +6,9 @@ import { getIntimacyLevel } from '@/engines/human-like/user-model';
 import { loadUserModel, learnFromSession, saveUserModel } from '@/engines/human-like/user-model';
 import { generateLLMSummary } from '@/engines/memory/generate-summary';
 import { extractLunaMemoryCard } from '@/engines/memory/extract-luna-memory-card';
+import { runLunaLetterJudge } from '@/lib/ai/luna-letter-judge';
+import { generateLunaMemoryImage } from '@/lib/ai/luna-image-gen';
+import { getAgeDays, getLifeStageInfo, type LunaMemory } from '@/lib/luna-life';
 
 /**
  * PATCH /api/sessions/[sessionId]/complete
@@ -175,36 +178,168 @@ export async function PATCH(
 
       const existingMemory: UserMemoryProfile = (profileData?.memory_profile as UserMemoryProfile) ?? createEmptyProfile();
 
-      // 🆕 v90: 메모리 추출 + LunaMemory 카드 동시 생성 (병렬)
-      const [extraction, lunaCard] = await Promise.all([
+      // 🆕 v101: 메모리 추출 + 루나 자율 판단 (병렬)
+      // judge 입력에 필요한 부가 컨텍스트 동시 로드
+      const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const [
+        extraction,
+        { data: lifeRow },
+        { data: recentMemoriesRaw },
+        { count: judgeCount24h },
+        { data: lunaImpressionRow },
+      ] = await Promise.all([
         extractSessionMemory(sessionMsgs, session.locked_scenario ?? undefined, existingMemory),
-        extractLunaMemoryCard({ messages: sessionMsgs, scenario: session.locked_scenario ?? undefined }),
+        supabase.from('luna_life').select('birth_date').eq('user_id', user.id).single(),
+        supabase
+          .from('luna_memories')
+          .select('id,title,content,day_number,created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(5),
+        supabase
+          .from('luna_memories')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('source', 'judge')
+          .gte('created_at', since24h),
+        supabase
+          .from('user_profiles')
+          .select('memory_profile')
+          .eq('id', user.id)
+          .single(),
       ]);
 
-      // 🆕 v90: LunaMemory 카드 → luna_memories 테이블 (루나의 방 추억 탭에 표시됨)
-      if (lunaCard) {
-        try {
-          // 현재 day_number 계산 (luna_life.birth_date 기준)
-          const { data: lifeRow } = await supabase
-            .from('luna_life')
-            .select('birth_date')
-            .eq('user_id', user.id)
-            .single();
-          let dayNumber = 1;
-          if (lifeRow?.birth_date) {
-            const birth = new Date(lifeRow.birth_date as string);
-            const diffMs = Date.now() - birth.getTime();
-            dayNumber = Math.max(1, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+      // 현재 day_number / lifeStage
+      let dayNumber = 1;
+      if (lifeRow?.birth_date) {
+        dayNumber = Math.max(1, getAgeDays(new Date(lifeRow.birth_date as string)));
+      }
+      const stageInfo = getLifeStageInfo(dayNumber);
+
+      const recentMemories: LunaMemory[] = (recentMemoriesRaw ?? []).map((m: any) => ({
+        id: m.id,
+        title: m.title,
+        content: m.content,
+        dayNumber: m.day_number,
+        createdAt: m.created_at,
+      }));
+
+      const lunaImpression: string | null =
+        ((lunaImpressionRow?.memory_profile as any)?.lunaImpression as string | undefined) ?? null;
+
+      // ── 자율 판단 ────────────────────────────────────────────────
+      let decisionLog = '';
+      try {
+        const decision = await runLunaLetterJudge({
+          messages: sessionMsgs,
+          scenario: session.locked_scenario ?? null,
+          phase: session.current_phase_v2 ?? null,
+          turnCount: session.turn_count ?? 0,
+          emotionStart: session.emotion_baseline ?? null,
+          emotionEnd: emotionEnd ?? null,
+          ageDays: dayNumber,
+          stageInfo,
+          recentMemories,
+          lunaImpression,
+          recentJudgeCountIn24h: judgeCount24h ?? 0,
+        });
+
+        decisionLog = `[Judge] ${decision.source} | letter=${decision.writeLetter} memory=${decision.writeMemory} +${decision.deliverInHours}h | ${decision.reason ?? ''}`;
+        console.log(decisionLog);
+
+        const scheduledForISO = decision.deliverInHours > 0
+          ? new Date(Date.now() + decision.deliverInHours * 3600 * 1000).toISOString()
+          : null;
+
+        // 편지 작성
+        if (decision.writeLetter && decision.letterContent) {
+          try {
+            await supabase.from('luna_gifts').insert({
+              user_id: user.id,
+              trigger_day: dayNumber,
+              gift_type: 'letter',
+              title: decision.letterTitle ?? `D+${dayNumber} 편지`,
+              content: decision.letterContent,
+              scheduled_for: scheduledForISO,
+              source: 'judge',
+              judge_reason: decision.reason ?? null,
+            });
+            console.log(`[Judge] 💌 편지 저장: D+${dayNumber} → ${decision.deliverInHours}h 뒤 도착`);
+          } catch (e) {
+            console.warn('[Judge] 편지 저장 실패:', (e as Error).message);
           }
-          await supabase.from('luna_memories').insert({
-            user_id: user.id,
-            title: lunaCard.title,
-            content: lunaCard.content,
-            day_number: dayNumber,
+        }
+
+        // 추억 작성 — insert 후 백그라운드 이미지 생성
+        if (decision.writeMemory && decision.memoryContent) {
+          try {
+            const { data: insertedMem, error: memErr } = await supabase
+              .from('luna_memories')
+              .insert({
+                user_id: user.id,
+                title: decision.memoryTitle ?? '그날의 한 장면',
+                content: decision.memoryContent,
+                day_number: dayNumber,
+                luna_thought: decision.lunaThought ?? null,
+                image_prompt: decision.imagePrompt ?? null,
+                scheduled_for: scheduledForISO,
+                source: 'judge',
+              })
+              .select('id')
+              .single();
+
+            if (memErr) {
+              console.warn('[Judge] 추억 저장 실패:', memErr.message);
+            } else if (insertedMem?.id) {
+              console.log(`[Judge] ✨ 추억 저장: D+${dayNumber} (id=${insertedMem.id})`);
+              // 백그라운드 이미지 생성 (await 안 함 — 응답 블로킹 X)
+              if (decision.imagePrompt) {
+                (async () => {
+                  try {
+                    const img = await generateLunaMemoryImage({
+                      memoryId: insertedMem.id,
+                      prompt: decision.imagePrompt!,
+                    });
+                    if (img?.imageUrl) {
+                      await supabase
+                        .from('luna_memories')
+                        .update({ image_url: img.imageUrl })
+                        .eq('id', insertedMem.id);
+                      console.log(`[Judge] 🖼  이미지 ${img.provider} → ${insertedMem.id}`);
+                    }
+                  } catch (e) {
+                    console.warn('[Judge] 이미지 생성 실패:', (e as Error).message);
+                  }
+                })();
+              }
+            }
+          } catch (e) {
+            console.warn('[Judge] 추억 처리 실패:', (e as Error).message);
+          }
+        }
+      } catch (e) {
+        console.warn('[Judge] 판단 실패 (무시):', (e as Error).message);
+      }
+
+      // ── Legacy 폴백 (env flag) ─────────────────────────────────
+      if (process.env.LUNA_LEGACY_MEMORY === '1') {
+        try {
+          const lunaCard = await extractLunaMemoryCard({
+            messages: sessionMsgs,
+            scenario: session.locked_scenario ?? undefined,
           });
-          console.log(`[LunaMemory] ✨ 카드 생성: D${dayNumber} "${lunaCard.title}"`);
+          if (lunaCard) {
+            await supabase.from('luna_memories').insert({
+              user_id: user.id,
+              title: lunaCard.title,
+              content: lunaCard.content,
+              day_number: dayNumber,
+              source: 'auto',
+            });
+            console.log(`[LunaMemory:legacy] ✨ ${lunaCard.title}`);
+          }
         } catch (err) {
-          console.warn('[LunaMemory] 저장 실패:', err);
+          console.warn('[LunaMemory:legacy] 실패:', err);
         }
       }
 
