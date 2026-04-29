@@ -2,13 +2,13 @@
  * 🧚 v83: Spirit Master Data — 20 spirits
  *
  * Rarity distribution:
- *   N × 7, R × 6, SR × 5, UR × 2, L × 0 (unlock-only, future: guardian_eddy)
+ *   N × 6, R × 7, SR × 5, UR × 2, L × 0 (unlock-only, future: guardian_eddy)
  */
 
 import type { SpiritMaster } from '@/types/spirit.types';
 
 export const SPIRITS: SpiritMaster[] = [
-  // ═══════════════════════ N (7) ═══════════════════════
+  // ═══════════════════════ N (6) ═══════════════════════
   {
     id: 'fire_goblin',
     emoji: '🔥',
@@ -47,19 +47,6 @@ export const SPIRITS: SpiritMaster[] = [
     abilityEnhanced: 'TTS 음성 무료화',
     backstoryPreview: '많이 운 사람의 눈물방울이 작은 정령이 된 것.',
     themeColor: '#60A5FA',
-  },
-  {
-    id: 'cloud_bunny',
-    emoji: '☁️',
-    name: '구름토끼 미미',
-    rarity: 'N',
-    personality: '태평 낙천 친구',
-    speechStyle: '명랑 반말',
-    abilityCategory: '가벼운 대화',
-    abilityShort: '가벼운 대화 시 재미 파티클 추가',
-    abilityEnhanced: '화면 애니 강화',
-    backstoryPreview: '맑은 하늘 위에서 떨어진 하얀 토끼. 걱정을 가볍게 해줘.',
-    themeColor: '#93C5FD',
   },
   {
     id: 'seed_spirit',
@@ -101,7 +88,20 @@ export const SPIRITS: SpiritMaster[] = [
     themeColor: '#FCA5A5',
   },
 
-  // ═══════════════════════ R (6) ═══════════════════════
+  // ═══════════════════════ R (7) ═══════════════════════
+  {
+    id: 'cloud_bunny',
+    emoji: '☁️',
+    name: '구름토끼 미미',
+    rarity: 'R',
+    personality: '태평 낙천 친구',
+    speechStyle: '명랑 반말',
+    abilityCategory: '가벼운 대화',
+    abilityShort: '가벼운 대화 시 재미 파티클 추가',
+    abilityEnhanced: '화면 애니 강화',
+    backstoryPreview: '맑은 하늘 위에서 떨어진 하얀 토끼. 걱정을 가볍게 해줘.',
+    themeColor: '#93C5FD',
+  },
   {
     id: 'letter_fairy',
     emoji: '💌',

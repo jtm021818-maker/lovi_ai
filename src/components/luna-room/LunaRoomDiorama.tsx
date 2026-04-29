@@ -18,6 +18,7 @@ import DayBadge from './DayBadge';
 import WindowScene from './WindowScene';
 import LunaCharacter from './LunaCharacter';
 import MailboxSlot from './MailboxSlot';
+import MailboxLetterScatter from './MailboxLetterScatter';
 import MemoryShelf from './MemoryShelf';
 import MemoryGallery from './MemoryGallery';
 import WhisperBubble from './WhisperBubble';
@@ -57,6 +58,7 @@ export default function LunaRoomDiorama({
   const isDark = stage.stage === 'twilight' || stage.stage === 'star';
 
   const [selectedGift, setSelectedGift] = useState<LunaGift | null>(null);
+  const [showLetterShelf, setShowLetterShelf] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
   const [whisper, setWhisper] = useState(liveState.whisper);
@@ -97,28 +99,18 @@ export default function LunaRoomDiorama({
     setShowChat(true);
   }, [isDeceased, showToast]);
 
-  const handleGiftSelected = useCallback(
-    (gift: LunaGift) => {
-      setSelectedGift(gift);
-    },
-    [],
-  );
-
-  const handleOpenLatestUnread = useCallback(() => {
+  const handleMailboxOpen = useCallback(() => {
     if (gifts.length === 0) {
       showToast('아직 편지가 없어');
       return;
     }
-    if (isDeceased && hasFinalLetter) {
-      const finalLetter = gifts.find((g) => g.giftType === 'final_letter');
-      if (finalLetter) {
-        setSelectedGift(finalLetter);
-        return;
-      }
-    }
-    const unread = gifts.find((g) => !g.openedAt);
-    setSelectedGift(unread ?? gifts[gifts.length - 1]);
-  }, [gifts, isDeceased, hasFinalLetter, showToast]);
+    setShowLetterShelf(true);
+  }, [gifts.length, showToast]);
+
+  const handleScatterSelect = useCallback((gift: LunaGift) => {
+    // 책상 모달은 닫지 않고 그 위에 편지 모달이 뜸 → 닫으면 책상으로 돌아옴
+    setSelectedGift(gift);
+  }, []);
 
   return (
     <div
@@ -205,7 +197,7 @@ export default function LunaRoomDiorama({
           >
             <MailboxSlot
               unopenedCount={unopenedGifts}
-              onOpen={handleOpenLatestUnread}
+              onOpen={handleMailboxOpen}
               isDeceased={isDeceased}
               accentColor={accentColor}
               hasFinalLetter={hasFinalLetter}
@@ -309,7 +301,22 @@ export default function LunaRoomDiorama({
         )}
       </AnimatePresence>
 
-      {/* 편지 모달 */}
+      {/* 책상 위 편지 흩뿌림 모달 */}
+      <AnimatePresence>
+        {showLetterShelf && (
+          <MailboxLetterScatter
+            key="letter-shelf"
+            gifts={gifts}
+            accentColor={accentColor}
+            isDark={isDark}
+            isDeceased={isDeceased}
+            onClose={() => setShowLetterShelf(false)}
+            onSelect={handleScatterSelect}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* 편지 단일 모달 (책상 위에 겹쳐서 뜸) */}
       <AnimatePresence>
         {selectedGift && (
           <LunaEnvelope
@@ -347,53 +354,6 @@ export default function LunaRoomDiorama({
         )}
       </AnimatePresence>
 
-      {/* 추가 편지 리스트 (디오라마 아래 작게 노출 — 우편함을 못 봤을 때 fallback)
-          기존 inbox 탭이 사라졌으므로, 우편함이 너무 작아 못 발견하는 케이스 방지 */}
-      {gifts.length > 1 && !isDeceased && (
-        <div className="relative z-[55] px-6 pb-8 pt-2">
-          <div className="flex items-center gap-2 mb-2">
-            <span style={{ fontSize: 11, fontWeight: 700, color: `${textColor}88`, fontFamily: ROOM_TOKENS.hudFont }}>
-              모든 편지
-            </span>
-            <span style={{ flex: 1, height: 1, background: `${accentColor}22` }} />
-          </div>
-          <div className="flex gap-2 overflow-x-auto pb-1 -mx-6 px-6">
-            {gifts.map((g) => {
-              const unread = !g.openedAt;
-              const icons: Record<LunaGift['giftType'], string> = {
-                letter: '💌',
-                poem: '🌸',
-                memory_album: '📷',
-                final_letter: '⭐',
-              };
-              return (
-                <motion.button
-                  key={g.id}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => handleGiftSelected(g)}
-                  className="flex-shrink-0 flex flex-col items-center justify-center px-3 py-2 rounded-2xl"
-                  style={{
-                    minWidth: 84,
-                    background: unread ? `${accentColor}22` : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.7)'),
-                    border: `1px solid ${unread ? accentColor + '55' : accentColor + '11'}`,
-                  }}
-                >
-                  <span style={{ fontSize: 18 }}>{icons[g.giftType]}</span>
-                  <span style={{ fontSize: 10, color: textColor, marginTop: 4, fontFamily: ROOM_TOKENS.hudFont, fontWeight: 600 }}>
-                    D+{g.triggerDay}
-                  </span>
-                  {unread && (
-                    <span
-                      className="mt-1"
-                      style={{ width: 5, height: 5, borderRadius: '50%', background: accentColor, display: 'inline-block' }}
-                    />
-                  )}
-                </motion.button>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
