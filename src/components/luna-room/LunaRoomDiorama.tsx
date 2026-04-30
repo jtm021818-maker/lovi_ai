@@ -8,7 +8,6 @@
 
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useRouter } from 'next/navigation';
 import type { LifeStageInfo, LunaGift, LunaMemory, LunaLiveState } from '@/lib/luna-life';
 import { getRoomBgKey, ROOM_BG_IMAGES } from '@/lib/luna-life';
 import { ROOM_TOKENS } from '@/lib/luna-life/tokens';
@@ -54,7 +53,6 @@ export default function LunaRoomDiorama({
   onPet,
   onMemoryPin,
 }: Props) {
-  const router = useRouter();
   const { bgGradient, accentColor, textColor, particleType, name, daysRemaining, showCountdown } = stage;
   const isDark = stage.stage === 'twilight' || stage.stage === 'star';
   const bgKey = getRoomBgKey(stage.stage);
@@ -151,21 +149,13 @@ export default function LunaRoomDiorama({
       {/* z-5 파티클 */}
       <LunaParticles type={particleType} />
 
-      {/* z-60 헤더 */}
-      <div className="relative z-[60] flex items-center justify-between px-4 pt-12 pb-2">
-        <button
-          onClick={() => router.push('/room')}
-          className="w-9 h-9 rounded-full flex items-center justify-center"
-          style={{
-            background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-            color: isDark ? '#E0E7FF' : '#5D4037',
-            fontSize: 16,
-          }}
-          aria-label="뒤로"
-        >
-          ←
-        </button>
-
+      {/* z-60 헤더 — 좌측에 D+N + 스테이지 타이틀 */}
+      <motion.div
+        initial={{ opacity: 0, y: -4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1, ...ROOM_TOKENS.springSoft }}
+        className="relative z-[60] flex flex-col items-start px-5 pt-12 pb-2 gap-1"
+      >
         <DayBadge
           ageDays={ageDays}
           showCountdown={showCountdown}
@@ -173,17 +163,6 @@ export default function LunaRoomDiorama({
           textColor={textColor}
           accentColor={accentColor}
         />
-
-        <div className="w-9" />
-      </div>
-
-      {/* 스테이지 타이틀 */}
-      <motion.div
-        initial={{ opacity: 0, y: -4 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2, ...ROOM_TOKENS.springSoft }}
-        className="relative z-[60] text-center pb-1"
-      >
         <p
           style={{
             fontFamily: ROOM_TOKENS.hudFont,
@@ -191,6 +170,7 @@ export default function LunaRoomDiorama({
             fontWeight: 600,
             color: `${textColor}88`,
             letterSpacing: '0.06em',
+            paddingLeft: 2,
           }}
         >
           {isDeceased ? '— 별 —' : `${name}의 루나`}

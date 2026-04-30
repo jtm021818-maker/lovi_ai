@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { LunaMemory } from '@/lib/luna-life';
 import { ROOM_TOKENS } from '@/lib/luna-life/tokens';
@@ -14,170 +15,101 @@ interface Props {
   isDark: boolean;
 }
 
-const FRAME_BORDER: Record<string, string> = {
-  wood: '#8B5A2B',
-  gold: '#D4AF37',
-  pastel: '#F9A8D4',
-  film: '#1F2937',
-};
+const SRC = '/background/ebum.png';
 
-interface FrameProps {
-  memory: LunaMemory | null;
-  accentColor: string;
-  index: number;
-  onClick: () => void;
-}
-
-function MiniFrame({ memory, accentColor, index, onClick }: FrameProps) {
-  const isEmpty = !memory;
-  const borderColor = memory?.frameStyle ? FRAME_BORDER[memory.frameStyle] ?? FRAME_BORDER.wood : FRAME_BORDER.wood;
-  // Deterministic tilt per index (no Math.random — 안정적)
-  const tilts = [-3, 1.5, -1, 2.5, -2];
-  const tilt = isEmpty ? 0 : tilts[index % tilts.length];
+export default function MemoryShelf({
+  totalMemoryCount,
+  onOpenGallery,
+  accentColor,
+  isDark,
+}: Props) {
+  const [imgFailed, setImgFailed] = useState(false);
 
   return (
     <motion.button
       type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-      whileHover={{ y: -3, rotate: 0, scale: isEmpty ? 1 : 1.08 }}
+      whileHover={{ y: -3, scale: 1.04 }}
       whileTap={{ scale: 0.94 }}
-      className="relative flex flex-col items-center justify-center"
-      style={{
-        width: 32,
-        height: 40,
-        borderRadius: 3,
-        background: isEmpty ? 'rgba(255,255,255,0.15)' : '#FFFBF5',
-        border: `1.5px solid ${isEmpty ? `${accentColor}33` : borderColor}`,
-        boxShadow: isEmpty ? 'none' : '0 2px 4px rgba(60, 40, 30, 0.28)',
-        transform: `rotate(${tilt}deg)`,
-        padding: 2,
-        cursor: 'pointer',
-      }}
-      aria-label={memory ? `추억: ${memory.title}` : '추억 슬롯'}
+      onClick={onOpenGallery}
+      className="relative flex flex-col items-center cursor-pointer"
+      style={{ width: 90, height: 110 }}
+      aria-label={`추억 갤러리 — ${totalMemoryCount}장`}
     >
-      {memory ? (
-        <>
+      {/* 그림자 */}
+      <div
+        className="absolute bottom-0 left-1/2 -translate-x-1/2 rounded-full opacity-25"
+        style={{ width: 60, height: 8, background: 'rgba(60,40,30,0.4)', filter: 'blur(4px)' }}
+      />
+
+      {/* 액자 이미지 */}
+      <div className="relative" style={{ width: 86, height: 100 }}>
+        {!imgFailed ? (
+          <img
+            src={SRC}
+            alt="추억 액자"
+            className="w-full h-full object-contain"
+            onError={() => setImgFailed(true)}
+            draggable={false}
+          />
+        ) : (
+          /* fallback: CSS 액자 */
           <div
-            className="relative flex items-center justify-center overflow-hidden"
+            className="w-full h-full rounded-md flex items-center justify-center"
             style={{
-              width: '100%',
-              flex: 1,
-              background: memory.imageUrl
-                ? '#000'
-                : `linear-gradient(135deg, ${accentColor}33, ${accentColor}11)`,
-              borderRadius: 1,
-              fontSize: 8,
-              fontWeight: 700,
-              color: accentColor,
+              background: `linear-gradient(135deg, ${accentColor}22, ${accentColor}11)`,
+              border: `2px solid ${accentColor}44`,
             }}
           >
-            {memory.imageUrl ? (
-              <img
-                src={memory.imageUrl}
-                alt={memory.title}
-                className="absolute inset-0 w-full h-full object-cover"
-                draggable={false}
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <span>{memory.title.slice(0, 2)}</span>
-            )}
+            <span style={{ fontSize: 28, opacity: 0.5 }}>🖼️</span>
           </div>
-          <div style={{ fontSize: 6, color: '#7C6B5A', marginTop: 1, lineHeight: 1 }}>
-            D+{memory.dayNumber}
-          </div>
-        </>
-      ) : (
-        <span style={{ fontSize: 10, opacity: 0.4 }}>+</span>
-      )}
-    </motion.button>
-  );
-}
+        )}
 
-export default function MemoryShelf({
-  pinnedMemories,
-  totalMemoryCount,
-  onOpenGallery,
-  onSelectMemory,
-  accentColor,
-  isDark,
-}: Props) {
-  const slots = [
-    pinnedMemories[0] ?? null,
-    pinnedMemories[1] ?? null,
-    pinnedMemories[2] ?? null,
-  ];
-
-  return (
-    <div
-      className="relative flex flex-col items-center"
-      style={{ width: 132, height: 100 }}
-    >
-      {/* 선반 (shelf plank) */}
-      <div className="relative" style={{ width: 120, height: 64 }}>
-        {/* 액자들 — 각 액자가 자체 클릭 */}
-        <div className="absolute inset-x-0 top-2 flex justify-around items-end" style={{ height: 50 }}>
-          {slots.map((m, i) => (
-            <MiniFrame
-              key={m?.id ?? `empty-${i}`}
-              memory={m}
-              accentColor={accentColor}
-              index={i}
-              onClick={() => {
-                if (m) {
-                  onSelectMemory(m);
-                } else {
-                  onOpenGallery();
-                }
-              }}
-            />
-          ))}
-        </div>
-        {/* 나무 선반 */}
-        <div
-          className="absolute bottom-0 inset-x-0 rounded-sm"
-          style={{
-            height: 6,
-            background: 'linear-gradient(180deg, #B8956A, #8B6F47)',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.18)',
-          }}
-        />
-        {/* 지지대 */}
-        <div
-          className="absolute"
-          style={{ bottom: -10, left: 18, width: 4, height: 12, background: '#6B5440', borderRadius: 1 }}
-        />
-        <div
-          className="absolute"
-          style={{ bottom: -10, right: 18, width: 4, height: 12, background: '#6B5440', borderRadius: 1 }}
-        />
+        {/* 추억 수 뱃지 */}
+        {totalMemoryCount > 0 && (
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            className="absolute"
+            style={{
+              top: -4,
+              right: -4,
+              minWidth: 18,
+              height: 18,
+              padding: '0 5px',
+              borderRadius: 9,
+              background: accentColor,
+              color: '#fff',
+              fontSize: 10,
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
+              fontFamily: ROOM_TOKENS.hudFont,
+            }}
+          >
+            {totalMemoryCount}
+          </motion.div>
+        )}
       </div>
 
-      {/* 카운트 칩 — 클릭 시 갤러리 진입 */}
-      <motion.button
-        type="button"
-        whileHover={{ y: -2 }}
-        whileTap={{ scale: 0.96 }}
-        onClick={onOpenGallery}
-        initial={{ opacity: 0, y: 4 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mt-3 px-2.5 py-0.5 rounded-full"
+      {/* 라벨 */}
+      <div
+        className="absolute"
         style={{
-          background: isDark ? ROOM_TOKENS.cardBgDark : ROOM_TOKENS.cardBg,
+          bottom: -16,
+          left: '50%',
+          transform: 'translateX(-50%)',
           fontSize: 10,
-          fontWeight: 600,
-          color: accentColor,
           fontFamily: ROOM_TOKENS.hudFont,
-          border: `1px solid ${accentColor}22`,
-          cursor: 'pointer',
+          fontWeight: 600,
+          color: isDark ? `${accentColor}` : `${accentColor}CC`,
+          opacity: 0.8,
+          whiteSpace: 'nowrap',
         }}
-        aria-label={`추억 갤러리 — ${totalMemoryCount}장`}
       >
-        추억 {totalMemoryCount}
-      </motion.button>
-    </div>
+        추억
+      </div>
+    </motion.button>
   );
 }
