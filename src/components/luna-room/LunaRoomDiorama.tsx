@@ -246,7 +246,8 @@ export default function LunaRoomDiorama({
               mood={liveState.mood}
               onSingleTap={handleSpeak}
               onDoubleTap={handlePet}
-              size={170}
+              size={220}
+              aspectRatio={1.6}
               isDeceased={isDeceased}
               accentColor={accentColor}
             />

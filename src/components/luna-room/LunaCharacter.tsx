@@ -11,7 +11,10 @@ interface Props {
   mood: LunaMood;
   onSingleTap: () => void;
   onDoubleTap: () => void;
+  /** 너비 (px). 높이는 aspectRatio 로 자동 산출 */
   size?: number;
+  /** 이미지 자연 종횡비 (height / width). 기본 1.6 (룸 sleep PNG) */
+  aspectRatio?: number;
   isDeceased?: boolean;
   accentColor: string;
 }
@@ -55,10 +58,12 @@ export default function LunaCharacter({
   mood,
   onSingleTap,
   onDoubleTap,
-  size = 220,
+  size = 240,
+  aspectRatio = 1.6,
   isDeceased = false,
   accentColor,
 }: Props) {
+  const wrapperHeight = Math.round(size * aspectRatio);
   // v102: 룸 전용 스프라이트 — 모든 활동에 동일 이미지 사용 (투명배경 위치 완성본)
   void mood; // 무드 매핑 미사용 (향후 다중 스프라이트 도입 시 활용)
   const [src, setSrc] = useState(SPRITE_ROOM_DEFAULT);
@@ -112,7 +117,7 @@ export default function LunaCharacter({
   return (
     <div
       className="relative cursor-pointer select-none"
-      style={{ width: size, height: size }}
+      style={{ width: size, height: wrapperHeight }}
       onClick={handleClick}
       role="button"
       aria-label={`루나 — ${ACTIVITY_LABELS[activity]}`}
