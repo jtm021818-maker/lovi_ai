@@ -201,9 +201,51 @@ export default function LunaRoomDiorama({
       </motion.div>
 
 
-      {/* z-30~50 디오라마 */}
-      <div className="relative z-[30] flex-1 flex flex-col items-center pt-6 pb-6">
-        {/* 가구 + 루나 row */}
+      {/* z-30~50 디오라마 — 방바닥 핀 레이아웃 */}
+      <div className="relative z-[30] flex-1 flex flex-col items-center justify-end pb-24">
+
+        {/* z-70 말풍선 — 캐릭터 위에 떠있는 느낌 */}
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.55, ...ROOM_TOKENS.springSoft }}
+          className="relative z-[70] mb-3 px-6"
+        >
+          <WhisperBubble
+            whisper={whisper}
+            isDark={isDark}
+            accentColor={accentColor}
+            textColor={textColor}
+          />
+        </motion.div>
+
+        {/* z-60 액션 버튼 */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7, ...ROOM_TOKENS.springSoft }}
+          className="relative z-[60] mb-4"
+        >
+          <ActionPills
+            onSpeak={handleSpeak}
+            onPet={handlePet}
+            petAvailable={petAvailable}
+            isDeceased={isDeceased}
+            accentColor={accentColor}
+            isDark={isDark}
+          />
+        </motion.div>
+
+        {/* 바닥 그림자 라인 */}
+        <div
+          className="w-full max-w-[420px]"
+          style={{
+            height: 1,
+            background: `linear-gradient(90deg, transparent, ${accentColor}44, transparent)`,
+          }}
+        />
+
+        {/* 가구 + 루나 row — 방바닥 */}
         <div className="relative w-full max-w-[420px] flex items-end justify-between px-6">
           {/* 좌: 액자 선반 */}
           <motion.div
@@ -256,47 +298,6 @@ export default function LunaRoomDiorama({
             />
           </motion.div>
         </div>
-
-        {/* 바닥 그림자 라인 */}
-        <div
-          className="w-full max-w-[420px] mt-2"
-          style={{
-            height: 1,
-            background: `linear-gradient(90deg, transparent, ${accentColor}33, transparent)`,
-          }}
-        />
-
-        {/* z-70 말풍선 */}
-        <motion.div
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.55, ...ROOM_TOKENS.springSoft }}
-          className="relative z-[70] mt-6 px-6"
-        >
-          <WhisperBubble
-            whisper={whisper}
-            isDark={isDark}
-            accentColor={accentColor}
-            textColor={textColor}
-          />
-        </motion.div>
-
-        {/* z-60 액션 버튼 */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.7, ...ROOM_TOKENS.springSoft }}
-          className="relative z-[60] mt-6"
-        >
-          <ActionPills
-            onSpeak={handleSpeak}
-            onPet={handlePet}
-            petAvailable={petAvailable}
-            isDeceased={isDeceased}
-            accentColor={accentColor}
-            isDark={isDark}
-          />
-        </motion.div>
       </div>
 
       {/* 토스트 */}

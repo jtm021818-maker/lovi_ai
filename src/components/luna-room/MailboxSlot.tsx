@@ -13,8 +13,8 @@ interface Props {
   hasFinalLetter: boolean;
 }
 
-const SRC_IDLE = '/background/letterBox.png';
-const SRC_ALERT = '/background/letterBox.png';
+const SRC_IDLE = '/background/letterEE.png';
+const SRC_ALERT = '/background/letterEE.png';
 
 export default function MailboxSlot({ unopenedCount, onOpen, isDeceased, accentColor, hasFinalLetter }: Props) {
   const src = unopenedCount > 0 ? SRC_ALERT : SRC_IDLE;
@@ -149,7 +149,7 @@ export default function MailboxSlot({ unopenedCount, onOpen, isDeceased, accentC
           whiteSpace: 'nowrap',
         }}
       >
-        우편함
+        편지
       </div>
     </motion.button>
   );
