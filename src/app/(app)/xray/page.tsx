@@ -1,181 +1,132 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+/**
+ * /xray — 카톡 엑스레이 v2 업로드 페이지
+ *
+ * Plan: docs/xray-v2-pro-plan.md §5
+ *
+ * 흐름:
+ *  1. 파일 선택 → base64 + 이미지 dimension 측정
+ *  2. CinematicScanner 띄움
+ *  3. POST /api/xray/v2/analyze
+ *  4. 응답 받으면 sessionStorage 에 이미지 저장 + /xray/result/[id] 로 push
+ */
+
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
-import XRayHeatmap from '@/components/xray/XRayHeatmap';
-import XRayResultCard from '@/components/xray/XRayResultCard';
 import { createClient } from '@/lib/supabase/client';
-import type { XRayResult } from '@/app/api/xray/analyze/route';
+import CinematicScanner from '@/components/xray-v2/CinematicScanner';
+import { XV2 } from '@/styles/xray-v2-tokens';
+import '@fontsource/jetbrains-mono/400.css';
+import '@fontsource/jetbrains-mono/700.css';
 
-// ─── 커스텀 SVG 배경 장식 ─────────────────────────────────────────
-
-function StarDecorations() {
-  const stars = useMemo(
-    () =>
-      Array.from({ length: 15 }, (_, i) => ({
-        id: i,
-        x: Math.random() * 90 + 5,
-        y: Math.random() * 50 + 5,
-        size: 3 + Math.random() * 4,
-        delay: Math.random() * 3,
-        duration: 2 + Math.random() * 2,
-      })),
-    [],
-  );
-
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-      {/* 초승달 (Crescent Moon SVG) */}
-      <motion.div
-        className="absolute text-[#FFE993] w-[22px] h-[22px]"
-        style={{ top: '10%', right: '12%' }}
-        animate={{ rotate: [-5, 10, -5], opacity: [0.7, 1, 0.7] }}
-        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-      >
-        <svg viewBox="0 0 24 24" fill="currentColor">
-          <path d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.93.566-3.725 1.542-5.182A9.752 9.752 0 003 11.25a9.75 9.75 0 0013.784 8.91 9.715 9.715 0 004.968-5.158z" />
-        </svg>
-      </motion.div>
-      <motion.div
-        className="absolute text-[#FFE993] w-[18px] h-[18px]"
-        style={{ top: '28%', left: '8%' }}
-        animate={{ rotate: [5, -10, 5], opacity: [0.5, 0.9, 0.5] }}
-        transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
-      >
-        <svg viewBox="0 0 24 24" fill="currentColor">
-          <path d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.93.566-3.725 1.542-5.182A9.752 9.752 0 003 11.25a9.75 9.75 0 0013.784 8.91 9.715 9.715 0 004.968-5.158z" />
-        </svg>
-      </motion.div>
-      <motion.div
-        className="absolute text-[#FFE993] w-[14px] h-[14px]"
-        style={{ top: '48%', right: '18%' }}
-        animate={{ opacity: [0.4, 0.8, 0.4] }}
-        transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
-      >
-        <svg viewBox="0 0 24 24" fill="currentColor">
-          <path d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.93.566-3.725 1.542-5.182A9.752 9.752 0 003 11.25a9.75 9.75 0 0013.784 8.91 9.715 9.715 0 004.968-5.158z" />
-        </svg>
-      </motion.div>
-
-      {/* 동그란 별 파티클 */}
-      {stars.map((s) => (
-        <motion.div
-          key={s.id}
-          className="absolute rounded-full"
-          style={{
-            left: `${s.x}%`,
-            top: `${s.y}%`,
-            width: s.size,
-            height: s.size,
-            background: s.size > 5 ? '#FFF8D6' : '#FFFFFF',
-          }}
-          animate={{
-            opacity: [0.3, 0.9, 0.3],
-            scale: [0.8, 1.2, 0.8],
-          }}
-          transition={{
-            duration: s.duration,
-            repeat: Infinity,
-            delay: s.delay,
-            ease: 'easeInOut',
-          }}
-        />
-      ))}
-
-      {/* ✨ 십자 반짝이 (Sparkle SVG) */}
-      <motion.div
-        className="absolute text-white w-[18px] h-[18px]"
-        style={{ top: '12%', left: '20%' }}
-        animate={{ opacity: [0, 1, 0], scale: [0.5, 1.2, 0.5] }}
-        transition={{ duration: 2.2, repeat: Infinity, delay: 0.2 }}
-      >
-        <svg viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 0C12 6.627 17.373 12 24 12C17.373 12 12 17.373 12 24C12 17.373 6.627 12 0 12C6.627 12 12 6.627 12 0Z" />
-        </svg>
-      </motion.div>
-      <motion.div
-        className="absolute text-white w-[16px] h-[16px]"
-        style={{ top: '22%', right: '22%' }}
-        animate={{ opacity: [0, 1, 0], scale: [0.5, 1.2, 0.5] }}
-        transition={{ duration: 2.5, repeat: Infinity, delay: 1.2 }}
-      >
-        <svg viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 0C12 6.627 17.373 12 24 12C17.373 12 12 17.373 12 24C12 17.373 6.627 12 0 12C6.627 12 12 6.627 12 0Z" />
-        </svg>
-      </motion.div>
-      <motion.div
-        className="absolute text-white w-[12px] h-[12px]"
-        style={{ top: '40%', left: '15%' }}
-        animate={{ opacity: [0, 1, 0], scale: [0.5, 1.2, 0.5] }}
-        transition={{ duration: 1.8, repeat: Infinity, delay: 0.8 }}
-      >
-        <svg viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 0C12 6.627 17.373 12 24 12C17.373 12 12 17.373 12 24C12 17.373 6.627 12 0 12C6.627 12 12 6.627 12 0Z" />
-        </svg>
-      </motion.div>
-    </div>
-  );
+interface AnalyzeResponse {
+  id: string | null;
+  result: unknown;
+  modelUsed: string;
+  latencyMs: number;
+  imageWidth: number;
+  imageHeight: number;
 }
 
-// ─── 메인 컴포넌트 ──────────────────────────────────────
-
-export default function XRayPage() {
+export default function XRayPageV2() {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
+
   const [imageBase64, setImageBase64] = useState<string | null>(null);
-  const [result, setResult] = useState<XRayResult | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isPremium, setIsPremium] = useState(true);
-  
-  // 사용하지 않지만 호환성을 위해 남겨둠 (이제 UI를 통합)
-  const [persona, setPersona] = useState<string>('luna');
+  const [isPremium, setIsPremium] = useState(false);
 
   useEffect(() => {
-    async function checkProfile() {
+    (async () => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data } = await supabase.from('user_profiles').select('is_premium, persona_mode').eq('id', user.id).single();
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('is_premium')
+        .eq('id', user.id)
+        .single();
       setIsPremium(data?.is_premium ?? false);
-      setPersona(data?.persona_mode ?? 'luna');
-    }
-    checkProfile();
+    })();
   }, []);
+
+  /** 이미지 dim 측정 */
+  const measureImage = (b64: string): Promise<{ width: number; height: number }> =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      img.onerror = reject;
+      img.src = b64;
+    });
 
   const handleFileSelect = useCallback(async (file: File) => {
     setError(null);
-    setResult(null);
+    if (file.size > 5 * 1024 * 1024) {
+      setError('이미지가 5MB 를 넘어. 더 작은 캡처로 다시 올려줘');
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = async (e) => {
-      const base64 = e.target?.result as string;
-      setImageBase64(base64);
-      setLoading(true);
+      const b64 = e.target?.result as string;
+      setImageBase64(b64);
 
       try {
-        const res = await fetch('/api/xray/analyze', {
+        const { width, height } = await measureImage(b64);
+        setScanning(true);
+
+        const res = await fetch('/api/xray/v2/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: base64 }),
+          body: JSON.stringify({ imageBase64: b64, imageWidth: width, imageHeight: height }),
         });
 
-        if (res.status === 429) throw new Error('upgrade');
-        if (!res.ok) throw new Error('분석에 실패했어요');
+        if (res.status === 429) {
+          const data = await res.json().catch(() => ({}));
+          setScanning(false);
+          setError(data?.upgrade ? 'upgrade' : '오늘 무료 분석을 다 사용했어');
+          return;
+        }
+        if (res.status === 422) {
+          setScanning(false);
+          setError('캡처에서 메시지를 찾지 못했어. 카톡 화면이 또렷하게 나왔는지 확인해줘');
+          return;
+        }
+        if (!res.ok) {
+          setScanning(false);
+          setError('분석에 실패했어. 다시 시도해줘');
+          return;
+        }
 
-        const data: XRayResult = await res.json();
-        setResult(data);
-      } catch (err: any) {
-        setError(err.message || '분석 중 오류가 발생했어요');
-      } finally {
-        setLoading(false);
+        const data = (await res.json()) as AnalyzeResponse;
+
+        // 이미지 + 결과를 sessionStorage 에 저장 (결과 페이지에서 즉시 표시)
+        if (data.id) {
+          try {
+            sessionStorage.setItem(`xray-v2-image-${data.id}`, b64);
+            sessionStorage.setItem(`xray-v2-result-${data.id}`, JSON.stringify(data));
+          } catch {
+            // quota 초과 시 그냥 무시 — 결과 페이지에서 DB fetch
+          }
+          router.push(`/xray/result/${data.id}`);
+        } else {
+          // DB insert 실패한 경우 — 임시 키로 저장하고 결과 페이지로
+          const tmpId = 'tmp-' + Date.now();
+          sessionStorage.setItem(`xray-v2-image-${tmpId}`, b64);
+          sessionStorage.setItem(`xray-v2-result-${tmpId}`, JSON.stringify(data));
+          router.push(`/xray/result/${tmpId}`);
+        }
+      } catch (err) {
+        setScanning(false);
+        setError((err as Error)?.message || '분석 중 오류가 발생했어');
       }
     };
     reader.readAsDataURL(file);
-  }, []);
+  }, [router]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -183,211 +134,206 @@ export default function XRayPage() {
     if (file?.type.startsWith('image/')) handleFileSelect(file);
   }, [handleFileSelect]);
 
-  const handleSimulate = useCallback(() => {
-    if (!isPremium) return;
-    if (result) {
-      sessionStorage.setItem('xray-result', JSON.stringify(result));
-      router.push('/xray/simulate');
-    }
-  }, [result, router, isPremium]);
-
   return (
     <div
-      className="h-full relative overflow-x-hidden flex flex-col"
+      className="min-h-full relative overflow-hidden flex flex-col"
       style={{
-        backgroundColor: '#C8B5F5',
+        background: XV2.bgGrad,
+        color: XV2.text,
+        fontFamily: XV2.fontSans,
       }}
     >
-      <StarDecorations />
+      {/* 그리드 백드롭 */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-30"
+        style={{
+          backgroundImage: `
+            linear-gradient(${XV2.cyan}11 1px, transparent 1px),
+            linear-gradient(90deg, ${XV2.cyan}11 1px, transparent 1px)
+          `,
+          backgroundSize: '32px 32px',
+          maskImage: 'radial-gradient(ellipse at center, black 30%, transparent 70%)',
+          WebkitMaskImage: 'radial-gradient(ellipse at center, black 30%, transparent 70%)',
+        }}
+      />
 
-      {/* 상단 텍스트 헤더 */}
+      {/* 헤더 */}
       <div className="relative z-10 pt-[60px] pb-6 px-6 text-center">
-        <motion.h1
-          initial={{ opacity: 0, y: -10 }}
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-[34px] font-black tracking-tight text-white flex items-center justify-center gap-1"
-          style={{ textShadow: '0 2px 10px rgba(0,0,0,0.08), 0 0 4px rgba(255,255,255,0.7)' }}
+          className="inline-block mb-2 px-3 py-1 rounded-full"
+          style={{
+            background: `${XV2.cyan}11`,
+            border: `1px solid ${XV2.cyan}55`,
+            color: XV2.cyan,
+            fontFamily: XV2.fontMono,
+            fontSize: 10,
+            letterSpacing: '0.16em',
+            textShadow: `0 0 6px ${XV2.cyan}`,
+          }}
         >
-          카톡 엑스레이 <span className="text-[26px]">🔬</span>
+          ⟢ X-RAY v2 ⟣
+        </motion.div>
+        <motion.h1
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="text-[28px] font-black"
+          style={{ color: XV2.text, letterSpacing: '-0.01em' }}
+        >
+          카톡 엑스레이
         </motion.h1>
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
-          className="text-[14px] mt-2 font-bold"
-          style={{ color: '#5C458A' }}
+          className="text-[13px] mt-2"
+          style={{ color: XV2.textDim }}
         >
-          캡처본 올리면 루나가 심리 분석해줄게
+          캡처본을 올리면 루나가 의료 진단처럼 풀어줄게
         </motion.p>
       </div>
 
-      {/* 메인 뷰 (결과 없음 & 업로드 전) */}
-      {!result && !loading && (
-        <div className="relative z-10 flex flex-col flex-1">
-          {/* 업로드 카드 영역 */}
-          <div className="px-5 mt-2">
-            {!imageBase64 && (
+      {/* 업로드 카드 */}
+      <div className="relative z-10 px-5 flex-1 flex items-center justify-center">
+        {!scanning && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 200 }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={handleDrop}
+            onClick={() => fileRef.current?.click()}
+            className="w-full max-w-[420px] rounded-[24px] cursor-pointer relative overflow-hidden"
+            style={{
+              background: XV2.glassBg,
+              backdropFilter: XV2.glassBlur,
+              WebkitBackdropFilter: XV2.glassBlur,
+              border: `1.5px dashed ${XV2.cyan}66`,
+              padding: '64px 24px',
+              boxShadow: XV2.glowSoft,
+            }}
+          >
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background: `radial-gradient(circle at 50% 50%, ${XV2.cyan}0a, transparent 70%)`,
+              }}
+            />
+
+            <div className="relative text-center">
               <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.3, type: 'spring', stiffness: 200 }}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={handleDrop}
-                onClick={() => fileRef.current?.click()}
-                className="bg-[#FFFFFF] rounded-[24px] px-6 py-[60px] text-center cursor-pointer relative shadow-lg"
+                animate={{ y: [0, -6, 0] }}
+                transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+                className="text-5xl mb-4"
+              >
+                📲
+              </motion.div>
+              <p
+                className="text-[16px] font-extrabold mb-1"
+                style={{ color: XV2.text }}
+              >
+                캡처본 올리기
+              </p>
+              <p
+                className="text-[12px]"
+                style={{ color: XV2.textDim }}
+              >
+                탭하거나 끌어다 놔 · PNG / JPEG / WebP (최대 5MB)
+              </p>
+
+              <div
+                className="mt-5 inline-flex gap-2 px-3 py-1 rounded-full"
                 style={{
-                  boxShadow: '0 12px 40px rgba(107, 70, 193, 0.12)',
+                  background: `${XV2.cyan}11`,
+                  border: `1px solid ${XV2.cyan}33`,
+                  fontFamily: XV2.fontMono,
+                  fontSize: 9,
+                  letterSpacing: '0.12em',
+                  color: XV2.cyan,
                 }}
               >
-                <p className="text-[18px] font-bold tracking-tight" style={{ color: '#6D549B' }}>
-                  여기에 대화 내용을
-                </p>
-                <div className="flex items-center justify-center gap-1 mt-1">
-                  <p className="text-[18px] font-bold tracking-tight" style={{ color: '#6D549B' }}>
-                    공유해줘!
-                  </p>
-                  <span className="text-[22px] leading-none mb-1">🖼️</span>
-                </div>
-              </motion.div>
-            )}
-
-            {/* 업로드 이미지 미리보기 */}
-            {imageBase64 && (
-              <div className="bg-white rounded-[24px] p-4 shadow-lg">
-                <img src={imageBase64} alt="uploaded" className="rounded-xl w-full" />
+                {isPremium ? 'PREMIUM · UNLIMITED' : 'FREE · 1/DAY'}
               </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* 숨겨진 파일 인풋 */}
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) handleFileSelect(file);
-        }}
-      />
-
-      {/* 로딩 뷰 */}
-      {loading && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="relative z-10 text-center py-20 flex-1"
-        >
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ repeat: Infinity, duration: 1.5, ease: 'linear' }}
-            className="inline-block text-5xl mb-4"
-          >
-            🔮
+            </div>
           </motion.div>
-          <p className="text-[16px] font-bold" style={{ color: '#5C458A' }}>
-            루나가 집중해서 분석하는 중...
-          </p>
-          <p className="text-[13px] mt-2 opacity-80" style={{ color: '#5C458A' }}>
-            숨겨진 맥락을 파악하고 있어요
-          </p>
-        </motion.div>
-      )}
+        )}
 
-      {/* 에러 / 구독뷰 */}
-      {error === 'upgrade' ? (
-        <div className="relative z-10 mx-5 mt-4 bg-white/90 rounded-2xl p-6 text-center shadow-lg">
-          <p className="text-sm font-bold mb-1" style={{ color: '#6D549B' }}>
-            오늘 무료 분석을 다 사용했어요
-          </p>
-          <p className="text-xs mb-4" style={{ color: '#8874AB' }}>
-            프리미엄이면 무제한 분석 가능!
-          </p>
-          <Link
-            href="/subscription"
-            className="inline-block px-6 py-2.5 rounded-full text-white text-sm font-bold no-underline shadow-md"
-            style={{ background: 'linear-gradient(135deg, #8b6db5 0%, #d4af37 100%)' }}
-          >
-            프리미엄 시작하기
-          </Link>
-        </div>
-      ) : error && (
-        <div className="relative z-10 mx-5 mt-4 bg-white/90 rounded-2xl p-5 text-center shadow-lg">
-          <p className="text-sm font-bold text-red-500">{error}</p>
-          <button
-            onClick={() => { setError(null); setImageBase64(null); }}
-            className="mt-3 text-xs text-red-400 underline font-medium"
-          >
-            다시 시도하기
-          </button>
-        </div>
-      )}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleFileSelect(file);
+          }}
+        />
+      </div>
 
-      {/* 결과 뷰 */}
+      {/* 에러 */}
       <AnimatePresence>
-        {result && imageBase64 && !loading && (
+        {error && error !== 'upgrade' && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="relative z-10 px-4 py-6 space-y-6 flex-1 pb-40"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            className="relative z-10 mx-5 mb-24 p-4 rounded-2xl"
+            style={{
+              background: `${XV2.magenta}11`,
+              border: `1px solid ${XV2.magenta}66`,
+              color: XV2.text,
+              boxShadow: XV2.glowMagenta,
+            }}
           >
-            <XRayHeatmap imageBase64={imageBase64} messages={result.messages} />
-            <XRayResultCard
-              overallAnalysis={result.overallAnalysis}
-              keyInsight={result.keyInsight}
-              suggestedResponse={result.suggestedResponse}
-              reconciliationScore={result.reconciliationScore}
-              onSimulate={isPremium ? handleSimulate : undefined}
-            />
+            <p className="text-[13px] font-bold">{error}</p>
             <button
-              onClick={() => { setResult(null); setImageBase64(null); }}
-              className="w-full py-3.5 rounded-xl text-[14px] font-bold transition-transform active:scale-95"
+              onClick={() => { setError(null); setImageBase64(null); }}
+              className="mt-2 text-[11px] underline"
+              style={{ color: XV2.magenta }}
+            >
+              다시 시도
+            </button>
+          </motion.div>
+        )}
+        {error === 'upgrade' && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            className="relative z-10 mx-5 mb-24 p-5 rounded-2xl text-center"
+            style={{
+              background: XV2.glassBg,
+              backdropFilter: XV2.glassBlur,
+              WebkitBackdropFilter: XV2.glassBlur,
+              border: `1px solid ${XV2.cyan}55`,
+              boxShadow: XV2.glow,
+            }}
+          >
+            <p className="text-[13px] font-bold mb-1" style={{ color: XV2.text }}>
+              오늘 무료 분석을 다 사용했어요
+            </p>
+            <p className="text-[11px] mb-3" style={{ color: XV2.textDim }}>
+              프리미엄이면 무제한 분석 가능!
+            </p>
+            <Link
+              href="/subscription"
+              className="inline-block px-5 py-2 rounded-full text-[12px] font-extrabold no-underline"
               style={{
-                background: '#FFFFFF',
-                color: '#6D549B',
-                boxShadow: '0 4px 14px rgba(107, 70, 193, 0.1)',
+                background: `linear-gradient(135deg, ${XV2.cyan}, ${XV2.purple})`,
+                color: XV2.bg,
+                boxShadow: XV2.glow,
               }}
             >
-              다른 캡처 분석하기
-            </button>
+              프리미엄 시작
+            </Link>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* 하단 마스코트 레이아웃 (결과화면 아닐 때만 노출) */}
-      {!result && !loading && (
-        <>
-          {/* 타로냥 마스코트 - fixed로 네비바 바로 위 고정 (네비바보다 앞쪽에 위치하도록 z-[45]) */}
-          <motion.div
-            initial={{ opacity: 0, y: 60, x: '-50%' }}
-            animate={{ opacity: 1, y: 0, x: '-50%' }}
-            transition={{ delay: 0.4, duration: 0.8, type: 'spring', stiffness: 150 }}
-            className="fixed left-1/2 z-[45] pointer-events-none flex flex-col justify-end items-center w-full max-w-[500px]"
-            style={{
-              bottom: 'calc(env(safe-area-inset-bottom) + 50px)', // 더 큼직해진 만큼 살짝 더 내려서 안착감 강화
-            }}
-          >
-            <Image
-              src="/char_img/taronaang_xray.webp"
-              width={480}
-              height={480}
-              alt="분석냥"
-              className="drop-shadow-[0_4px_16px_rgba(0,0,0,0.15)] origin-bottom w-[95%] h-auto"
-              priority
-            />
-          </motion.div>
-          {/* 타로냥 뒤로 깔리는 그라데이션 - 자연스러운 배경 블렌딩 */}
-          <div 
-            className="fixed left-0 right-0 h-[80px] z-[30] pointer-events-none"
-            style={{
-              bottom: 'calc(env(safe-area-inset-bottom) + 64px)',
-              background: 'linear-gradient(to bottom, transparent, #BCA1EE)', 
-            }}
-          />
-        </>
-      )}
+      {/* Scanner */}
+      <CinematicScanner open={scanning} imageBase64={imageBase64} />
     </div>
   );
 }

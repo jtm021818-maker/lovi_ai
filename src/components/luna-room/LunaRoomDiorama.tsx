@@ -184,6 +184,24 @@ export default function LunaRoomDiorama({
       {/* z-30~50 디오라마 — 방바닥 핀 레이아웃 */}
       <div className="relative z-[30] flex-1 flex flex-col items-center justify-end pb-24">
 
+        {/* 벽에 걸린 추억 액자 — 절대 위치 */}
+        <motion.div
+          initial={{ opacity: 0, x: -12 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.4, ...ROOM_TOKENS.springSoft }}
+          className="absolute z-[50]"
+          style={{ top: '38%', left: '5%' }}
+        >
+          <MemoryShelf
+            pinnedMemories={pinnedMemories}
+            totalMemoryCount={allMemories.length}
+            onOpenGallery={() => setShowGallery(true)}
+            onSelectMemory={(m) => setRecallMemory(m)}
+            accentColor={accentColor}
+            isDark={isDark}
+          />
+        </motion.div>
+
         {/* z-70 말풍선 — 캐릭터 위에 떠있는 느낌 */}
         <motion.div
           initial={{ opacity: 0, y: 6 }}
@@ -227,22 +245,8 @@ export default function LunaRoomDiorama({
 
         {/* 가구 + 루나 row — 방바닥 */}
         <div className="relative w-full max-w-[420px] flex items-end justify-between px-6">
-          {/* 좌: 액자 선반 */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.35, ...ROOM_TOKENS.springSoft }}
-            className="relative z-[50] pb-2"
-          >
-            <MemoryShelf
-              pinnedMemories={pinnedMemories}
-              totalMemoryCount={allMemories.length}
-              onOpenGallery={() => setShowGallery(true)}
-              onSelectMemory={(m) => setRecallMemory(m)}
-              accentColor={accentColor}
-              isDark={isDark}
-            />
-          </motion.div>
+          {/* 좌: 빈 공간 (추억 액자는 벽에 걸려있음) */}
+          <div style={{ width: 90 }} />
 
           {/* 중: 루나 */}
           <motion.div
