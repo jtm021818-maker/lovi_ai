@@ -117,8 +117,12 @@ export default function LunaRoomDiorama({
 
   return (
     <div
-      className="relative min-h-screen flex flex-col overflow-hidden"
-      style={{ background: isDark ? '#0F0A1E' : '#F5F0FF' }}
+      className="fixed inset-0 flex flex-col overflow-hidden"
+      style={{
+        background: isDark ? '#0F0A1E' : '#F5F0FF',
+        touchAction: 'none',
+        overscrollBehavior: 'none',
+      }}
     >
       {/* z-0 배경 이미지 — 3구간으로 나뉜 룸 배경 */}
       <motion.div

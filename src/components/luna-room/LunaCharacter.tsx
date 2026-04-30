@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { LunaActivity, LunaMood } from '@/lib/luna-life/mood';
 import { ACTIVITY_LABELS } from '@/lib/luna-life/whispers';
+import { useTransparentPixelGuard } from '@/hooks/useTransparentPixelGuard';
 
 interface Props {
   activity: LunaActivity;
@@ -15,32 +16,10 @@ interface Props {
   accentColor: string;
 }
 
-const SPRITE_FALLBACK = '/char_img/luna_1_event.webp';
-const SPRITE_SLEEP = '/char_img/luna_sleep.png';
-
-/**
- * 활동 × 무드 → 스프라이트 경로.
- * 사용자 제작 시 `public/luna-room/character/luna_<activity>_<moodPair>.webp` 로 저장.
- * 미존재 시 onError → fallback.
- */
-function pickSpriteSrc(activity: LunaActivity, mood: LunaMood): string {
-  const base = `/luna-room/character/luna_${activity}`;
-
-  // 무드 → 스프라이트 그룹 매핑 (16장 케이스, 2-3 무드씩 묶음)
-  const moodGroup = (() => {
-    if (activity === 'sleeping') return mood === 'peaceful' ? 'peaceful' : 'sleepy';
-    if (activity === 'stretching') return mood === 'sleepy' ? 'sleepy' : 'bright';
-    if (activity === 'sipping_tea') return mood === 'thoughtful' || mood === 'wistful' ? 'thoughtful' : 'warm';
-    if (activity === 'reading') return mood === 'wistful' ? 'wistful' : 'warm';
-    if (activity === 'drawing') return mood === 'thoughtful' ? 'thoughtful' : 'bright';
-    if (activity === 'gazing_window') return mood === 'wistful' || mood === 'thoughtful' ? 'wistful' : 'warm';
-    if (activity === 'cuddling_cat') return mood === 'sleepy' ? 'sleepy' : 'warm';
-    if (activity === 'on_phone') return mood === 'playful' ? 'playful' : 'warm';
-    return 'warm';
-  })();
-
-  return `${base}_${moodGroup}.webp`;
-}
+/** v102: 룸 전용 스프라이트 — 투명배경 룸 포지셔닝 완료된 단일 이미지 */
+const SPRITE_ROOM_DEFAULT = '/background/lunaroom_runa_sleep.png';
+/** 사망 fallback 동일 이미지로 처리 (grayscale 필터 적용) */
+const SPRITE_FALLBACK = SPRITE_ROOM_DEFAULT;
 
 function ActivityHint({ activity }: { activity: LunaActivity }) {
   // 활동별 작은 보조 모션 (이모지로 fallback — 사용자 sprite에 이미 있을 수도)
@@ -80,14 +59,25 @@ export default function LunaCharacter({
   isDeceased = false,
   accentColor,
 }: Props) {
-  const [src, setSrc] = useState(() =>
-    isDeceased ? SPRITE_FALLBACK : activity === 'sleeping' ? SPRITE_SLEEP : pickSpriteSrc(activity, mood),
-  );
+  // v102: 룸 전용 스프라이트 — 모든 활동에 동일 이미지 사용 (투명배경 위치 완성본)
+  void mood; // 무드 매핑 미사용 (향후 다중 스프라이트 도입 시 활용)
+  const [src, setSrc] = useState(SPRITE_ROOM_DEFAULT);
   const [hearts, setHearts] = useState<number[]>([]);
   const lastClickRef = useRef<number>(0);
   const singleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleClick = () => {
+  // v102: 투명 PNG 알파 픽셀 가드 — 캐릭터 픽셀 위에서만 클릭 작동
+  const { isOpaque } = useTransparentPixelGuard(src);
+
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // 투명 영역 클릭 차단
+    const rect = e.currentTarget.getBoundingClientRect();
+    const localX = e.clientX - rect.left;
+    const localY = e.clientY - rect.top;
+    if (!isOpaque(localX, localY, rect.width, rect.height)) {
+      return;
+    }
+
     const now = Date.now();
     const since = now - lastClickRef.current;
     lastClickRef.current = now;
