@@ -19,8 +19,6 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import CinematicScanner from '@/components/xray-v2/CinematicScanner';
 import { XV2 } from '@/styles/xray-v2-tokens';
-import '@fontsource/jetbrains-mono/400.css';
-import '@fontsource/jetbrains-mono/700.css';
 
 interface AnalyzeResponse {
   id: string | null;

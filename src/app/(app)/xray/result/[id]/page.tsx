@@ -21,8 +21,6 @@ import { XV2 } from '@/styles/xray-v2-tokens';
 import XRayDashboard from '@/components/xray-v2/XRayDashboard';
 import { isValidResultV2 } from '@/lib/xray/types-v2';
 import type { XRayResultV2 } from '@/lib/xray/types-v2';
-import '@fontsource/jetbrains-mono/400.css';
-import '@fontsource/jetbrains-mono/700.css';
 
 interface ApiResp {
   id: string;
