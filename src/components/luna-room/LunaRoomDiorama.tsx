@@ -16,7 +16,6 @@ import LunaParticles from './LunaParticles';
 import LunaEnvelope from './LunaEnvelope';
 import LunaChat from './LunaChat';
 import DayBadge from './DayBadge';
-import WindowScene from './WindowScene';
 import LunaCharacter from './LunaCharacter';
 import MailboxSlot from './MailboxSlot';
 import MailboxLetterScatter from './MailboxLetterScatter';
@@ -201,38 +200,25 @@ export default function LunaRoomDiorama({
         </p>
       </motion.div>
 
-      {/* z-10 창문 씬 */}
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1, ...ROOM_TOKENS.springSoft }}
-        className="relative z-[10] mx-4 mt-4 rounded-3xl overflow-hidden"
-        style={{
-          height: 200,
-          boxShadow: isDark ? ROOM_TOKENS.cardShadowDark : ROOM_TOKENS.cardShadow,
-          border: `1px solid ${accentColor}22`,
-        }}
-      >
-        <WindowScene weather={liveState.weather} timeBand={liveState.timeBand} stage={stage.stage} />
-      </motion.div>
 
       {/* z-30~50 디오라마 */}
       <div className="relative z-[30] flex-1 flex flex-col items-center pt-6 pb-6">
         {/* 가구 + 루나 row */}
         <div className="relative w-full max-w-[420px] flex items-end justify-between px-6">
-          {/* 좌: 우편함 */}
+          {/* 좌: 액자 선반 */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.35, ...ROOM_TOKENS.springSoft }}
-            className="relative z-[50] pb-6"
+            className="relative z-[50] pb-2"
           >
-            <MailboxSlot
-              unopenedCount={unopenedGifts}
-              onOpen={handleMailboxOpen}
-              isDeceased={isDeceased}
+            <MemoryShelf
+              pinnedMemories={pinnedMemories}
+              totalMemoryCount={allMemories.length}
+              onOpenGallery={() => setShowGallery(true)}
+              onSelectMemory={(m) => setRecallMemory(m)}
               accentColor={accentColor}
-              hasFinalLetter={hasFinalLetter}
+              isDark={isDark}
             />
           </motion.div>
 
@@ -254,20 +240,19 @@ export default function LunaRoomDiorama({
             />
           </motion.div>
 
-          {/* 우: 액자 선반 */}
+          {/* 우: 우편함 */}
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.35, ...ROOM_TOKENS.springSoft }}
-            className="relative z-[50] pb-2"
+            className="relative z-[50] pb-6"
           >
-            <MemoryShelf
-              pinnedMemories={pinnedMemories}
-              totalMemoryCount={allMemories.length}
-              onOpenGallery={() => setShowGallery(true)}
-              onSelectMemory={(m) => setRecallMemory(m)}
+            <MailboxSlot
+              unopenedCount={unopenedGifts}
+              onOpen={handleMailboxOpen}
+              isDeceased={isDeceased}
               accentColor={accentColor}
-              isDark={isDark}
+              hasFinalLetter={hasFinalLetter}
             />
           </motion.div>
         </div>

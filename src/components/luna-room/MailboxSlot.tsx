@@ -13,8 +13,8 @@ interface Props {
   hasFinalLetter: boolean;
 }
 
-const SRC_IDLE = '/luna-room/furniture/mailbox_idle.webp';
-const SRC_ALERT = '/luna-room/furniture/mailbox_alert.webp';
+const SRC_IDLE = '/background/letterBox.png';
+const SRC_ALERT = '/background/letterBox.png';
 
 export default function MailboxSlot({ unopenedCount, onOpen, isDeceased, accentColor, hasFinalLetter }: Props) {
   const src = unopenedCount > 0 ? SRC_ALERT : SRC_IDLE;
