@@ -22,7 +22,6 @@ import MemoryShelf from './MemoryShelf';
 import MemoryGallery from './MemoryGallery';
 import MemoryRecallModal from './MemoryRecallModal';
 import WhisperBubble from './WhisperBubble';
-import ActionPills from './ActionPills';
 
 interface Props {
   ageDays: number;
@@ -190,7 +189,7 @@ export default function LunaRoomDiorama({
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.4, ...ROOM_TOKENS.springSoft }}
           className="absolute z-[50]"
-          style={{ top: '38%', left: '5%' }}
+          style={{ top: '20%', left: '2%' }}
         >
           <MemoryShelf
             pinnedMemories={pinnedMemories}
@@ -202,35 +201,18 @@ export default function LunaRoomDiorama({
           />
         </motion.div>
 
-        {/* z-70 말풍선 — 캐릭터 위에 떠있는 느낌 */}
+        {/* z-70 말풍선 — 캐릭터 바로 위 */}
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.55, ...ROOM_TOKENS.springSoft }}
-          className="relative z-[70] mb-3 px-6"
+          className="relative z-[70] mb-1 px-6"
         >
           <WhisperBubble
             whisper={whisper}
             isDark={isDark}
             accentColor={accentColor}
             textColor={textColor}
-          />
-        </motion.div>
-
-        {/* z-60 액션 버튼 */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.7, ...ROOM_TOKENS.springSoft }}
-          className="relative z-[60] mb-4"
-        >
-          <ActionPills
-            onSpeak={handleSpeak}
-            onPet={handlePet}
-            petAvailable={petAvailable}
-            isDeceased={isDeceased}
-            accentColor={accentColor}
-            isDark={isDark}
           />
         </motion.div>
 
