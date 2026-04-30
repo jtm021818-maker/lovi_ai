@@ -150,6 +150,21 @@ const STAGE_THRESHOLDS: { stage: LifeStage; from: number }[] = [
   { stage: 'dawn',     from: 0 },
 ];
 
+// ─── Room background image mapping ──────────────────────────────────────────
+export type RoomBgKey = 'light' | 'warm' | 'dark';
+
+export function getRoomBgKey(stage: LifeStage): RoomBgKey {
+  if (['dawn', 'spring', 'summer'].includes(stage)) return 'light';
+  if (['autumn', 'winter'].includes(stage)) return 'warm';
+  return 'dark'; // twilight, star
+}
+
+export const ROOM_BG_IMAGES: Record<RoomBgKey, string> = {
+  light: '/background/lunaroom_0_60.jpeg',
+  warm:  '/background/lunaroom_61_90.jpeg',
+  dark:  '/background/lunaroom_91_100.jpeg',
+};
+
 export function getAgeDays(birthDate: Date): number {
   const diffMs = Date.now() - birthDate.getTime();
   return Math.floor(diffMs / (1000 * 60 * 60 * 24));

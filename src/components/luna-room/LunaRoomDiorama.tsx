@@ -10,6 +10,7 @@ import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import type { LifeStageInfo, LunaGift, LunaMemory, LunaLiveState } from '@/lib/luna-life';
+import { getRoomBgKey, ROOM_BG_IMAGES } from '@/lib/luna-life';
 import { ROOM_TOKENS } from '@/lib/luna-life/tokens';
 import LunaParticles from './LunaParticles';
 import LunaEnvelope from './LunaEnvelope';
@@ -57,6 +58,8 @@ export default function LunaRoomDiorama({
   const router = useRouter();
   const { bgGradient, accentColor, textColor, particleType, name, daysRemaining, showCountdown } = stage;
   const isDark = stage.stage === 'twilight' || stage.stage === 'star';
+  const bgKey = getRoomBgKey(stage.stage);
+  const bgImage = ROOM_BG_IMAGES[bgKey];
 
   const [selectedGift, setSelectedGift] = useState<LunaGift | null>(null);
   const [showLetterShelf, setShowLetterShelf] = useState(false);
@@ -119,8 +122,33 @@ export default function LunaRoomDiorama({
   return (
     <div
       className="relative min-h-screen flex flex-col overflow-hidden"
-      style={{ background: bgGradient }}
+      style={{ background: isDark ? '#0F0A1E' : '#F5F0FF' }}
     >
+      {/* z-0 배경 이미지 — 3구간으로 나뉜 룸 배경 */}
+      <motion.div
+        key={bgKey}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 1.4, ease: 'easeInOut' }}
+        className="absolute inset-0"
+        style={{
+          zIndex: 0,
+          backgroundImage: `url(${bgImage})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center bottom',
+        }}
+      />
+
+      {/* z-1 스테이지 색감 오버레이 — 배경 위에 얇게 씌워 각 단계 톤 유지 */}
+      <div
+        className="absolute inset-0"
+        style={{
+          zIndex: 1,
+          background: bgGradient,
+          opacity: isDark ? 0.52 : 0.38,
+        }}
+      />
+
       {/* z-5 파티클 */}
       <LunaParticles type={particleType} />
 
