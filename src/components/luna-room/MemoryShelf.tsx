@@ -93,11 +93,11 @@ export default function MemoryShelf({
         )}
       </div>
 
-      {/* 라벨 */}
+      {/* 라벨 — 이미지 위 */}
       <div
         className="absolute"
         style={{
-          bottom: -16,
+          top: -16,
           left: '50%',
           transform: 'translateX(-50%)',
           fontSize: 10,

@@ -55,6 +55,7 @@ export default function RoomPage() {
   const [editMode, setEditMode] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
   const [showDex, setShowDex] = useState(false);
+  const [ageDaysForDex, setAgeDaysForDex] = useState(0);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const roomInnerRef = useRef<HTMLDivElement>(null);
 
@@ -65,6 +66,7 @@ export default function RoomPage() {
       .then((data) => {
         const owned = data.owned ?? [];
         setOwnedSpirits(owned);
+        if (typeof data.ageDays === 'number') setAgeDaysForDex(data.ageDays);
         try { localStorage.setItem('room_spirits', JSON.stringify(owned)); } catch {}
       })
       .catch(() => {});
@@ -293,6 +295,7 @@ export default function RoomPage() {
         isOpen={showDex}
         onClose={() => setShowDex(false)}
         owned={ownedSpirits}
+        ageDays={ageDaysForDex}
       />
     </div>
   );

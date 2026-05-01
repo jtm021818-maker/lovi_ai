@@ -13,16 +13,35 @@
  * - 미소지: ??? + 힌트
  */
 
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { SpiritMaster, UserSpirit, SpiritRarity } from '@/types/spirit.types';
 import { SPIRITS } from '@/data/spirits';
 import { INTERACTIONS } from '@/data/interactions';
+import { getRevealEntry } from '@/data/spirit-reveal-schedule';
+import { getBackstory } from '@/data/backstories';
 import RarityBadge, { RARITY_META } from './RarityBadge';
 import SpiritSprite from '@/components/spirit/SpiritSprite';
+
+interface FragmentResp {
+  unlocked: boolean;
+  resolved: {
+    spiritId: string;
+    title: string;
+    body: string;
+    sourceLabel: string;
+    bridgeOneLiner: string;
+    matched: boolean;
+  } | null;
+}
 
 interface Props {
   spirit: SpiritMaster | null;
   owned: UserSpirit | null;
+  /** v102: 루나 현재 나이 (Day Gate 계산) */
+  ageDays?: number;
+  /** v102: 다른 정령 L2 누적 해금 수 (lore L3 게이트 계산) */
+  totalUnlockedL2?: number;
   onClose: () => void;
 }
 
@@ -45,7 +64,7 @@ const LV_THRESHOLD: Record<number, { next: number; label: string }> = {
   5: { next: 900, label: 'MAX · 비밀 해금' },
 };
 
-export default function SpiritDetailSheet({ spirit, owned, onClose }: Props) {
+export default function SpiritDetailSheet({ spirit, owned, ageDays = 0, totalUnlockedL2 = 0, onClose }: Props) {
   return (
     <AnimatePresence>
       {spirit && (
@@ -74,7 +93,13 @@ export default function SpiritDetailSheet({ spirit, owned, onClose }: Props) {
               boxShadow: '0 -12px 40px rgba(0,0,0,0.45)',
             }}
           >
-            <DetailBody spirit={spirit} owned={owned} onClose={onClose} />
+            <DetailBody
+              spirit={spirit}
+              owned={owned}
+              ageDays={ageDays}
+              totalUnlockedL2={totalUnlockedL2}
+              onClose={onClose}
+            />
           </motion.div>
         </>
       )}
@@ -82,9 +107,11 @@ export default function SpiritDetailSheet({ spirit, owned, onClose }: Props) {
   );
 }
 
-function DetailBody({ spirit, owned, onClose }: {
+function DetailBody({ spirit, owned, ageDays, totalUnlockedL2, onClose }: {
   spirit: SpiritMaster;
   owned: UserSpirit | null;
+  ageDays: number;
+  totalUnlockedL2: number;
   onClose: () => void;
 }) {
   const rarity = spirit.rarity as SpiritRarity;
@@ -247,24 +274,15 @@ function DetailBody({ spirit, owned, onClose }: {
         </Section>
       )}
 
-      {/* 백스토리 */}
+      {/* 백스토리 — v102: 3-step 잠금 */}
       {isOwned && owned && (
-        <Section title="📜 비밀 이야기">
-          {owned.backstoryUnlocked || owned.bondLv >= 5 ? (
-            <p className="text-[12px] text-[#3a2418] leading-relaxed italic">
-              {spirit.backstoryPreview}
-            </p>
-          ) : (
-            <>
-              <p className="text-[11.5px] text-[#7c5738]/80 italic leading-relaxed">
-                &quot;{spirit.backstoryPreview.slice(0, 28)}...&quot;
-              </p>
-              <p className="mt-1.5 text-[10px] text-[#a1887f]">
-                🔒 Lv.5 에 도달하면 전부 읽을 수 있어
-              </p>
-            </>
-          )}
-        </Section>
+        <ThreeStepSecret
+          spiritId={spirit.id}
+          spirit={spirit}
+          owned={owned}
+          ageDays={ageDays}
+          totalUnlockedL2={totalUnlockedL2}
+        />
       )}
 
       {/* 파트너 정령 */}
@@ -303,6 +321,140 @@ function DetailBody({ spirit, owned, onClose }: {
             <span className="ml-1 text-[#7c5738]/80">마음이 닿은 만큼 XP 로 환원됐어.</span>
           </p>
         </Section>
+      )}
+    </div>
+  );
+}
+
+/**
+ * v102: 3-step 비밀 섹션 — 표면 / 백스토리(L2) / 어머니 일기(L3).
+ */
+function ThreeStepSecret({ spiritId, spirit, owned, ageDays, totalUnlockedL2 }: {
+  spiritId: string;
+  spirit: SpiritMaster;
+  owned: UserSpirit;
+  ageDays: number;
+  totalUnlockedL2: number;
+}) {
+  const entry = getRevealEntry(spiritId);
+  const revealDay = entry?.revealDay ?? 0;
+  const dayGateOpen = ageDays >= revealDay;
+  const lvGateOpen = owned.bondLv >= 5;
+  const l2Open = lvGateOpen && dayGateOpen;
+  const l3GateNeed = entry?.loreUnlockAfter ?? 999;
+  const otherUnlocked = Math.max(0, totalUnlockedL2 - (owned.backstoryUnlocked ? 1 : 0));
+  const l3Open = l2Open && otherUnlocked >= l3GateNeed;
+  const remainXp = lvGateOpen ? 0 : Math.max(0, 1500 - owned.bondXp);
+  const remainDay = dayGateOpen ? 0 : Math.max(0, revealDay - ageDays);
+  const need = Math.max(0, l3GateNeed - otherUnlocked);
+
+  const backstory = getBackstory(spiritId);
+
+  // v102 (rev2): L3 는 동적 fetch (유저 세션 기반)
+  const [fragment, setFragment] = useState<FragmentResp['resolved']>(null);
+  const [loadingFragment, setLoadingFragment] = useState(false);
+  useEffect(() => {
+    if (!l3Open) return;
+    let cancelled = false;
+    setLoadingFragment(true);
+    fetch(`/api/spirits/${spiritId}/fragment`)
+      .then((r) => r.json() as Promise<FragmentResp>)
+      .then((d) => { if (!cancelled) setFragment(d.resolved ?? null); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoadingFragment(false); });
+    return () => { cancelled = true; };
+  }, [l3Open, spiritId]);
+
+  return (
+    <Section title="📜 비밀 이야기">
+      {/* Step 1 — 표면 */}
+      <Step locked={false} label="첫 만남 한 줄" idx={1}>
+        <p className="text-[12px] text-[#3a2418] italic leading-relaxed">
+          {spirit.backstoryPreview}
+        </p>
+      </Step>
+
+      {/* Step 2 — 출신 백스토리 */}
+      <Step
+        locked={!l2Open}
+        label="진짜 이야기"
+        idx={2}
+        unlockHint={
+          !lvGateOpen ? `💜 Lv.5 까지 ${remainXp}XP 더 친해지자`
+          : !dayGateOpen ? `🌙 D-${remainDay}일 — 그 날이 오면 풀 수 있어`
+          : ''
+        }
+      >
+        {l2Open && backstory ? (
+          <div className="space-y-1.5">
+            {backstory.paragraphs.map((p, i) => (
+              <p key={i} className="text-[12px] leading-relaxed text-[#3a2418]">{p}</p>
+            ))}
+            <div className="mt-2 p-2 rounded-lg bg-purple-50 border border-purple-200">
+              <div className="text-[9px] font-bold text-purple-500 mb-0.5">세계관 조각</div>
+              <div className="text-[11px] italic text-purple-700">“{backstory.loreFragment}”</div>
+            </div>
+          </div>
+        ) : null}
+      </Step>
+
+      {/* Step 3 — 내 마음의 페이지 (L3, 유저 자기-반영) */}
+      <Step
+        locked={!l3Open}
+        label="내 마음의 페이지"
+        idx={3}
+        unlockHint={
+          !l2Open ? '먼저 진짜 이야기를 풀어줘'
+          : need > 0 ? `이 비밀은 다른 정령들의 비밀이 ${need}개 더 풀리면 보여`
+          : ''
+        }
+        accent="amber"
+      >
+        {l3Open ? (
+          loadingFragment ? (
+            <p className="text-[11px] text-amber-900/60 italic">너에게서 흘러나온 결을 읽는 중…</p>
+          ) : fragment ? (
+            <div>
+              <pre className="whitespace-pre-wrap font-serif text-[12px] leading-6 text-[#3a2418]">
+                {fragment.body}
+              </pre>
+              {fragment.bridgeOneLiner && (
+                <div className="mt-2 p-2 rounded-lg bg-amber-50 border border-amber-200">
+                  <div className="text-[10px] italic text-amber-800">“{fragment.bridgeOneLiner}”</div>
+                </div>
+              )}
+              {fragment.sourceLabel && (
+                <div className="mt-1 text-[9px] text-amber-700/70">{fragment.sourceLabel}</div>
+              )}
+            </div>
+          ) : null
+        ) : null}
+      </Step>
+    </Section>
+  );
+}
+
+function Step({ locked, label, idx, children, unlockHint, accent = 'rose' }: {
+  locked: boolean;
+  label: string;
+  idx: number;
+  children?: React.ReactNode;
+  unlockHint?: string;
+  accent?: 'rose' | 'amber';
+}) {
+  const accentBg = accent === 'amber' ? 'bg-amber-100/60 border-amber-300/60' : 'bg-rose-50 border-rose-200/60';
+  return (
+    <div className={`mb-2 p-2.5 rounded-xl border ${accentBg} ${locked ? 'opacity-70' : ''}`}>
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className="w-4 h-4 rounded-full bg-white/70 text-[9px] font-black text-[#7c5738] flex items-center justify-center">
+          {idx}
+        </span>
+        <span className="text-[11px] font-bold text-[#7c5738]">{label}</span>
+        <span className="ml-auto text-[10px]">{locked ? '🔒' : '✨'}</span>
+      </div>
+      {children}
+      {locked && unlockHint && (
+        <div className="mt-1 text-[10.5px] text-[#7c5738]/80 italic">{unlockHint}</div>
       )}
     </div>
   );

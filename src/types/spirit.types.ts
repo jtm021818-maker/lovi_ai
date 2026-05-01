@@ -39,6 +39,14 @@ export interface UserSpirit {
   backstoryUnlocked: boolean;
   firstObtainedAt: string;
   lastInteractionAt: string | null;
+  /** v102: L3(어머니 일기) 잠금 해제 여부 */
+  loreUnlocked?: boolean;
+  /** v102: backstory(L2) 가 풀린 시점 ageDays */
+  dayRevealedAt?: number | null;
+  /** v102: 이 정령이 풀리는 day 게이트 (서버 → 클라 응답에 함께 노출) */
+  revealDay?: number;
+  /** v102: 현재 게이트가 열렸는지 (서버 계산) */
+  dayGateOpen?: boolean;
 }
 
 export interface BondDialogue {

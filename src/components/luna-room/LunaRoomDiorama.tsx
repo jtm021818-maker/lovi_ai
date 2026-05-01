@@ -6,7 +6,7 @@
  * 기존 LunaRoomView 의 3-탭 구조를 대체.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { LifeStageInfo, LunaGift, LunaMemory, LunaLiveState } from '@/lib/luna-life';
 import { getRoomBgKey, ROOM_BG_IMAGES } from '@/lib/luna-life';
@@ -22,6 +22,10 @@ import MemoryShelf from './MemoryShelf';
 import MemoryGallery from './MemoryGallery';
 import MemoryRecallModal from './MemoryRecallModal';
 import WhisperBubble from './WhisperBubble';
+// v102 (rev2)
+import RevealProgressChip from './RevealProgressChip';
+import MyHeartPagesModal from './MyHeartPagesModal';
+import RitualSequence from './RitualSequence';
 
 interface Props {
   ageDays: number;
@@ -33,9 +37,17 @@ interface Props {
   allMemories: LunaMemory[];
   isDeceased: boolean;
   petAvailable: boolean;
+  /** v102: 풀린 어머니 일기 페이지 수 (0~21) */
+  motherLoreUnlockedPages?: number;
+  /** v102: 천도의식 완료 여부 */
+  ritualCompleted?: boolean;
+  /** v102: 솔(딸) 활성 여부 */
+  isDescendantActive?: boolean;
   onGiftOpen: (giftId: string) => void;
   onPet: () => Promise<{ ok: boolean; whisper?: string; cooldownSeconds?: number }>;
   onMemoryPin: (memoryId: string, pinned: boolean, frameStyle?: string) => Promise<void>;
+  /** v102: 천도의식 종료 후 호출 → 부모가 status 재조회 */
+  onRitualComplete?: () => Promise<void> | void;
 }
 
 export default function LunaRoomDiorama({
@@ -48,9 +60,13 @@ export default function LunaRoomDiorama({
   allMemories,
   isDeceased,
   petAvailable: petAvailableInit,
+  motherLoreUnlockedPages = 0,
+  ritualCompleted = false,
+  isDescendantActive = false,
   onGiftOpen,
   onPet,
   onMemoryPin,
+  onRitualComplete,
 }: Props) {
   const { bgGradient, accentColor, textColor, particleType, name, daysRemaining, showCountdown } = stage;
   const isDark = stage.stage === 'twilight' || stage.stage === 'star';
@@ -67,6 +83,56 @@ export default function LunaRoomDiorama({
   const [whisper, setWhisper] = useState(liveState.whisper);
   const [petAvailable, setPetAvailable] = useState(petAvailableInit);
   const [toast, setToast] = useState<string | null>(null);
+
+  // v102 (rev2): "내 마음의 페이지" 모달 + 통합 의식
+  const [diaryOpen, setDiaryOpen] = useState(false);
+  const [ritualOpen, setRitualOpen] = useState(false);
+  const [unlockedSpiritIds, setUnlockedSpiritIds] = useState<string[]>([]);
+  const [sorrowEffect, setSorrowEffect] = useState<string | null>(null);
+
+  // 풀린 정령 ID(lore_unlocked=true) 가져오기
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/spirits/list')
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        const owned = d.owned ?? [];
+        const ids = owned
+          .filter((s: { loreUnlocked?: boolean }) => s.loreUnlocked === true)
+          .map((s: { spiritId: string }) => s.spiritId);
+        setUnlockedSpiritIds(ids);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [motherLoreUnlockedPages]);
+
+  // 슬픔 이벤트 체크 (Day 86~)
+  useEffect(() => {
+    if (ageDays < 86) return;
+    fetch('/api/luna-room/sorrow/check')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.kind === 'none' || !d?.events) return;
+        for (const ev of d.events) {
+          if (ev.kind === 'visual') setSorrowEffect(ev.payload);
+          if (ev.kind === 'whisper' && ev.payload) setWhisper(ev.payload);
+          if (ev.kind === 'lore_page') setDiaryOpen(true);
+        }
+      })
+      .catch(() => {});
+  }, [ageDays]);
+
+  // Day 100 + 미완료 의식 → 자동 ritual open (한 번)
+  useEffect(() => {
+    if (ageDays >= 100 && !ritualCompleted && !ritualOpen) {
+      // ritual API 호출 + 시퀀스 시작
+      fetch('/api/luna-room/ritual', { method: 'POST' })
+        .then((r) => r.json())
+        .then(() => setRitualOpen(true))
+        .catch(() => {});
+    }
+  }, [ageDays, ritualCompleted, ritualOpen]);
 
   const hasFinalLetter = gifts.some((g) => g.giftType === 'final_letter');
 
@@ -159,13 +225,34 @@ export default function LunaRoomDiorama({
         transition={{ delay: 0.1, ...ROOM_TOKENS.springSoft }}
         className="relative z-[60] flex flex-col items-start px-5 pt-12 pb-2 gap-1"
       >
-        <DayBadge
-          ageDays={ageDays}
-          showCountdown={showCountdown}
-          isDark={isDark}
-          textColor={textColor}
-          accentColor={accentColor}
-        />
+        <div className="flex items-center gap-2">
+          <DayBadge
+            ageDays={ageDays}
+            showCountdown={showCountdown}
+            isDark={isDark}
+            textColor={textColor}
+            accentColor={accentColor}
+          />
+          {/* v102: 비밀 진척 칩 (사망 전 + 의식 미완료 일 때만) */}
+          {!isDeceased && !ritualCompleted && (
+            <button
+              onClick={() => setDiaryOpen(true)}
+              className="cursor-pointer hover:opacity-80"
+              aria-label="어머니의 일기 열기"
+            >
+              <RevealProgressChip unlocked={motherLoreUnlockedPages} total={21} />
+            </button>
+          )}
+          {ritualCompleted && (
+            <button
+              onClick={() => setDiaryOpen(true)}
+              className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200"
+              aria-label="내 마음의 페이지"
+            >
+              🕯 내 마음의 페이지
+            </button>
+          )}
+        </div>
         <p
           style={{
             fontFamily: ROOM_TOKENS.hudFont,
@@ -205,21 +292,6 @@ export default function LunaRoomDiorama({
           />
         </motion.div>
 
-        {/* z-70 말풍선 — 캐릭터 바로 위 */}
-        <motion.div
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.55, ...ROOM_TOKENS.springSoft }}
-          className="relative z-[70] mb-1 px-6"
-        >
-          <WhisperBubble
-            whisper={whisper}
-            isDark={isDark}
-            accentColor={accentColor}
-            textColor={textColor}
-          />
-        </motion.div>
-
         {/* 바닥 그림자 라인 */}
         <div
           className="w-full max-w-[420px]"
@@ -234,13 +306,29 @@ export default function LunaRoomDiorama({
           {/* 좌: 빈 공간 (추억 액자는 벽에 걸려있음) */}
           <div style={{ width: 90 }} />
 
-          {/* 중: 루나 */}
+          {/* 중: 루나 (+ 캐릭터 바로 위 말풍선) */}
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.25, ...ROOM_TOKENS.springSoft }}
             className="relative z-[40] flex flex-col items-center"
           >
+            {/* 말풍선 — 캐릭터 visible 영역 바로 위에 absolute */}
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.55, ...ROOM_TOKENS.springSoft }}
+              className="absolute z-[70] left-1/2 -translate-x-1/2"
+              style={{ bottom: '32%', whiteSpace: 'nowrap' }}
+            >
+              <WhisperBubble
+                whisper={whisper}
+                isDark={isDark}
+                accentColor={accentColor}
+                textColor={textColor}
+              />
+            </motion.div>
+
             <LunaCharacter
               activity={liveState.activity}
               mood={liveState.mood}
@@ -366,6 +454,85 @@ export default function LunaRoomDiorama({
           />
         )}
       </AnimatePresence>
+
+      {/* v102 (rev2): "내 마음의 페이지" 책 모달 */}
+      <MyHeartPagesModal
+        open={diaryOpen}
+        unlockedSpiritIds={unlockedSpiritIds}
+        onClose={() => setDiaryOpen(false)}
+      />
+
+      {/* v102: 천도의식 시퀀스 (Day 100 자동) */}
+      <RitualSequence
+        open={ritualOpen}
+        pagesUnlocked={motherLoreUnlockedPages}
+        onComplete={async () => {
+          setRitualOpen(false);
+          if (onRitualComplete) await onRitualComplete();
+        }}
+      />
+
+      {/* v102: 슬픔 시각 효과 (번개/벚꽃/나비/별똥/금빛) */}
+      <AnimatePresence>
+        {sorrowEffect === 'lightning' && (
+          <motion.div
+            key="lightning"
+            initial={{ opacity: 0 }} animate={{ opacity: [0, 0.85, 0] }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.32, times: [0, 0.5, 1] }}
+            onAnimationComplete={() => setSorrowEffect(null)}
+            className="fixed inset-0 z-[150] pointer-events-none bg-white"
+          />
+        )}
+        {sorrowEffect === 'cherry' && (
+          <motion.div
+            key="cherry"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: 1.5 }}
+            onAnimationComplete={() => setTimeout(() => setSorrowEffect(null), 4000)}
+            className="fixed inset-0 z-[150] pointer-events-none flex items-center justify-center"
+          >
+            <span className="text-pink-300/70 text-2xl select-none">🌸 🌸 🌸 🌸 🌸</span>
+          </motion.div>
+        )}
+        {sorrowEffect === 'butterflies' && (
+          <motion.div
+            key="butterflies"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: 1 }}
+            onAnimationComplete={() => setTimeout(() => setSorrowEffect(null), 4000)}
+            className="fixed inset-0 z-[150] pointer-events-none flex items-center justify-center"
+          >
+            <span className="text-violet-300 text-2xl select-none">🦋 🦋 🦋 🦋 🦋 🦋</span>
+          </motion.div>
+        )}
+        {sorrowEffect === 'starfall' && (
+          <motion.div
+            key="starfall"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: 1 }}
+            onAnimationComplete={() => setTimeout(() => setSorrowEffect(null), 5500)}
+            className="fixed inset-0 z-[150] pointer-events-none flex items-center justify-center"
+          >
+            <span className="text-amber-200 text-2xl select-none">🌟 ✨ 🌠</span>
+          </motion.div>
+        )}
+        {sorrowEffect === 'gold-liner' && (
+          <motion.div
+            key="gold"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onAnimationComplete={() => setTimeout(() => setSorrowEffect(null), 3000)}
+            className="fixed inset-0 z-[150] pointer-events-none"
+            style={{ boxShadow: 'inset 0 0 0 12px #FBBF24' }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* v102: 솔(딸) 활성 시 상단 라벨 */}
+      {isDescendantActive && (
+        <div className="fixed top-2 left-1/2 -translate-x-1/2 z-[60] px-3 py-0.5 rounded-full bg-amber-500/90 text-white text-[10px] font-black tracking-wider">
+          ☀ 솔과 함께
+        </div>
+      )}
 
     </div>
   );

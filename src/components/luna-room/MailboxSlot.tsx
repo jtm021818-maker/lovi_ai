@@ -134,11 +134,11 @@ export default function MailboxSlot({ unopenedCount, onOpen, isDeceased, accentC
         </motion.div>
       )}
 
-      {/* label */}
+      {/* label — 이미지 위 */}
       <div
         className="absolute"
         style={{
-          bottom: -16,
+          top: -16,
           left: '50%',
           transform: 'translateX(-50%)',
           fontSize: 10,

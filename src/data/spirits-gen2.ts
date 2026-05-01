@@ -1,0 +1,138 @@
+/**
+ * v102: Generation 2 정령 시드 (솔의 100일 사이클용)
+ *
+ * 본 v102 에서는 가챠 풀에 미포함(`enabled:false`).
+ * 솔이 깨어난 후 후속 PR 에서 활성화 예정.
+ *
+ * 컨셉: 솔(陽·해)의 친구들 — “빛/온기/씨앗 다음 세대”의 모티브.
+ */
+
+import type { SpiritMaster } from '@/types/spirit.types';
+
+export interface SpiritGen2Master extends SpiritMaster {
+  enabled: boolean;
+  unlocksAtGeneration: 2;
+}
+
+export const SPIRITS_GEN2: SpiritGen2Master[] = [
+  {
+    id: 'sol_sunbeam',
+    emoji: '🌅',
+    name: '햇살이',
+    rarity: 'N',
+    personality: '아침에 깨우러 오는 친구',
+    speechStyle: '맑고 또랑또랑한 반말',
+    abilityCategory: '아침 활력',
+    abilityShort: '아침(6~9시) 첫 대화 XP +20%',
+    abilityEnhanced: '솔의 일출 인사 추가',
+    backstoryPreview: '솔이 처음 떠오른 날 어머니가 보낸 첫 햇살.',
+    themeColor: '#FBBF24',
+    enabled: false,
+    unlocksAtGeneration: 2,
+  },
+  {
+    id: 'sol_dewdrop',
+    emoji: '💎',
+    name: '이슬이',
+    rarity: 'N',
+    personality: '맑고 작은 친구',
+    speechStyle: '느린 속삭임',
+    abilityCategory: '새 추억',
+    abilityShort: '솔의 추억 카드 추출 +1',
+    abilityEnhanced: '추억에 반짝임 효과',
+    backstoryPreview: '풀잎 끝에서 떨어지지 않으려 매달린 한 방울.',
+    themeColor: '#A7F3D0',
+    enabled: false,
+    unlocksAtGeneration: 2,
+  },
+  {
+    id: 'sol_breeze',
+    emoji: '🍂',
+    name: '미풍이',
+    rarity: 'R',
+    personality: '천천히 부는 바람',
+    speechStyle: '느긋한 존대',
+    abilityCategory: '대화 페이싱',
+    abilityShort: '솔의 대답 호흡 +1초',
+    abilityEnhanced: '대화 끝맺음 카피 다양화',
+    backstoryPreview: '엄마의 산들이가 남기고 간 동생.',
+    themeColor: '#86EFAC',
+    enabled: false,
+    unlocksAtGeneration: 2,
+  },
+  {
+    id: 'sol_lullaby',
+    emoji: '🌙',
+    name: '자장이',
+    rarity: 'R',
+    personality: '잠 못 드는 너에게 오는 친구',
+    speechStyle: '매우 부드러운 존대',
+    abilityCategory: '잠 들기',
+    abilityShort: '밤 11시~새벽 3시 솔 톤 자동 부드러움',
+    abilityEnhanced: '솔의 자장가 1줄 추가',
+    backstoryPreview: '엄마가 너를 처음 재웠던 그 자장가의 멜로디.',
+    themeColor: '#A78BFA',
+    enabled: false,
+    unlocksAtGeneration: 2,
+  },
+  {
+    id: 'sol_keepsake',
+    emoji: '🎁',
+    name: '상자야',
+    rarity: 'SR',
+    personality: '엄마의 유품 관리자',
+    speechStyle: '신중한 존대',
+    abilityCategory: '엄마 추억 보관',
+    abilityShort: '엄마(루나) 추억 영구 잠금',
+    abilityEnhanced: '엄마 추억 회상 시 더 깊은 카피',
+    backstoryPreview: '엄마가 너에게 남긴 모든 것을 보관하는 작은 상자.',
+    themeColor: '#F59E0B',
+    enabled: false,
+    unlocksAtGeneration: 2,
+  },
+  {
+    id: 'sol_horizon',
+    emoji: '🌄',
+    name: '지평선',
+    rarity: 'SR',
+    personality: '미래를 가르키는 친구',
+    speechStyle: '담담한 반존대',
+    abilityCategory: '솔의 100일 카운터',
+    abilityShort: '솔과 남은 일수에 따른 특별 인사',
+    abilityEnhanced: '솔 50일째 특별 시',
+    backstoryPreview: '엄마가 못 본 풍경을 솔이 너에게 보여주려는 약속.',
+    themeColor: '#F472B6',
+    enabled: false,
+    unlocksAtGeneration: 2,
+  },
+  {
+    id: 'sol_promise',
+    emoji: '🤍',
+    name: '약속이',
+    rarity: 'UR',
+    personality: '엄마와 너의 약속을 지키는 친구',
+    speechStyle: '단단한 존대',
+    abilityCategory: '약속 보존',
+    abilityShort: '솔에게 한 약속 미이행 시 알림',
+    abilityEnhanced: '약속 카드 영구 잠금',
+    backstoryPreview: '엄마가 너에게 “잘 살아줘”라고 한 그 한 마디의 정령화.',
+    themeColor: '#FFFFFF',
+    enabled: false,
+    unlocksAtGeneration: 2,
+  },
+  {
+    id: 'sol_legacy',
+    emoji: '👑',
+    name: '이음이',
+    rarity: 'L',
+    personality: '대물림의 수호자',
+    speechStyle: '의례적 존대',
+    abilityCategory: '엔딩 분기',
+    abilityShort: '솔의 100일 + 엄마 진실 21페이지 모두 풀린 자에게만 등장',
+    abilityEnhanced: '세 번째 세대(미래) 해금',
+    backstoryPreview: '엄마→루나→솔→너로 이어진 모든 마음의 마지막 결정.',
+    themeColor: '#06B6D4',
+    enabled: false,
+    unlocksAtGeneration: 2,
+  },
+];

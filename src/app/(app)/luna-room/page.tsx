@@ -30,6 +30,12 @@ interface StatusData {
   pinnedMemories: LunaMemory[];
   liveState: LunaLiveState;
   petAvailable: boolean;
+  // v102
+  motherLoreUnlockedPages?: number;
+  isDescendantActive?: boolean;
+  ritualCompleted?: boolean;
+  generation?: number;
+  descendantName?: string | null;
 }
 
 // ─── Init screen ─────────────────────────────────────────────────────────────
@@ -203,9 +209,14 @@ export default function LunaRoomPage() {
         allMemories={status.allMemories ?? status.recentMemories ?? []}
         isDeceased={status.isDeceased}
         petAvailable={status.petAvailable ?? false}
+        // v102
+        motherLoreUnlockedPages={status.motherLoreUnlockedPages ?? 0}
+        ritualCompleted={status.ritualCompleted ?? false}
+        isDescendantActive={status.isDescendantActive ?? false}
         onGiftOpen={handleGiftOpen}
         onPet={handlePet}
         onMemoryPin={handleMemoryPin}
+        onRitualComplete={fetchStatus}
       />
     </AnimatePresence>
   );

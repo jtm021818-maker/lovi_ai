@@ -24,9 +24,16 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   owned: UserSpirit[];
+  /** v102: 루나 현재 나이 (정령 비밀 day-게이트) */
+  ageDays?: number;
 }
 
-export default function DexModal({ isOpen, onClose, owned }: Props) {
+export default function DexModal({ isOpen, onClose, owned, ageDays = 0 }: Props) {
+  // v102: 다른 정령 L2(backstoryUnlocked) 누적 카운트 — L3 어머니 일기 게이트용
+  const totalUnlockedL2 = useMemo(
+    () => owned.filter((u) => u.backstoryUnlocked).length,
+    [owned],
+  );
   const [filter, setFilter] = useState<DexFilterState>({
     status: 'all',
     rarities: new Set<SpiritRarity>(),
@@ -136,6 +143,8 @@ export default function DexModal({ isOpen, onClose, owned }: Props) {
             <SpiritDetailSheet
               spirit={selected?.spirit ?? null}
               owned={selected?.owned ?? null}
+              ageDays={ageDays}
+              totalUnlockedL2={totalUnlockedL2}
               onClose={() => setSelected(null)}
             />
           </motion.div>

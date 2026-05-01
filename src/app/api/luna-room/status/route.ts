@@ -35,12 +35,28 @@ export async function GET(_req: NextRequest) {
   }
 
   const ageDays = getAgeDays(new Date(life.birth_date));
+  // v102 (rev2): user_spirits.lore_unlocked 카운트 = 풀린 자기-반영 fragment 수
+  const [{ count: loreCount }, { data: descendant }] = await Promise.all([
+    supabase
+      .from('user_spirits')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('lore_unlocked', true),
+    supabase.from('luna_descendant').select('*').eq('user_id', user.id).maybeSingle(),
+  ]);
+  const loreFragmentsUnlocked = loreCount ?? 0;
+  // backwards-compat 별명 — 클라이언트가 아직 옛 이름을 쓸 수 있어 두 이름 모두 노출
+  const motherLoreUnlockedPages = loreFragmentsUnlocked;
+  const isDescendantActive = !!descendant?.is_active;
+  // ritual/generation 상태는 life row 자체에서 가져옴
+  const ritualCompleted = !!life.ritual_completed_at;
+  const generation = life.generation ?? 1;
   const info = getLifeStageInfo(ageDays);
 
   // Auto-generate pending gift (fire-and-forget style, awaited for correctness)
   const pendingDay = pendingGiftDay(ageDays, life.last_gift_day);
   if (pendingDay !== null) {
-    await generateAndStoreGift(supabase, user.id, pendingDay, info);
+    await generateAndStoreGift(supabase, user.id, pendingDay, info, loreFragmentsUnlocked);
     await supabase
       .from('luna_life')
       .update({ last_gift_day: pendingDay, is_deceased: ageDays >= 100 })
@@ -164,6 +180,13 @@ export async function GET(_req: NextRequest) {
     pinnedMemories: (pinned ?? []).map(mapMemory),
     liveState,
     petAvailable,
+    // v102 (rev2)
+    loreFragmentsUnlocked,
+    motherLoreUnlockedPages, // legacy alias — 동일 값
+    isDescendantActive,
+    ritualCompleted,
+    generation,
+    descendantName: descendant?.name ?? null,
   });
 }
 
@@ -172,6 +195,7 @@ async function generateAndStoreGift(
   userId: string,
   triggerDay: number,
   info: ReturnType<typeof getLifeStageInfo>,
+  motherLoreUnlockedPages: number,
 ) {
   // 🆕 v90: 추억 + 실제 상담 데이터 병렬 로드 → 편지에 진짜 사연 녹이기
   const [
@@ -229,7 +253,9 @@ async function generateAndStoreGift(
   };
 
   const scheduleEntry = GIFT_SCHEDULE.find((g: { day: number }) => g.day === triggerDay);
-  const { system, user: userPrompt } = getGiftPrompt(triggerDay, info, memories, userContext);
+  const { system, user: userPrompt } = getGiftPrompt(
+    triggerDay, info, memories, userContext, motherLoreUnlockedPages,
+  );
 
   try {
     const result = await generateWithCascade(
