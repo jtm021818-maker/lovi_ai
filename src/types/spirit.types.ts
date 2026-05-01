@@ -47,6 +47,16 @@ export interface UserSpirit {
   revealDay?: number;
   /** v102: 현재 게이트가 열렸는지 (서버 계산) */
   dayGateOpen?: boolean;
+  /** v103: 무드 0..100 — server-side 시간 흐름 계산값 */
+  mood?: number;
+  /** v103: 무드 표시 톤 (bright/neutral/quiet/withdrawn) */
+  moodTone?: 'bright' | 'neutral' | 'quiet' | 'withdrawn';
+  /** v103: 마지막 방문 시각 (ISO) */
+  lastVisitedAt?: string | null;
+  /** v103: 방에 배치되어 있는지 */
+  isPlacedInRoom?: boolean;
+  /** v103: 풀린 cherished fragment 슬롯 인덱스 (0/1/2) */
+  fragmentsUnlocked?: number[];
 }
 
 export interface BondDialogue {

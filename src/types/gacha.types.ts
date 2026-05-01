@@ -38,7 +38,15 @@ export interface PullResult {
   /** 중복 시 환전 내역 */
   duplicateRefund?: {
     heartStone?: number;
-    bondShards?: number;
+    bondXp?: number;
+  };
+  /** 중복 뽑기 교감 변화 (UI 표시용) */
+  bondBonus?: {
+    xpGained: number;
+    lvBefore: number;
+    lvAfter: number;
+    /** Lv5 오버플로우: XP → 하트스톤 환전량 */
+    overflowHearts?: number;
   };
 }
 

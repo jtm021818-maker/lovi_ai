@@ -7,8 +7,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { getBanner } from '@/engines/gacha/banner-config';
-import { pullSinglePure, pullTenPure } from '@/engines/gacha/gacha-engine';
+import { pullSinglePure, pullTenPure, DUPLICATE_OVERFLOW_HEARTS } from '@/engines/gacha/gacha-engine';
 import { getBalance, spendCurrency, grantCurrency } from '@/lib/server/currency-ops';
+import { calcBondLv } from '@/engines/spirits/bond-engine';
 import type { GachaState, PullResult } from '@/types/gacha.types';
 import type { SpiritId } from '@/types/spirit.types';
 
@@ -87,26 +88,59 @@ export async function POST(req: NextRequest) {
       });
       ownedSet.add(r.spiritId);
     } else {
-      // 카운트 증가 — fallback: 단순 update (RPC 없어도 동작)
+      // 카운트 증가 + 교감 XP 직접 부여
       const { data: row } = await supabase
         .from('user_spirits')
-        .select('count')
+        .select('count, bond_xp, bond_lv')
         .eq('user_id', user.id)
         .eq('spirit_id', r.spiritId)
         .maybeSingle();
+
       if (row) {
+        const xpBefore = row.bond_xp ?? 0;
+        const lvBefore = (row.bond_lv ?? 1) as 1 | 2 | 3 | 4 | 5;
+        const bonusXp = r.duplicateRefund?.bondXp ?? 0;
+        const isMaxBond = xpBefore >= 1500;
+
+        let xpGained = 0;
+        let lvAfter = lvBefore;
+        let overflowHearts = 0;
+
+        const update: Record<string, unknown> = { count: (row.count ?? 1) + 1 };
+
+        if (isMaxBond) {
+          // Lv5 상태: XP 대신 하트스톤 오버플로우
+          overflowHearts = DUPLICATE_OVERFLOW_HEARTS[r.rarity];
+        } else {
+          const newXp = Math.min(1500, xpBefore + bonusXp);
+          xpGained = newXp - xpBefore;
+          lvAfter = calcBondLv(newXp);
+          update.bond_xp = newXp;
+          update.bond_lv = lvAfter;
+        }
+
         await supabase
           .from('user_spirits')
-          .update({ count: (row.count ?? 1) + 1 })
+          .update(update)
           .eq('user_id', user.id)
           .eq('spirit_id', r.spiritId);
-      }
-      // 환전
-      if (r.duplicateRefund?.heartStone) {
-        await grantCurrency(user.id, 'heart_stone', r.duplicateRefund.heartStone, 'gacha_duplicate', { spiritId: r.spiritId });
-      }
-      if (r.duplicateRefund?.bondShards) {
-        await grantCurrency(user.id, 'bond_shards', r.duplicateRefund.bondShards, 'gacha_duplicate', { spiritId: r.spiritId });
+
+        // 하트스톤 환전 (중복 기본 보상)
+        if (r.duplicateRefund?.heartStone) {
+          await grantCurrency(user.id, 'heart_stone', r.duplicateRefund.heartStone, 'gacha_duplicate', { spiritId: r.spiritId });
+        }
+        // Lv5 오버플로우 하트스톤
+        if (overflowHearts > 0) {
+          await grantCurrency(user.id, 'heart_stone', overflowHearts, 'gacha_overflow', { spiritId: r.spiritId });
+        }
+
+        // UI 표시용 교감 정보 첨부
+        r.bondBonus = {
+          xpGained,
+          lvBefore,
+          lvAfter,
+          ...(overflowHearts > 0 ? { overflowHearts } : {}),
+        };
       }
     }
 

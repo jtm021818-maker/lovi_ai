@@ -15,13 +15,22 @@ import type { BannerConfig, GachaState, PullResult } from '@/types/gacha.types';
 import { SPIRITS, getSpiritsByRarity } from '@/data/spirits';
 import { SOFT_PITY_START, SOFT_PITY_RATE_GAIN, HARD_PITY } from './banner-config';
 
-/** 중복 환전 표 */
-const DUPLICATE_REFUND: Record<SpiritRarity, { heartStone?: number; bondShards?: number }> = {
-  N: { heartStone: 10 },
-  R: { heartStone: 50 },
-  SR: { heartStone: 200, bondShards: 1 },
-  UR: { heartStone: 800, bondShards: 5 },
-  L: { heartStone: 2000, bondShards: 10 },
+/** 중복 환전 표 — heartStone: 즉시 환전, bondXp: 해당 정령 교감 XP 직접 부여 */
+const DUPLICATE_REFUND: Record<SpiritRarity, { heartStone?: number; bondXp: number }> = {
+  N:  { heartStone: 10,   bondXp: 10  },
+  R:  { heartStone: 50,   bondXp: 25  },
+  SR: { heartStone: 200,  bondXp: 60  },
+  UR: { heartStone: 800,  bondXp: 120 },
+  L:  { heartStone: 2000, bondXp: 250 },
+};
+
+/** Lv5 오버플로우: 교감이 이미 최대일 때 bondXp 대신 지급하는 하트스톤 */
+export const DUPLICATE_OVERFLOW_HEARTS: Record<SpiritRarity, number> = {
+  N:  5,
+  R:  12,
+  SR: 30,
+  UR: 60,
+  L:  125,
 };
 
 /** 현재 피티 기준 UR 확률 계산 (소프트/하드 피티 반영) */

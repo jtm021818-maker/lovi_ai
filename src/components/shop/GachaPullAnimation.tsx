@@ -131,7 +131,32 @@ export default function GachaPullAnimation({ results, onFinish }: Props) {
                   </div>
                   <div className="text-[8px] font-bold truncate max-w-full px-1">{sp?.name}</div>
                   <div className="text-[7px] opacity-80">{r.rarity}</div>
-                  {r.duplicateRefund?.heartStone && (
+                  {/* 교감 XP 뱃지 (중복 뽑기) */}
+                  {r.bondBonus && (
+                    <div className="flex flex-col items-center gap-0.5 mt-0.5">
+                      {r.bondBonus.overflowHearts ? (
+                        <div className="text-[7px] font-bold text-yellow-200 tabular-nums">
+                          +{r.bondBonus.overflowHearts}💎
+                        </div>
+                      ) : (
+                        <div
+                          className="text-[7px] font-black tabular-nums"
+                          style={{ color: '#fde68a' }}
+                        >
+                          +{r.bondBonus.xpGained}XP
+                        </div>
+                      )}
+                      {r.bondBonus.lvAfter > r.bondBonus.lvBefore && (
+                        <div
+                          className="px-1 py-0.5 rounded-full text-[6px] font-black"
+                          style={{ background: 'rgba(251,191,36,0.35)', color: '#fde68a' }}
+                        >
+                          ↑Lv{r.bondBonus.lvAfter}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {!r.bondBonus && r.duplicateRefund?.heartStone && (
                     <div className="text-[7px] text-yellow-200">+💎{r.duplicateRefund.heartStone}</div>
                   )}
                 </div>

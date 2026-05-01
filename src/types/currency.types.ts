@@ -19,6 +19,7 @@ export type CurrencyGrantReason =
   | 'crisis_overcome'
   | 'achievement'
   | 'gacha_duplicate'
+  | 'gacha_overflow'
   | 'purchase'
   | 'subscription'
   | 'admin_grant'

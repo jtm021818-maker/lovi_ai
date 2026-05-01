@@ -20,6 +20,9 @@ import { SPIRITS } from '@/data/spirits';
 import { INTERACTIONS } from '@/data/interactions';
 import { getRevealEntry } from '@/data/spirit-reveal-schedule';
 import { getBackstory } from '@/data/backstories';
+import { getAllFragmentSlots, FRAGMENT_UNLOCK_BY_SLOT } from '@/data/spirit-cherished-fragments';
+import { SPIRIT_DRIVE_BASELINE, describeDrive } from '@/data/spirit-drive-profiles';
+import { moodToDots, moodToLabel } from '@/lib/spirits/mood-engine';
 import RarityBadge, { RARITY_META } from './RarityBadge';
 import SpiritSprite from '@/components/spirit/SpiritSprite';
 
@@ -201,6 +204,17 @@ function DetailBody({ spirit, owned, ageDays, totalUnlockedL2, onClose }: {
         )}
       </div>
 
+      {/* 마음의 결 — 무드 + Drive (v103) */}
+      {isOwned && owned && (
+        <MoodDriveStrip
+          mood={owned.mood ?? 60}
+          lastVisitedAt={owned.lastVisitedAt ?? null}
+          driveText={describeDrive(SPIRIT_DRIVE_BASELINE[spirit.id] ?? {
+            connection: 50, novelty: 50, expression: 50, safety: 50, play: 50,
+          })}
+        />
+      )}
+
       {/* 미소지 힌트 */}
       {!isOwned && (
         <div className="mx-4 mb-5 p-4 rounded-2xl text-center bg-white/60"
@@ -274,6 +288,16 @@ function DetailBody({ spirit, owned, ageDays, totalUnlockedL2, onClose }: {
         </Section>
       )}
 
+      {/* v103: 같이 두기 토글 (방 배치) */}
+      {isOwned && owned && (
+        <RoomPlaceToggle
+          spiritId={spirit.id}
+          spiritName={spirit.name}
+          initiallyPlaced={!!owned.isPlacedInRoom}
+          bondLv={owned.bondLv}
+        />
+      )}
+
       {/* 백스토리 — v102: 3-step 잠금 */}
       {isOwned && owned && (
         <ThreeStepSecret
@@ -282,6 +306,14 @@ function DetailBody({ spirit, owned, ageDays, totalUnlockedL2, onClose }: {
           owned={owned}
           ageDays={ageDays}
           totalUnlockedL2={totalUnlockedL2}
+        />
+      )}
+
+      {/* v103: Cherished Fragments — 본드 1/3/5 단계별 해제 */}
+      {isOwned && owned && (
+        <CherishedFragmentsSection
+          spiritId={spirit.id}
+          bondLv={owned.bondLv}
         />
       )}
 
@@ -307,8 +339,9 @@ function DetailBody({ spirit, owned, ageDays, totalUnlockedL2, onClose }: {
               </div>
             ))}
           </div>
-          <p className="mt-2 text-[9.5px] text-[#7c5738]/70 italic">
-            둘 다 Lv.4 이상일 때 같이 방에 두면 대화해
+          <p className="mt-2 text-[9.5px] text-[#7c5738]/70 italic leading-relaxed">
+            둘 다 <span className="font-bold">Lv.4</span> 이상이고 같은 방에 있을 때
+            — 30분에 한 번씩 자기들끼리 한 마디씩 주고받아.
           </p>
         </Section>
       )}
@@ -459,6 +492,201 @@ function Step({ locked, label, idx, children, unlockHint, accent = 'rose' }: {
     </div>
   );
 }
+
+/* ───────────────────────── v103 컴포넌트 ───────────────────────── */
+
+/** 마음의 결 — 무드 점등 + 마지막 방문 + Drive 한 줄 */
+function MoodDriveStrip({ mood, lastVisitedAt, driveText }: {
+  mood: number;
+  lastVisitedAt: string | null;
+  driveText: string;
+}) {
+  const dots = moodToDots(mood);
+  const moodLbl = moodToLabel(mood);
+  const visitedLabel = formatRelativeKr(lastVisitedAt);
+  return (
+    <div className="mx-4 mt-1 mb-3 px-3 py-2 rounded-2xl flex items-center gap-3"
+      style={{
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.85) 0%, rgba(254,243,229,0.7) 100%)',
+        border: '1px solid rgba(212,175,55,0.25)',
+      }}
+    >
+      <div className="flex items-center gap-1.5">
+        <span className="text-[14px]">{dots}</span>
+        <span className="text-[10.5px] font-bold text-[#7c5738]">{moodLbl}</span>
+      </div>
+      <div className="w-px h-4 bg-amber-900/15" />
+      <div className="flex-1 text-[10px] text-[#7c5738]/75 italic truncate">
+        {driveText}
+      </div>
+      {visitedLabel && (
+        <div className="text-[9px] text-[#a1887f] flex-shrink-0">{visitedLabel}</div>
+      )}
+    </div>
+  );
+}
+
+/** 방 배치 토글 — POST /api/spirits/[id]/place */
+function RoomPlaceToggle({ spiritId, spiritName, initiallyPlaced, bondLv }: {
+  spiritId: string;
+  spiritName: string;
+  initiallyPlaced: boolean;
+  bondLv: number;
+}) {
+  const [placed, setPlaced] = useState(initiallyPlaced);
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  async function toggle() {
+    if (busy) return;
+    setBusy(true);
+    const next = !placed;
+    setPlaced(next); // optimistic
+    try {
+      const r = await fetch(`/api/spirits/${spiritId}/place`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ placed: next }),
+      });
+      if (!r.ok) throw new Error('place failed');
+      setToast(next
+        ? `${spiritName} 가 방에 함께 있어요 ✨`
+        : `${spiritName} 가 방에서 나갔어요`);
+      setTimeout(() => setToast(null), 2000);
+    } catch {
+      setPlaced(!next); // rollback
+      setToast('잠깐 — 다시 시도해줘');
+      setTimeout(() => setToast(null), 1800);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const lvNeeded = bondLv < 4;
+
+  return (
+    <div className="mx-4 mb-4">
+      <h4 className="text-[11px] font-black tracking-widest text-[#7c5738] mb-1.5">🛋️ 같이 두기</h4>
+      <button
+        onClick={toggle}
+        disabled={busy}
+        className="w-full p-3 rounded-xl flex items-center gap-3 active:scale-[0.99] transition-transform disabled:opacity-60"
+        style={{
+          background: placed
+            ? 'linear-gradient(135deg, rgba(251,191,36,0.18) 0%, rgba(236,72,153,0.12) 100%)'
+            : 'rgba(255,255,255,0.75)',
+          border: `1.5px solid ${placed ? 'rgba(251,191,36,0.45)' : 'rgba(212,175,55,0.25)'}`,
+          boxShadow: placed ? '0 0 14px rgba(251,191,36,0.25)' : 'inset 0 1px 0 rgba(255,255,255,0.6), 0 2px 6px rgba(0,0,0,0.06)',
+        }}
+      >
+        <div className="text-[20px]">{placed ? '✨' : '🛋️'}</div>
+        <div className="flex-1 text-left">
+          <div className="text-[12px] font-black text-[#3a2418]">
+            {placed ? '지금 방에 같이 있어요' : '방에 두기'}
+          </div>
+          <div className="text-[10px] text-[#7c5738]/75 mt-0.5 leading-snug">
+            {placed
+              ? '루나 옆에서 너를 기다리고 있어'
+              : lvNeeded
+                ? 'Lv.4 부터는 다른 친구와 같이 두면 대화도 해'
+                : '다른 친구들과 같이 두면 페어 대화가 시작돼'}
+          </div>
+        </div>
+        <div className="text-[10px] font-bold tabular-nums"
+          style={{ color: placed ? '#b45309' : '#a1887f' }}
+        >
+          {placed ? 'ON' : 'OFF'}
+        </div>
+      </button>
+      {toast && (
+        <div className="mt-2 text-center text-[10.5px] font-semibold text-amber-700">
+          {toast}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 간직한 조각 — 본드 1/3/5 슬롯, 잠긴 슬롯은 흐릿한 실루엣 */
+function CherishedFragmentsSection({ spiritId, bondLv }: {
+  spiritId: string;
+  bondLv: number;
+}) {
+  const slots = getAllFragmentSlots(spiritId);
+  if (slots.length === 0) return null;
+  const [openIdx, setOpenIdx] = useState<number | null>(null);
+
+  return (
+    <Section title="💎 간직한 조각">
+      <div className="grid grid-cols-3 gap-2">
+        {slots.map((f, i) => {
+          const required = FRAGMENT_UNLOCK_BY_SLOT[f.slot];
+          const unlocked = bondLv >= required;
+          const isOpen = openIdx === i;
+          return (
+            <button
+              key={f.slot}
+              onClick={() => unlocked && setOpenIdx(isOpen ? null : i)}
+              disabled={!unlocked}
+              className="aspect-square rounded-xl flex flex-col items-center justify-center p-2 active:scale-95 transition-transform"
+              style={{
+                background: unlocked
+                  ? 'linear-gradient(145deg, rgba(255,255,255,0.95) 0%, rgba(254,243,229,0.85) 100%)'
+                  : 'rgba(0,0,0,0.05)',
+                border: `1px ${unlocked ? 'solid rgba(212,175,55,0.45)' : 'dashed rgba(124,87,56,0.25)'}`,
+                boxShadow: unlocked ? '0 2px 8px rgba(212,175,55,0.18)' : 'none',
+              }}
+            >
+              <div
+                className="text-[26px] leading-none mb-0.5"
+                style={{
+                  filter: unlocked ? 'none' : 'blur(2.5px) opacity(0.35)',
+                }}
+              >
+                {f.icon}
+              </div>
+              <div className="text-[8.5px] font-bold text-[#7c5738] truncate max-w-full">
+                {unlocked ? f.title : `Lv.${required}에서`}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {openIdx !== null && bondLv >= FRAGMENT_UNLOCK_BY_SLOT[slots[openIdx].slot] && (
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-2 p-3 rounded-xl bg-amber-50 border border-amber-200"
+        >
+          <div className="text-[10px] font-bold text-amber-700 mb-1">
+            {slots[openIdx].icon} {slots[openIdx].title}
+          </div>
+          <div className="text-[11.5px] italic text-[#3a2418] leading-relaxed">
+            {slots[openIdx].recollection}
+          </div>
+        </motion.div>
+      )}
+    </Section>
+  );
+}
+
+/** 시간 포맷 */
+function formatRelativeKr(iso: string | null): string | null {
+  if (!iso) return null;
+  try {
+    const diffMs = Date.now() - new Date(iso).getTime();
+    const min = Math.floor(diffMs / 60000);
+    if (min < 1) return '방금';
+    if (min < 60) return `${min}분 전`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr}시간 전`;
+    const d = Math.floor(hr / 24);
+    if (d < 7) return `${d}일 전`;
+    return `${Math.floor(d / 7)}주 전`;
+  } catch { return null; }
+}
+
+/* ───────────────────────── 기존 헬퍼 ───────────────────────── */
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
