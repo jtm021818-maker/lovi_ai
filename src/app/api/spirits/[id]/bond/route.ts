@@ -73,6 +73,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .eq('user_id', user.id)
     .eq('spirit_id', id);
 
+  // v103: Mind Map 자동 노드 — 본드 레벨업 / L2 / L3 해제
+  if (didLevelUp) {
+    await supabase.from('spirit_mind_map_nodes').insert({
+      user_id: user.id,
+      spirit_id: id,
+      node_type: 'bond_up',
+      label: `Lv.${newLv} 도달`,
+      detail: ['', '처음 알아감', '친해지는 중', '마음을 나눔', '깊이 연결됨', 'MAX · 비밀 해금'][newLv] ?? null,
+    });
+  }
+  if (newlyUnlocked) {
+    await supabase.from('spirit_mind_map_nodes').insert({
+      user_id: user.id,
+      spirit_id: id,
+      node_type: 'secret_unlock',
+      label: '진짜 이야기 열림',
+      detail: `Day ${ageDays} 에 백스토리(L2) 가 풀렸어.`,
+    });
+  }
+  if (loreUnlocked && !row.lore_unlocked) {
+    await supabase.from('spirit_mind_map_nodes').insert({
+      user_id: user.id,
+      spirit_id: id,
+      node_type: 'secret_unlock',
+      label: '내 마음의 페이지 열림',
+      detail: '너에게서 흘러나온 결이 보였어.',
+    });
+  }
+
   return NextResponse.json({
     newXp,
     newLv,

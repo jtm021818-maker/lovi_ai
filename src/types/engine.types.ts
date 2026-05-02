@@ -191,7 +191,34 @@ export type PhaseEventType =
   // ──────────────────────────────
   | 'BROWSE_STREAM_START'      // 🔍 v88: 브라우징 세션 시작 (메타 + searching UI)
   | 'BROWSE_STREAM_BLOCK'      // 🔍 v88: 단일 말풍선/링크/리뷰/결정 블록
-  | 'BROWSE_STREAM_END';       // 🔍 v88: 세션 종료 + shortlist 요약
+  | 'BROWSE_STREAM_END'        // 🔍 v88: 세션 종료 + shortlist 요약
+  // ──────────────────────────────
+  // 🆕 v104: Spirit Random Events (20개 정령 시그니처 카드)
+  // ──────────────────────────────
+  // N (6)
+  | 'SPIRIT_RAGE_LETTER'        // 🔥 fire_goblin — 분노 폭발 편지 3안
+  | 'SPIRIT_THINK_FRAME'        // 📖 book_worm — 3프레임 재해석
+  | 'SPIRIT_CRY_TOGETHER'       // 💧 tear_drop — 침묵 1분 모드
+  | 'SPIRIT_FIRST_BREATH'       // 🌱 seed_spirit — 4-7-8 호흡
+  | 'SPIRIT_RHYTHM_CHECK'       // 🥁 drum_imp — 답장 리듬 진단
+  | 'SPIRIT_OLIVE_BRANCH'       // 🕊️ peace_dove — 화해 첫마디 3안
+  // R (7)
+  | 'SPIRIT_CLOUD_REFRAME'      // ☁️ cloud_bunny — 코미디 리프레임 4줄
+  | 'SPIRIT_LETTER_BRIDGE'      // 💌 letter_fairy — 부치지 않을 편지
+  | 'SPIRIT_WINDOW_OPEN'        // 🍃 wind_sprite — 5분 환기
+  | 'SPIRIT_NIGHT_CONFESSION'   // 🌙 moon_rabbit — 새벽 고백실
+  | 'SPIRIT_REVERSE_ROLE'       // 🎭 clown_harley — 입장 바꿔 5턴
+  | 'SPIRIT_BUTTERFLY_DIARY'    // 🌹 rose_fairy — 설렘 일지 3가지
+  | 'SPIRIT_ROOTED_HUG'         // 🌳 forest_mom — 5-4-3-2-1 그라운딩
+  // SR (5)
+  | 'SPIRIT_FALLEN_PETALS'      // 🌸 cherry_leaf — 떨어진 꽃잎 의식
+  | 'SPIRIT_FREEZE_FRAME'       // ❄️ ice_prince — 60초 강제 침묵
+  | 'SPIRIT_BOLT_CARD'          // ⚡ lightning_bird — 무작위 다른 정령 카드 트리거
+  | 'SPIRIT_METAMORPHOSIS'      // 🦋 butterfly_meta — 90일 비교 거울
+  | 'SPIRIT_MEMORY_KEY'         // 🗝️ book_keeper — 패턴 키워드 카드
+  // UR (2)
+  | 'SPIRIT_CROWN_RECLAIM'      // 👑 queen_elena — 가치 3가지 봉인 해제
+  | 'SPIRIT_WISH_GRANT';        // 🌟 star_dust — 월간 소원 if-then
 
 /** Phase 이벤트 데이터 */
 export interface PhaseEvent {
@@ -1239,7 +1266,7 @@ export type SuggestionCategory =
 /** 선택지 메타 정보 — 프론트→서버→엔진 전달 */
 export interface SuggestionMeta {
   /** 메시지 출처 */
-  source: 'typed' | 'suggestion' | 'emotion_thermometer' | 'insight_card' | 'emotion_mirror' | 'luna_story' | 'luna_strategy' | 'mind_reading' | 'pattern_mirror' | 'solution_preview' | 'solution_preview_delay' | 'solution_card_draft' | 'solution_card_other' | 'message_copy' | 'message_modify' | 'message_custom' | 'growth_report_promise' | 'growth_report_continue' | 'tone_select' | 'draft_workshop' | 'roleplay_feedback' | 'panel_report' | 'idea_refine' | 'browse_decision' | 'event';
+  source: 'typed' | 'suggestion' | 'emotion_thermometer' | 'insight_card' | 'emotion_mirror' | 'luna_story' | 'luna_strategy' | 'mind_reading' | 'pattern_mirror' | 'solution_preview' | 'solution_preview_delay' | 'solution_card_draft' | 'solution_card_other' | 'message_copy' | 'message_modify' | 'message_custom' | 'growth_report_promise' | 'growth_report_continue' | 'tone_select' | 'draft_workshop' | 'roleplay_feedback' | 'panel_report' | 'idea_refine' | 'browse_decision' | 'event' | 'spirit_event';
   context?: Record<string, any>;
   /** 선택지가 의도한 전략 */
   strategyHint?: StrategyType;

@@ -173,6 +173,8 @@ export async function* executeAceV5(
     selfExpression: passSelfExpression((input.leftBrain as any)?.self_expression),
     thinkingLevel: pickThinkingLevel(input.leftBrain, isReanalysis),
     chatHistory: input.chatHistory,
+    // 🆕 v104: 활성 정령 가이드 (선택)
+    activeSpiritsHint: input.activeSpiritsHint ?? null,
   };
 
   let buffer = '';
@@ -425,6 +427,8 @@ interface SingleCallParams {
   thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high';
   /** 🆕 v78: 대화 히스토리 — 치매 방지. 우뇌가 직접 맥락 봄. */
   chatHistory?: Array<{ role: 'user' | 'ai'; content: string }>;
+  /** 🆕 v104: 활성 정령 가이드 (방 Lv3+ 정령 시그니처 카드 발동 안내) */
+  activeSpiritsHint?: string | null;
 }
 
 interface SingleCallResult {
@@ -463,6 +467,7 @@ async function* streamVoiceOnceGen(
     previousLunaText: params.previousLunaText ?? null,
     selfExpression: params.selfExpression ?? null,
     chatHistory: params.chatHistory,
+    activeSpiritsHint: params.activeSpiritsHint ?? null,
   });
 
   const provider = params.model === 'claude' ? 'anthropic' : 'gemini';

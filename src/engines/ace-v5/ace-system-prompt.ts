@@ -623,10 +623,12 @@ export function buildAceV5UserMessage(params: {
     must_avoid_question: boolean;
     self_disclosure_opportunity: string | null;
   } | null;
+  // 🆕 v104: 활성 정령 가이드 — 방에 배치된 Lv3+ 정령 시그니처 카드 발동 안내
+  activeSpiritsHint?: string | null;
 }): string {
   // v75: 좌뇌 handoff 가 이미 모든 신호 (pacingMeta, metaAwareness, selfExpression 포함) 를
   //      내면 독백 포맷으로 담음. 별도 주입 섹션 모두 제거 — 중복 안티패턴.
-  const { userUtterance, handoffPromptText, recentLunaActions, intimacyLevel, phase, isReanalysis, previousLunaText, metaAwareness, chatHistory } = params;
+  const { userUtterance, handoffPromptText, recentLunaActions, intimacyLevel, phase, isReanalysis, previousLunaText, metaAwareness, chatHistory, activeSpiritsHint } = params;
 
   const sections: string[] = [];
 
@@ -677,6 +679,11 @@ export function buildAceV5UserMessage(params: {
   const transitionGuide = getPhaseTransitionTagGuide(phase);
   if (transitionGuide) {
     sections.push(transitionGuide);
+  }
+
+  // 🆕 v104: 활성 정령 시그니처 카드 가이드 — 방에 Lv3+ 배치된 정령만 발동 가능
+  if (activeSpiritsHint && activeSpiritsHint.trim()) {
+    sections.push(activeSpiritsHint);
   }
 
   // 직전 루나 발화 (meta-complaint 감지 시 자기 참조용)

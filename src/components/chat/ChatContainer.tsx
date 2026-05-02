@@ -76,6 +76,28 @@ import TarotDraw from './events/TarotDraw';
 import TarotAxisCollect from './events/TarotAxisCollect';
 import TarotInsight from './events/TarotInsight';
 import XRayInlineCard from './events/XRayInlineCard';
+// 🆕 v104: Spirit Random Events (20개 정령 카드)
+import RageLetter from './events/spirits/RageLetter';
+import ThinkFrame from './events/spirits/ThinkFrame';
+import CryTogether from './events/spirits/CryTogether';
+import FirstBreath from './events/spirits/FirstBreath';
+import RhythmCheck from './events/spirits/RhythmCheck';
+import OliveBranch from './events/spirits/OliveBranch';
+import CloudReframe from './events/spirits/CloudReframe';
+import LetterBridge from './events/spirits/LetterBridge';
+import WindowOpen from './events/spirits/WindowOpen';
+import NightConfession from './events/spirits/NightConfession';
+import ReverseRole from './events/spirits/ReverseRole';
+import ButterflyDiary from './events/spirits/ButterflyDiary';
+import RootedHug from './events/spirits/RootedHug';
+import FallenPetals from './events/spirits/FallenPetals';
+import FreezeFrame from './events/spirits/FreezeFrame';
+import BoltCard from './events/spirits/BoltCard';
+import Metamorphosis from './events/spirits/Metamorphosis';
+import MemoryKey from './events/spirits/MemoryKey';
+import CrownReclaim from './events/spirits/CrownReclaim';
+import WishGrant from './events/spirits/WishGrant';
+import type { BoltCardData as SpiritBoltCardData } from '@/engines/spirits/spirit-event-types';
 import type { XRayResult } from '@/app/api/xray/analyze/route';
 import { RelationshipScenario } from '@/types/engine.types';
 import type { NudgeAction, SuggestionMeta, PhaseEvent, TarotAxisCollectData, TarotInsightData } from '@/types/engine.types';
@@ -436,6 +458,38 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
 
   /** 선택지 클릭 */
   function handleSuggestionSelect(text: string, meta?: SuggestionMeta) {
+    // 🆕 v104: 정령 카드 선택은 fire-and-forget DB 갱신 (보관함/소원 영구 저장)
+    if (meta?.source === 'spirit_event') {
+      const ctx = meta.context ?? {};
+      const spiritId = ctx.spiritId as string | undefined;
+      const eventType = ctx.eventType as string | undefined;
+      const choice = ctx.choice as string | undefined;
+      if (spiritId && eventType && choice) {
+        // input 으로 묶어 보관 — body/items/values/wish 등 자유 필드
+        const input: Record<string, unknown> = {};
+        if (typeof ctx.body === 'string') input.body = ctx.body;
+        if (Array.isArray(ctx.items)) input.items = ctx.items;
+        if (Array.isArray(ctx.values)) input.values = ctx.values;
+        if (typeof ctx.recipient === 'string') input.recipient = ctx.recipient;
+        if (typeof ctx.originalWish === 'string') input.originalWish = ctx.originalWish;
+        if (typeof ctx.ifPhrase === 'string') input.ifPhrase = ctx.ifPhrase;
+        if (typeof ctx.thenPhrase === 'string') input.thenPhrase = ctx.thenPhrase;
+        if (typeof ctx.target === 'string') input.target = ctx.target;
+        // fire-and-forget
+        fetch('/api/spirits/event/choose', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId,
+            spiritId,
+            eventType,
+            choice,
+            input: Object.keys(input).length > 0 ? input : undefined,
+          }),
+        }).catch((err) => console.warn('[spirit-event/choose] POST fail', err));
+      }
+    }
+
     // 타로 이벤트 선택은 유저 메시지로 안 보임
     // 내부적으로만 메타데이터 전송 → AI가 자연스럽게 이어감
     const isTarotEvent = meta?.context?.tarotEvent;
@@ -559,6 +613,40 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
             onSelect={(text, meta) => handleSuggestionSelect(text, meta)}
           />
         );
+      // 🆕 v104: Spirit Random Events (20개 정령 카드)
+      case 'SPIRIT_RAGE_LETTER': return <RageLetter key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
+      case 'SPIRIT_THINK_FRAME': return <ThinkFrame key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
+      case 'SPIRIT_CRY_TOGETHER': return <CryTogether key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
+      case 'SPIRIT_FIRST_BREATH': return <FirstBreath key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
+      case 'SPIRIT_RHYTHM_CHECK': return <RhythmCheck key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
+      case 'SPIRIT_OLIVE_BRANCH': return <OliveBranch key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
+      case 'SPIRIT_CLOUD_REFRAME': return <CloudReframe key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
+      case 'SPIRIT_LETTER_BRIDGE': return <LetterBridge key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
+      case 'SPIRIT_WINDOW_OPEN': return <WindowOpen key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
+      case 'SPIRIT_NIGHT_CONFESSION': return <NightConfession key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
+      case 'SPIRIT_REVERSE_ROLE': return <ReverseRole key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
+      case 'SPIRIT_BUTTERFLY_DIARY': return <ButterflyDiary key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
+      case 'SPIRIT_ROOTED_HUG': return <RootedHug key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
+      case 'SPIRIT_FALLEN_PETALS': return <FallenPetals key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
+      case 'SPIRIT_FREEZE_FRAME': return <FreezeFrame key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
+      case 'SPIRIT_METAMORPHOSIS': return <Metamorphosis key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
+      case 'SPIRIT_MEMORY_KEY': return <MemoryKey key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
+      case 'SPIRIT_CROWN_RECLAIM': return <CrownReclaim key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
+      case 'SPIRIT_WISH_GRANT': return <WishGrant key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
+      // ⚡ BoltCard — 0.8초 핏치 입장 후 inner picked card 재귀 렌더
+      case 'SPIRIT_BOLT_CARD': {
+        const boltData = event.data as unknown as SpiritBoltCardData;
+        const innerEvent: PhaseEvent = {
+          type: boltData.pickedEventType as PhaseEvent['type'],
+          phase: event.phase,
+          data: boltData.pickedEventData as unknown as Record<string, unknown>,
+        };
+        return (
+          <BoltCard key={`event-${idx}`} event={event}>
+            {renderPhaseEvent(innerEvent, idx + 10000)}
+          </BoltCard>
+        );
+      }
       default: return null;
     }
   };

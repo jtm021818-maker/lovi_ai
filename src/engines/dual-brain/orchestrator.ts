@@ -456,6 +456,8 @@ export interface DualBrainInput {
   chatHistory?: Array<{ role: 'user' | 'ai'; content: string }>;
   /** 🆕 v86: 이미 완료된 이벤트 목록 — AI가 중복 발동 멘트 반복 방지 */
   completedEvents?: string[];
+  /** 🆕 v104: 활성 정령 카드 가이드 — pipeline 에서 buildActiveSpiritsHint 로 빌드 후 주입 */
+  activeSpiritsHint?: string | null;
   /** 🆕 v90 Perf: 파이프라인이 미리 로드한 장기 기억 번들 (Promise).
    *  좌뇌와 병렬 로드되어 좌→우 갭(~1.5~2초) 제거. */
   preloadedMemoryBundlePromise?: Promise<{
@@ -612,6 +614,7 @@ export async function* executeDualBrain(
           memoryBundle,       // 🆕 v76
           chatHistory: input.chatHistory,   // 🆕 v78: 치매 방지 — 우뇌가 맥락 직접 봄
           completedEvents: input.completedEvents,  // 🆕 v86: 중복 이벤트 멘트 방지
+          activeSpiritsHint: input.activeSpiritsHint ?? null,  // 🆕 v104: 활성 정령 카드 가이드
         }, logCollector)) {
           if (chunk.type === 'text') {
             aceChunkCount++;
@@ -701,6 +704,7 @@ export async function* executeDualBrain(
           memoryBundle,      // 🆕 v76
           chatHistory: input.chatHistory,   // 🆕 v78: 치매 방지 — 우뇌가 맥락 직접 봄
           completedEvents: input.completedEvents,  // 🆕 v86: 중복 이벤트 멘트 방지
+          activeSpiritsHint: input.activeSpiritsHint ?? null,  // 🆕 v104: 활성 정령 카드 가이드
         }, logCollector)) {
           if (chunk.type === 'text') {
             fullResponseText += chunk.data;

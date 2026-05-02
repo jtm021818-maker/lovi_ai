@@ -317,6 +317,14 @@ function DetailBody({ spirit, owned, ageDays, totalUnlockedL2, onClose }: {
         />
       )}
 
+      {/* v103: 별자리 — Mind Map 노드 시각화 */}
+      {isOwned && owned && (
+        <MindMapConstellation
+          spiritId={spirit.id}
+          bondLv={owned.bondLv}
+        />
+      )}
+
       {/* 파트너 정령 */}
       {isOwned && partners.length > 0 && (
         <Section title="🤝 같이 놀면 좋은 친구">
@@ -663,6 +671,249 @@ function CherishedFragmentsSection({ spiritId, bondLv }: {
           </div>
           <div className="text-[11.5px] italic text-[#3a2418] leading-relaxed">
             {slots[openIdx].recollection}
+          </div>
+        </motion.div>
+      )}
+    </Section>
+  );
+}
+
+/** Mind Map 별자리 — 본드 레벨에 따라 별이 점점 선명해짐 */
+interface MapNode {
+  id: string;
+  type: 'first_meet' | 'bond_up' | 'secret_unlock' | 'room_session' | 'user_note';
+  label: string;
+  detail: string | null;
+  createdAt: string;
+}
+
+function MindMapConstellation({ spiritId, bondLv }: { spiritId: string; bondLv: number }) {
+  const [nodes, setNodes] = useState<MapNode[]>([]);
+  const [open, setOpen] = useState<MapNode | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [noteLabel, setNoteLabel] = useState('');
+  const [noteDetail, setNoteDetail] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    try {
+      const r = await fetch(`/api/spirits/${spiritId}/mind-map`);
+      const d: { nodes: MapNode[] } = await r.json();
+      setNodes(d.nodes ?? []);
+    } catch { /* silent */ }
+  }
+  useEffect(() => { load(); }, [spiritId]);
+
+  const userNoteCount = nodes.filter((n) => n.type === 'user_note').length;
+  const canAddNote = bondLv >= 3 && userNoteCount < 3;
+
+  async function submitNote() {
+    if (!noteLabel.trim() || busy) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/spirits/${spiritId}/mind-map`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: noteLabel.trim(), detail: noteDetail.trim() || undefined }),
+      });
+      if (r.ok) {
+        await load();
+        setAdding(false);
+        setNoteLabel('');
+        setNoteDetail('');
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // 별 크기/투명도는 본드 레벨 따라
+  const clarity = Math.max(0.3, Math.min(1, 0.3 + bondLv * 0.18));
+
+  // 노드 좌표 계산 — 원형 배치 (안정 시드: index)
+  const positions = nodes.map((_, i) => {
+    const total = Math.max(nodes.length, 1);
+    const angle = (i / total) * Math.PI * 2 - Math.PI / 2;
+    const r = 38 + (i % 2) * 8;
+    return { x: 50 + Math.cos(angle) * r * 0.65, y: 50 + Math.sin(angle) * r * 0.65 };
+  });
+
+  const TYPE_STYLE: Record<MapNode['type'], { color: string; size: number }> = {
+    first_meet:    { color: '#fde68a', size: 9 },
+    bond_up:       { color: '#fca5a5', size: 7 },
+    secret_unlock: { color: '#a78bfa', size: 10 },
+    room_session:  { color: '#86efac', size: 6 },
+    user_note:     { color: '#67e8f9', size: 8 },
+  };
+
+  return (
+    <Section title="✨ 기억의 별자리">
+      <div
+        className="relative w-full rounded-2xl overflow-hidden"
+        style={{
+          aspectRatio: '5 / 3',
+          background: 'radial-gradient(circle at center, #1e1b4b 0%, #0b0219 100%)',
+          border: '1px solid rgba(167,139,250,0.25)',
+        }}
+      >
+        {/* 배경 미세 별 */}
+        {Array.from({ length: 22 }).map((_, i) => (
+          <div
+            key={`bg-${i}`}
+            className="absolute rounded-full bg-white"
+            style={{
+              left: `${(i * 17 + 9) % 100}%`,
+              top: `${(i * 23 + 11) % 100}%`,
+              width: 1.5,
+              height: 1.5,
+              opacity: 0.15 + (i % 3) * 0.08,
+            }}
+          />
+        ))}
+
+        {/* 노드 간 선 (인접한 것끼리, 본드 4+) */}
+        {bondLv >= 4 && nodes.length > 1 && (
+          <svg className="absolute inset-0 w-full h-full pointer-events-none">
+            {nodes.slice(0, -1).map((_, i) => {
+              const a = positions[i];
+              const b = positions[i + 1];
+              return (
+                <line
+                  key={`l-${i}`}
+                  x1={`${a.x}%`} y1={`${a.y}%`}
+                  x2={`${b.x}%`} y2={`${b.y}%`}
+                  stroke="rgba(167,139,250,0.35)"
+                  strokeWidth={0.6}
+                  strokeDasharray="2 3"
+                />
+              );
+            })}
+          </svg>
+        )}
+
+        {/* 노드(별) */}
+        {nodes.map((n, i) => {
+          const style = TYPE_STYLE[n.type];
+          const pos = positions[i];
+          return (
+            <button
+              key={n.id}
+              onClick={() => setOpen(n)}
+              className="absolute rounded-full active:scale-90 transition-transform"
+              style={{
+                left: `${pos.x}%`,
+                top: `${pos.y}%`,
+                width: style.size,
+                height: style.size,
+                transform: 'translate(-50%, -50%)',
+                background: style.color,
+                opacity: clarity,
+                boxShadow: `0 0 ${style.size * 1.4}px ${style.color}aa`,
+              }}
+              aria-label={n.label}
+            />
+          );
+        })}
+
+        {/* 노드 0개 안내 */}
+        {nodes.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-[10px] text-white/40 italic text-center px-4 leading-relaxed">
+              아직 기억이 모이지 않았어<br />
+              만나고 친해지면 별이 하나씩 생겨
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 선택된 노드 라벨 + 디테일 */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="mt-2 p-2.5 rounded-xl bg-white/85 border border-violet-200"
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <span
+                className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ background: TYPE_STYLE[open.type].color }}
+              />
+              <span className="text-[11px] font-bold text-[#3a2418]">{open.label}</span>
+              <button
+                onClick={() => setOpen(null)}
+                className="ml-auto text-[10px] text-[#a1887f] active:scale-95"
+                aria-label="닫기"
+              >
+                ✕
+              </button>
+            </div>
+            {open.detail && (
+              <div className="text-[11px] text-[#5a3e2b] leading-relaxed italic">{open.detail}</div>
+            )}
+            <div className="mt-1 text-[9px] text-[#a1887f]">
+              {formatRelativeKr(open.createdAt) ?? ''}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 사용자 메모 추가 */}
+      <div className="mt-2 flex items-center justify-between">
+        <div className="text-[10px] text-[#7c5738]/65">
+          ⭐ 별 {nodes.length}개 · 내 메모 {userNoteCount}/3
+        </div>
+        {!adding && canAddNote && (
+          <button
+            onClick={() => setAdding(true)}
+            className="px-2.5 py-1 rounded-full text-[10px] font-bold text-amber-800 active:scale-95"
+            style={{ background: 'rgba(251,191,36,0.18)', border: '1px solid rgba(251,191,36,0.35)' }}
+          >
+            + 메모 추가
+          </button>
+        )}
+        {!canAddNote && bondLv < 3 && (
+          <span className="text-[9px] text-[#a1887f]">Lv.3부터 메모 가능</span>
+        )}
+      </div>
+
+      {adding && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          className="mt-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 space-y-1.5"
+        >
+          <input
+            type="text"
+            placeholder="기억할 한 줄 (최대 60자)"
+            value={noteLabel}
+            onChange={(e) => setNoteLabel(e.target.value.slice(0, 60))}
+            className="w-full px-2.5 py-1.5 rounded-lg text-[11px] bg-white border border-amber-300 outline-none focus:border-amber-500"
+          />
+          <textarea
+            placeholder="자세한 내용 (선택, 최대 200자)"
+            value={noteDetail}
+            onChange={(e) => setNoteDetail(e.target.value.slice(0, 200))}
+            rows={2}
+            className="w-full px-2.5 py-1.5 rounded-lg text-[11px] bg-white border border-amber-300 outline-none focus:border-amber-500 resize-none"
+          />
+          <div className="flex gap-1.5 justify-end">
+            <button
+              onClick={() => { setAdding(false); setNoteLabel(''); setNoteDetail(''); }}
+              className="px-2.5 py-1 rounded-full text-[10px] font-bold text-[#7c5738] active:scale-95"
+              style={{ background: 'rgba(0,0,0,0.06)' }}
+            >
+              취소
+            </button>
+            <button
+              onClick={submitNote}
+              disabled={!noteLabel.trim() || busy}
+              className="px-2.5 py-1 rounded-full text-[10px] font-bold text-white active:scale-95 disabled:opacity-50"
+              style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}
+            >
+              저장
+            </button>
           </div>
         </motion.div>
       )}

@@ -87,6 +87,14 @@ export async function POST(req: NextRequest) {
         bond_lv: 1,
       });
       ownedSet.add(r.spiritId);
+      // v103: first_meet 노드 자동 기록
+      await supabase.from('spirit_mind_map_nodes').insert({
+        user_id: user.id,
+        spirit_id: r.spiritId,
+        node_type: 'first_meet',
+        label: '처음 만남',
+        detail: `${new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })} — 처음 손이 닿은 날.`,
+      });
     } else {
       // 카운트 증가 + 교감 XP 직접 부여
       const { data: row } = await supabase
@@ -153,6 +161,25 @@ export async function POST(req: NextRequest) {
       is_new: r.isNew,
       pity_at_draw: r.pityAtDraw,
     });
+  }
+
+  // v104 M2: 10연차 시 가챠 부산물 1개 보너스 (gacha_dust)
+  if (count === 10) {
+    const { data: master } = await supabase
+      .from('item_master')
+      .select('id')
+      .eq('id', 'gacha_dust')
+      .maybeSingle();
+    if (master) {
+      await supabase.from('user_inventory_items').insert({
+        user_id: user.id,
+        item_id: 'gacha_dust',
+        quantity: 1,
+        source: 'gacha',
+        luna_note: null,
+        is_new: true,
+      });
+    }
   }
 
   // gacha state 저장

@@ -26,6 +26,17 @@ import WhisperBubble from './WhisperBubble';
 import RevealProgressChip from './RevealProgressChip';
 import MyHeartPagesModal from './MyHeartPagesModal';
 import RitualSequence from './RitualSequence';
+// v103
+import SpiritsRoomLayer from './SpiritsRoomLayer';
+import PlacedSpiritsChip from './PlacedSpiritsChip';
+// v104
+import BagButton from './BagButton';
+import EmptySeatNote from './EmptySeatNote';
+import LunaReturnCeremony from './LunaReturnCeremony';
+// v104 M3
+import CapsuleUnlockCeremony from './CapsuleUnlockCeremony';
+// v104 M5
+import LunaReturnBoxCeremony from './LunaReturnBoxCeremony';
 
 interface Props {
   ageDays: number;
@@ -90,6 +101,30 @@ export default function LunaRoomDiorama({
   const [unlockedSpiritIds, setUnlockedSpiritIds] = useState<string[]>([]);
   const [sorrowEffect, setSorrowEffect] = useState<string | null>(null);
 
+  // v104: 루나 쇼핑 상태
+  const [shoppingState, setShoppingState] = useState<'present' | 'out' | 'returned-pending'>('present');
+  const [shoppingTrip, setShoppingTrip] = useState<{
+    id: string; departedAt: string; returnsAt: string; minutesRemaining: number;
+  } | null>(null);
+  const [pendingCeremony, setPendingCeremony] = useState<{
+    tripId: string;
+    item: {
+      id: string; itemId: string; name: string; emoji: string; rarity: string;
+      description: string; lunaNote: string | null; acquiredDay: number | null;
+    };
+  } | null>(null);
+  // v104 M3: 만기 캡슐
+  const [pendingCapsule, setPendingCapsule] = useState<{
+    id: string; message: string; sealedAt: string; unlocksAt: string; daysSealed: number;
+  } | null>(null);
+  // v104 M5: 루나의 마지막 박스 (Day 95+)
+  const [returnBox, setReturnBox] = useState<{
+    boxId: string;
+    triggeredAtDay: number;
+    items: Array<{ id: string; title: string; content: string; dayNumber: number | null; lunaThought: string | null }>;
+    lunaWords: string;
+  } | null>(null);
+
   // 풀린 정령 ID(lore_unlocked=true) 가져오기
   useEffect(() => {
     let cancelled = false;
@@ -122,6 +157,64 @@ export default function LunaRoomDiorama({
       })
       .catch(() => {});
   }, [ageDays]);
+
+  // v104: 루나 쇼핑 폴링 (60초)
+  useEffect(() => {
+    if (isDeceased) return;
+    let cancelled = false;
+    async function check() {
+      try {
+        const r = await fetch('/api/luna-room/shopping/check', { method: 'POST' });
+        const d = await r.json();
+        if (cancelled) return;
+        setShoppingState(d.state ?? 'present');
+        setShoppingTrip(d.trip ?? null);
+        if (d.pendingCeremony) setPendingCeremony(d.pendingCeremony);
+      } catch { /* silent */ }
+    }
+    check();
+    const t = setInterval(check, 60_000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [isDeceased]);
+
+  // v104 M2: Day 마일스톤 자동 체크 (마운트 1회)
+  useEffect(() => {
+    if (isDeceased) return;
+    fetch('/api/luna-room/milestones/check', { method: 'POST' }).catch(() => {});
+  }, [isDeceased]);
+
+  // v104 M3: 만기된 타임캡슐 폴링 (3분)
+  useEffect(() => {
+    if (isDeceased) return;
+    let cancelled = false;
+    async function check() {
+      // 이미 의례 진행 중이면 스킵
+      if (pendingCapsule || pendingCeremony) return;
+      try {
+        const r = await fetch('/api/luna-room/capsules/check', { method: 'POST' });
+        const d = await r.json();
+        if (cancelled) return;
+        if (d.pending) setPendingCapsule(d.pending);
+      } catch { /* silent */ }
+    }
+    check();
+    const t = setInterval(check, 180_000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [isDeceased, pendingCapsule, pendingCeremony]);
+
+  // v104 M5: 루나의 마지막 박스 체크 (Day 95+, 마운트 1회)
+  useEffect(() => {
+    if (isDeceased || ageDays < 95) return;
+    let cancelled = false;
+    fetch('/api/luna-room/luna-return/check', { method: 'POST' })
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        if (d.pending) setReturnBox(d.pending);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isDeceased, ageDays]);
 
   // Day 100 + 미완료 의식 → 자동 ritual open (한 번)
   useEffect(() => {
@@ -252,6 +345,14 @@ export default function LunaRoomDiorama({
               🕯 내 마음의 페이지
             </button>
           )}
+          {/* v103: 오늘 같이 있는 친구들 칩 */}
+          {!isDeceased && (
+            <PlacedSpiritsChip isDark={isDark} accentColor={accentColor} />
+          )}
+          {/* v104: 가방 */}
+          {!isDeceased && (
+            <BagButton isDark={isDark} accentColor={accentColor} />
+          )}
         </div>
         <p
           style={{
@@ -313,32 +414,44 @@ export default function LunaRoomDiorama({
             transition={{ delay: 0.25, ...ROOM_TOKENS.springSoft }}
             className="relative z-[40] flex flex-col items-center"
           >
-            {/* 말풍선 — 캐릭터 visible 영역 바로 위에 absolute */}
-            <motion.div
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.55, ...ROOM_TOKENS.springSoft }}
-              className="absolute z-[70] left-1/2 -translate-x-1/2"
-              style={{ bottom: '32%', whiteSpace: 'nowrap' }}
-            >
-              <WhisperBubble
-                whisper={whisper}
-                isDark={isDark}
-                accentColor={accentColor}
-                textColor={textColor}
-              />
-            </motion.div>
+            {/* 말풍선 — 캐릭터 visible 영역 바로 위에 absolute (외출 중엔 숨김) */}
+            {shoppingState !== 'out' && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.55, ...ROOM_TOKENS.springSoft }}
+                className="absolute z-[70] left-1/2 -translate-x-1/2"
+                style={{ bottom: '92%', whiteSpace: 'nowrap' }}
+              >
+                <WhisperBubble
+                  whisper={whisper}
+                  isDark={isDark}
+                  accentColor={accentColor}
+                  textColor={textColor}
+                />
+              </motion.div>
+            )}
 
-            <LunaCharacter
-              activity={liveState.activity}
-              mood={liveState.mood}
-              onSingleTap={handleSpeak}
-              onDoubleTap={handlePet}
-              size={220}
-              aspectRatio={1.6}
-              isDeceased={isDeceased}
-              accentColor={accentColor}
-            />
+            {/* v104: 외출 중이면 빈 자리 + 쪽지, 아니면 루나 캐릭터 */}
+            {shoppingState === 'out' && shoppingTrip ? (
+              <EmptySeatNote
+                minutesRemaining={shoppingTrip.minutesRemaining}
+                departedAt={shoppingTrip.departedAt}
+                returnsAt={shoppingTrip.returnsAt}
+                isDark={isDark}
+              />
+            ) : (
+              <LunaCharacter
+                activity={liveState.activity}
+                mood={liveState.mood}
+                onSingleTap={handleSpeak}
+                onDoubleTap={handlePet}
+                size={220}
+                aspectRatio={1.6}
+                isDeceased={isDeceased}
+                accentColor={accentColor}
+              />
+            )}
           </motion.div>
 
           {/* 우: 우편함 */}
@@ -358,6 +471,36 @@ export default function LunaRoomDiorama({
           </motion.div>
         </div>
       </div>
+
+      {/* v103: 정령 레이어 — placed 정령 부유 + 페어 인터랙션 말풍선 */}
+      {!isDeceased && <SpiritsRoomLayer />}
+
+      {/* v104: 루나 귀환 의례 (외출 종료 시) */}
+      {pendingCeremony && (
+        <LunaReturnCeremony
+          open={!!pendingCeremony}
+          tripId={pendingCeremony.tripId}
+          item={pendingCeremony.item}
+          onClose={() => setPendingCeremony(null)}
+        />
+      )}
+
+      {/* v104 M3: 타임캡슐 만기 의례 */}
+      <CapsuleUnlockCeremony
+        open={!!pendingCapsule && !pendingCeremony && !returnBox}
+        capsule={pendingCapsule}
+        onClose={() => setPendingCapsule(null)}
+      />
+
+      {/* v104 M5: 루나의 마지막 박스 (Day 95+ 양방향 호 정점) */}
+      <LunaReturnBoxCeremony
+        open={!!returnBox && !pendingCeremony}
+        boxId={returnBox?.boxId ?? null}
+        triggeredAtDay={returnBox?.triggeredAtDay ?? 0}
+        items={returnBox?.items ?? []}
+        lunaWords={returnBox?.lunaWords ?? ''}
+        onClose={() => setReturnBox(null)}
+      />
 
       {/* 토스트 */}
       <AnimatePresence>

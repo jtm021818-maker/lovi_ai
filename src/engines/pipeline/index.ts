@@ -59,6 +59,9 @@ import { startBrowseAgent, resumeBrowseAgent } from '@/lib/ai/browse-agent';
 import { synthesizeActionPlan } from '@/lib/ai/action-plan-synthesizer';
 import { synthesizeWarmWrap } from '@/lib/ai/warm-wrap-synthesizer';
 import { synthesizeSessionLetter } from '@/lib/ai/session-summary-synthesizer';
+// 🆕 v104: Spirit Random Events 오케스트레이터
+import { runSpiritOrchestrator } from '@/engines/spirits/spirit-event-orchestrator';
+import { buildActiveSpiritsHint } from '@/engines/spirits/active-spirits-hint';
 import type { ParsedSongReadyData, ParsedDateSpotReadyData, ParsedGiftReadyData, ParsedActivityReadyData, ParsedAnniversaryReadyData, ParsedMovieReadyData, ParsedBrowseReadyData } from '@/engines/human-like/phase-signal';
 import { generateDynamicTarotInsight } from '@/engines/tarot/interpretation-engine';
 import { matchTarotSolutions, getTarotSolutionPrompt } from '@/engines/solution-dictionary/tarot-solutions';
@@ -1858,6 +1861,16 @@ ${researchResult.insight}
         let firstBurstAt: number | null = null;  // TTFB 측정용
         const dualBrainStart = Date.now();
 
+        // 🆕 v104: 활성 정령 카드 가이드 빌드 (방 Lv3+ 정령) — fire-and-forget on fail
+        let activeSpiritsHint: string | null = null;
+        if (ragContext?.userId) {
+          try {
+            activeSpiritsHint = await buildActiveSpiritsHint(ragContext.userId, newPhaseV2);
+          } catch (err) {
+            console.warn('[Pipeline] 🧚 activeSpiritsHint build fail (silent)', (err as Error).message);
+          }
+        }
+
         try {
           for await (const chunk of executeDualBrain({
             userInput: userMessage,
@@ -1876,6 +1889,8 @@ ${researchResult.insight}
             completedEvents: updatedCompletedEvents,
             // 🆕 v90 Perf: 미리 hoist 한 장기 기억 번들 (좌뇌와 병렬 로드됨) — 좌→우 갭 제거
             preloadedMemoryBundlePromise: memoryBundlePromise,
+            // 🆕 v104: 활성 정령 카드 가이드 (Lv3+ 방 배치)
+            activeSpiritsHint,
           }, logCollector)) {
             if (chunk.type === 'text') {
               // 🆕 v79: 항상 버퍼링 (SILENCE 검출 + KBE 레거시 경로용)
@@ -2638,6 +2653,37 @@ ${researchResult.insight}
         }
         yield { type: 'phase_event', data: event };
         console.log(`[Pipeline] 🎮 이벤트 발생: ${event.type} (${newPhaseV2})${autoFx ? ` + auto-fx:${autoFx.id}` : ''}`);
+      }
+
+      // 🆕 v104: Spirit Random Events 오케스트레이터 — LLM 본문 [SPIRIT_*] 태그 + 휴리스틱 폴백
+      if (ragContext?.userId && ragContext?.sessionId && fullText.length > 0) {
+        try {
+          const spiritResult = await runSpiritOrchestrator({
+            userId: ragContext.userId,
+            sessionId: ragContext.sessionId,
+            responseText: fullText,
+            phase: newPhaseV2,
+            turn: turnCount,
+            riskLevel: stateResult.riskLevel,
+            scenario: stateResult.scenario,
+            emotionScore: stateResult.emotionScore,
+            cognitiveDistortions: (stateResult.cognitiveDistortions ?? []).map((d) => String(d)),
+            intent: stateResult.intent?.primaryIntent,
+            recentTurns: messages.filter((m) => m.role === 'user').slice(-5).map((m) => m.content),
+          });
+          if (spiritResult.phaseEvent) {
+            yield { type: 'phase_event', data: spiritResult.phaseEvent };
+            console.log(
+              `[Pipeline] 🧚 Spirit 카드: ${spiritResult.debug.spiritId} → ${spiritResult.debug.eventType} (${spiritResult.debug.source})`,
+            );
+          } else if (spiritResult.debug.parsedTagCount > 0 || spiritResult.debug.rejectReason) {
+            console.log(
+              `[Pipeline] 🧚 Spirit reject: ${spiritResult.debug.rejectReason ?? 'none'} (tags=${spiritResult.debug.parsedTagCount})`,
+            );
+          }
+        } catch (err) {
+          console.warn('[Pipeline] 🧚 Spirit orchestrator fail (silent)', (err as Error).message);
+        }
       }
 
       // 🆕 v84: 🎵 루나 자율 노래 추천 — SEARCHING 이벤트 UI 진입 후 grounded Gemini 실행 → RECOMMENDATION 이벤트 yield

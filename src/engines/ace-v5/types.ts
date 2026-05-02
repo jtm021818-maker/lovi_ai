@@ -199,6 +199,9 @@ export interface AceV5Input {
 
   /** 🆕 v86: 이미 완료된 이벤트 목록 — AI가 중복 발동 멘트 반복 방지 */
   completedEvents?: string[];
+
+  /** 🆕 v104: 활성 정령 시그니처 카드 가이드 (방 Lv3+ 정령) — buildAceV5UserMessage 에 주입 */
+  activeSpiritsHint?: string | null;
 }
 
 // ============================================================
