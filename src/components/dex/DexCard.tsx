@@ -175,10 +175,24 @@ export default function DexCard({ spirit, owned, onClick, index }: Props) {
           </div>
         )}
 
-        {/* 백스토리 해금 🔓 (하단 우) */}
+        {/* 백스토리 해금 📜 (하단 우) */}
         {owned?.backstoryUnlocked && (
           <div className="absolute bottom-1 right-1.5 z-20 text-[9px]" title="비밀 해금">
             📜
+          </div>
+        )}
+
+        {/* v105: 시그니처 무브 해금 🎴 (하단 우, 📜 위) */}
+        {owned && owned.bondLv >= 3 && (
+          <div
+            className="absolute z-20 text-[9px]"
+            style={{
+              bottom: owned.backstoryUnlocked ? 14 : 4,
+              right: 6,
+            }}
+            title="시그니처 무브 해금"
+          >
+            🎴
           </div>
         )}
       </div>

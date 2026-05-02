@@ -25,6 +25,7 @@ import { SPIRIT_DRIVE_BASELINE, describeDrive } from '@/data/spirit-drive-profil
 import { moodToDots, moodToLabel } from '@/lib/spirits/mood-engine';
 import RarityBadge, { RARITY_META } from './RarityBadge';
 import SpiritSprite from '@/components/spirit/SpiritSprite';
+import SignatureMoveSection from './SignatureMoveSection';
 
 interface FragmentResp {
   unlocked: boolean;
@@ -286,6 +287,11 @@ function DetailBody({ spirit, owned, ageDays, totalUnlockedL2, onClose }: {
             </div>
           )}
         </Section>
+      )}
+
+      {/* v105: 시그니처 무브 카드 프리뷰 — Lv.3 해금 랜덤 이벤트의 결을 도감에 노출 */}
+      {isOwned && owned && (
+        <SignatureMoveSection spirit={spirit} owned={owned} />
       )}
 
       {/* v103: 같이 두기 토글 (방 배치) */}
