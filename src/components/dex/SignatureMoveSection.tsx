@@ -60,9 +60,12 @@ export default function SignatureMoveSection({ spirit, owned }: Props) {
 
   return (
     <div className="mx-4 mb-4">
-      <h4 className="text-[11px] font-black tracking-widest text-[#7c5738] mb-1.5">
-        🎴 시그니처 무브
+      <h4 className="text-[11px] font-black tracking-widest text-[#7c5738] mb-0.5">
+        💫 이 친구의 고유 이벤트
       </h4>
+      <p className="text-[10px] text-[#7c5738]/75 italic mb-1.5 leading-snug">
+        Lv.3 부터, 상담 중 알맞은 순간이 오면 이 친구가 직접 찾아와 줘
+      </p>
 
       <motion.div
         initial={{ opacity: 0, y: 8 }}
@@ -70,16 +73,14 @@ export default function SignatureMoveSection({ spirit, owned }: Props) {
         transition={{ delay: 0.1, type: 'spring', stiffness: 200, damping: 22 }}
         className="relative w-full overflow-hidden"
         style={{
-          aspectRatio: '5 / 7',
-          maxHeight: 380,
-          borderRadius: 18,
+          borderRadius: 16,
           padding: 2,
           background: borderGradient,
           boxShadow: cardShadow,
         }}
       >
         <div
-          className="relative w-full h-full rounded-[16px] flex flex-col p-3.5 overflow-hidden"
+          className="relative w-full rounded-[14px] flex flex-col p-3 overflow-hidden"
           style={{ background: cardBg }}
         >
           {/* Lv.5 셔머 오버레이 */}
@@ -119,14 +120,14 @@ export default function SignatureMoveSection({ spirit, owned }: Props) {
             </span>
           </div>
 
-          {/* 카드 일러스트 자리 — 이모지 */}
-          <div className="relative z-10 flex items-center justify-center py-2">
+          {/* 카드 일러스트 + 이름 — 가로 정렬로 압축 */}
+          <div className="relative z-10 flex items-center gap-2.5 mb-2">
             <motion.span
               key={isFullReveal ? 'reveal' : 'lock'}
               initial={{ scale: 0.85, rotate: -6 }}
               animate={{ scale: 1, rotate: 0 }}
               transition={{ type: 'spring', stiffness: 220, damping: 16 }}
-              className="text-[58px] leading-none select-none"
+              className="text-[36px] leading-none select-none flex-shrink-0"
               style={
                 isFullReveal
                   ? { filter: isEnhanced ? `drop-shadow(0 0 10px ${meta.glow})` : 'none' }
@@ -135,33 +136,30 @@ export default function SignatureMoveSection({ spirit, owned }: Props) {
             >
               {preview.cardEmoji}
             </motion.span>
+            <div className="flex-1 min-w-0">
+              <h5
+                className="text-[14px] font-black tracking-tight truncate"
+                style={{
+                  color: isFullReveal ? '#3a2418' : 'rgba(255,255,255,0.78)',
+                  letterSpacing: isFullReveal ? '-0.01em' : '0.16em',
+                }}
+              >
+                {isFullReveal ? preview.cardName : '???'}
+              </h5>
+              <p
+                className="text-[10.5px] italic leading-snug mt-0.5"
+                style={{ color: isFullReveal ? '#7c5738' : 'rgba(255,255,255,0.68)' }}
+              >
+                {preview.tagline}
+              </p>
+            </div>
           </div>
-
-          {/* 카드 이름 */}
-          <div className="relative z-10 text-center mb-1">
-            <h5
-              className="text-[15px] font-black tracking-tight"
-              style={{
-                color: isFullReveal ? '#3a2418' : 'rgba(255,255,255,0.78)',
-                letterSpacing: isFullReveal ? '-0.01em' : '0.18em',
-              }}
-            >
-              {isFullReveal ? preview.cardName : '???'}
-            </h5>
-          </div>
-
-          {/* Tagline (Lv.1+ 노출) */}
-          <p
-            className="relative z-10 text-center text-[11.5px] italic leading-relaxed mb-2.5"
-            style={{ color: isFullReveal ? '#7c5738' : 'rgba(255,255,255,0.68)' }}
-          >
-            {preview.tagline}
-          </p>
 
           {/* 정보 줄들 */}
-          <div className="relative z-10 space-y-1 flex-1">
+          <div className="relative z-10 space-y-1">
             <InfoLine
-              icon="📍"
+              icon="🎬"
+              label="등장 순간"
               text={preview.momentHint}
               dim={!isFullReveal}
               fullReveal={isFullReveal}
@@ -174,21 +172,21 @@ export default function SignatureMoveSection({ spirit, owned }: Props) {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.18 }}
                 >
-                  <InfoLine icon="⏱️" text={preview.cadenceHint} fullReveal />
+                  <InfoLine icon="⏱️" label="발생 빈도" text={preview.cadenceHint} fullReveal />
                 </motion.div>
                 <motion.div
                   initial={{ opacity: 0, x: -4 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.24 }}
                 >
-                  <InfoLine icon="🎯" text={preview.choiceHint} fullReveal />
+                  <InfoLine icon="🎯" label="선택" text={preview.choiceHint} fullReveal />
                 </motion.div>
                 <motion.div
                   initial={{ opacity: 0, x: -4 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.30 }}
                 >
-                  <InfoLine icon="💎" text={preview.rarityNote} fullReveal />
+                  <InfoLine icon="💎" label="희소도" text={preview.rarityNote} fullReveal />
                 </motion.div>
               </>
             )}
@@ -204,14 +202,14 @@ export default function SignatureMoveSection({ spirit, owned }: Props) {
                   border: '1px solid rgba(217,119,6,0.45)',
                 }}
               >
-                <InfoLine icon="✨" text={`강화 — ${preview.empowerHint}`} fullReveal bold />
+                <InfoLine icon="✨" label="강화" text={preview.empowerHint} fullReveal bold />
               </motion.div>
             )}
           </div>
 
           {/* 푸터 — 잠금/펼쳐짐 캡션 */}
           <div
-            className="relative z-10 mt-2 pt-2 text-center text-[9.5px]"
+            className="relative z-10 mt-2 pt-1.5 text-center text-[9.5px]"
             style={{
               borderTop: isFullReveal
                 ? '1px dashed rgba(124,87,56,0.25)'
@@ -220,9 +218,9 @@ export default function SignatureMoveSection({ spirit, owned }: Props) {
             }}
           >
             {isFullReveal ? (
-              <>카드 본문은 실제 등장 때 보여 ✨</>
+              <>지금 이 친구는 상담 중에 찾아올 수 있어 ✨</>
             ) : (
-              <>🔒 Lv.3 에 펼쳐져</>
+              <>🔒 Lv.3 부터 상담 중에 발생해</>
             )}
           </div>
         </div>
@@ -240,12 +238,14 @@ export default function SignatureMoveSection({ spirit, owned }: Props) {
 
 function InfoLine({
   icon,
+  label,
   text,
   dim = false,
   fullReveal = false,
   bold = false,
 }: {
   icon: string;
+  label?: string;
   text: string;
   dim?: boolean;
   fullReveal?: boolean;
@@ -258,13 +258,23 @@ function InfoLine({
     : dim
       ? 'rgba(255,255,255,0.55)'
       : 'rgba(255,255,255,0.78)';
+  const labelColor = fullReveal
+    ? bold
+      ? '#92400e'
+      : '#a1887f'
+    : 'rgba(255,255,255,0.45)';
   return (
     <div className="flex items-start gap-1.5 leading-snug">
       <span className="text-[11px] flex-shrink-0 mt-px">{icon}</span>
-      <span
-        className="text-[11.5px]"
-        style={{ color, fontWeight: bold ? 700 : 500 }}
-      >
+      <span className="text-[11.5px] flex-1" style={{ color, fontWeight: bold ? 700 : 500 }}>
+        {label && (
+          <span
+            className="text-[10px] font-bold mr-1"
+            style={{ color: labelColor, letterSpacing: '0.02em' }}
+          >
+            {label} —
+          </span>
+        )}
         {text}
       </span>
     </div>

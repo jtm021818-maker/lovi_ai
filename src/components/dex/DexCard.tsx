@@ -190,7 +190,7 @@ export default function DexCard({ spirit, owned, onClick, index }: Props) {
               bottom: owned.backstoryUnlocked ? 14 : 4,
               right: 6,
             }}
-            title="시그니처 무브 해금"
+            title="고유 이벤트 해금"
           >
             🎴
           </div>
