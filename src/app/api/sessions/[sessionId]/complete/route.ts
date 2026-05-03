@@ -9,6 +9,8 @@ import { extractLunaMemoryCard } from '@/engines/memory/extract-luna-memory-card
 import { runLunaLetterJudge } from '@/lib/ai/luna-letter-judge';
 import { generateLunaMemoryImage } from '@/lib/ai/luna-image-gen';
 import { getAgeDays, getLifeStageInfo, type LunaMemory } from '@/lib/luna-life';
+// 🆕 v110: 장기 기억 시스템 — 4계층(L0~L3) 파이프라인. env flag MEMORY_V2_WRITE 로 토글.
+import { runSessionEndPipeline } from '@/engines/memory-v2';
 
 /**
  * PATCH /api/sessions/[sessionId]/complete
@@ -436,6 +438,54 @@ export async function PATCH(
       }
     } catch (e) {
       console.warn('[Memory] 친밀도 업데이트 실패 (무시):', e);
+    }
+
+    // 🆕 v110: 장기 기억 시스템 — Episode + PersonaFacts + SelfState + Weekly Reflection
+    //   env flag MEMORY_V2_WRITE=1 일 때만 발동. 추가 INSERT 만 하므로 기존 동작 영향 0.
+    //   설계서: docs/luna-longterm-memory-v110-plan.md
+    if (process.env.MEMORY_V2_WRITE === '1') {
+      try {
+        // dayNumber 는 위 IIFE 의 luna_life 로드 결과 (line ~213) 에서 이미 계산됨.
+        // 여기서는 다시 한 번 fetch (스코프 밖) — 비용 미미.
+        const { data: lifeRow2 } = await supabase
+          .from('luna_life')
+          .select('birth_date')
+          .eq('user_id', user.id)
+          .single();
+        let dayNumberV110 = 1;
+        if (lifeRow2?.birth_date) {
+          dayNumberV110 = Math.max(1, getAgeDays(new Date(lifeRow2.birth_date as string)));
+        }
+
+        // title 은 luna_memories 의 가장 최근 카드(이번 세션에 방금 INSERT 된 것 우선) 재사용.
+        const { data: latestCard } = await supabase
+          .from('luna_memories')
+          .select('title')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const v110Title = (latestCard?.title as string | undefined) ?? '오늘의 한 장면';
+        const v110ShortSummary = summary.slice(0, 80);
+
+        const v110Result = await runSessionEndPipeline({
+          supabase,
+          userId: user.id,
+          sessionId,
+          dayNumber: dayNumberV110,
+          title: v110Title,
+          summaryShort: v110ShortSummary,
+          summaryLong: summary,
+          scenario: session.locked_scenario ?? undefined,
+        });
+        console.log(
+          `[Memory v110] ✅ episode=${v110Result.episodeId ? 'ok' : 'skip'} ` +
+          `personaIns=${v110Result.personaInserted} sup=${v110Result.personaSuperseded} ` +
+          `weekly=${v110Result.weeklyDigestId ? 'ok' : 'no'} day=${dayNumberV110}`
+        );
+      } catch (e) {
+        console.warn('[Memory v110] 파이프라인 실패 (무시):', (e as Error).message);
+      }
     }
 
     // 🆕 v31: 유저 모델 학습 (대화 스타일/감정 패턴 업데이트)
