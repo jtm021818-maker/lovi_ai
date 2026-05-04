@@ -314,3 +314,119 @@ export function pickChipPool(args: { mood: LunaMood; ageDays: number }): ChipIte
   const stage = getChipDayStage(args.ageDays);
   return CHIP_POOLS_BY_MOOD_DAY[args.mood][stage];
 }
+
+// ─── 🆕 v112-rev2: 카톡 친구 톡방 — Follow-up 메시지 풀 ─────────────
+// LunaGreetingMessage 의 두 번째 카톡 메시지로 사용.
+// 첫 인사 (pickGreeting) 다음 자연스럽게 도착하는 follow-up.
+
+export const FOLLOWUP_BY_MOOD: Record<LunaMood, readonly string[]> = {
+  bright: ['오늘 뭐 했어?', '좋은 일 있었으면 좋겠어 ㅎ', '얼굴 보여줘'],
+  warm: ['오늘 어땠어 ㅠㅠ', '얘기 들어줄게', '편하게 다 말해'],
+  playful: ['뭐 재밌는 일 없어?', '나 심심해 ㅋㅋ', '너 얘기 듣고 싶어'],
+  wistful: ['오늘은 좀 가라앉았어?', '괜찮아?', '오늘 같은 날엔 같이 있어줄게'],
+  sleepy: ['너도 안 자고 있었어?', '뭔 일이야', '편하게 얘기해'],
+  thoughtful: ['요즘 어떻게 지내?', '뭐 고민 있어?', '천천히 얘기해도 돼'],
+  peaceful: ['편한 날이야?', '뭐 얘기하고 싶어?', '여기 있어'],
+};
+
+/**
+ * 두 번째 인사 메시지 픽.
+ * recurring/frequent 는 별도 톤. mood 풀은 first 일 때만.
+ */
+export function pickFollowup(args: {
+  mood: LunaMood;
+  recentSessionCount24h: number;
+  intimacyLevel: number;
+  seed: number;
+}): string {
+  if (args.recentSessionCount24h >= 3) {
+    return '괜찮아? 오늘 자꾸 와서 걱정돼';
+  }
+  if (args.recentSessionCount24h >= 1 && args.intimacyLevel >= 3) {
+    return '뭐 또 일 있어?';
+  }
+  if (args.recentSessionCount24h >= 1) {
+    return '오늘은 무슨 일이야?';
+  }
+  const pool = FOLLOWUP_BY_MOOD[args.mood];
+  return pool[Math.abs(Math.floor(args.seed)) % pool.length];
+}
+
+// ─── 🆕 v112-rev2: SmartReplyBar — 답장 chip 풀 (카테고리 라벨 X) ────
+// ChatInput 위 가로 chip 으로 사용. 12자 이내, 답장 톤만.
+
+export type ReplyTier = 'first' | 'recurring' | 'frequent';
+
+export const SMART_REPLIES: Record<ReplyTier, readonly string[]> = {
+  first: [
+    '응 잘 지냈어 ㅎ',
+    '오늘 좀 힘들어 ㅠ',
+    '그냥 얘기하고 싶어',
+    '나 또 그 일이야',
+    '잠깐만 옆에 있어줘',
+    '할 말 있어',
+  ],
+  recurring: [
+    '응 또 왔어 ㅎㅎ',
+    '할 말 있어서',
+    '오늘은 좀 다른 일',
+    '그냥 너 보고 싶어',
+    '나 좀 봐줘',
+  ],
+  frequent: [
+    '응… 오늘 진짜 힘들어',
+    '어떻게 해야 할지 모르겠어',
+    '잠깐만 안아줘',
+    '미안 자꾸 와서',
+    '괜찮아 옆에 있어줘',
+  ],
+};
+
+/** mood 별 보정 chip — first 진입에 1개 추가 */
+export const SMART_REPLIES_MOOD_OVERRIDE: Partial<Record<LunaMood, string>> = {
+  bright: '오 나 좋은 일 있었어!',
+  wistful: '... 그냥 좀 우울해',
+  sleepy: '잠 안 와서 왔어',
+  playful: '심심해서 왔어 ㅋㅋ',
+  thoughtful: '요즘 자꾸 생각이 많아',
+};
+
+/**
+ * Smart Reply chip 4~5개 픽. 카테고리 라벨 없이 답장 텍스트만.
+ */
+export function pickSmartReplies(args: {
+  mood: LunaMood;
+  recentSessionCount24h: number;
+  intimacyLevel: number;
+  seed: number;
+}): string[] {
+  const tier: ReplyTier =
+    args.recentSessionCount24h === 0 ? 'first'
+    : args.recentSessionCount24h <= 2 ? 'recurring'
+    : 'frequent';
+
+  const base: string[] = [...SMART_REPLIES[tier]];
+
+  // first 진입 시 mood 보정 1개
+  if (tier === 'first') {
+    const moodReply = SMART_REPLIES_MOOD_OVERRIDE[args.mood];
+    if (moodReply && !base.includes(moodReply)) {
+      base.unshift(moodReply);
+    }
+  }
+
+  // 절친 (intimacy >= 4) 친근 톤 1개
+  if (args.intimacyLevel >= 4) {
+    const close = '야 그 일 또 ㅋㅋ';
+    if (!base.includes(close)) base.unshift(close);
+  }
+
+  // deterministic 픽 — 4~5개
+  const offset = Math.abs(Math.floor(args.seed)) % Math.max(1, base.length);
+  const ordered: string[] = [];
+  for (let i = 0; i < Math.min(5, base.length); i++) {
+    ordered.push(base[(offset + i) % base.length]);
+  }
+  // 중복 제거
+  return Array.from(new Set(ordered)).slice(0, 5);
+}

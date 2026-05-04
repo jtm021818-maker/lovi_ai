@@ -1,1205 +1,841 @@
-# 루나 채팅 진입 UX v112 — Luna's Daily Ritual
+# 루나 채팅 진입 UX v112-rev2 — Unni's KakaoTalk
 
-**작성일**: 2026-05-05 (v2 — 글로벌 사례 리서치 반영 대폭 업그레이드)
+**작성일**: 2026-05-05 (rev2 — 사용자 피드백 후 전면 재설계)
 **대상 버전**: v112
-**총 분량**: A4 ~16장 (자기완결, 다른 세션이 이대로 구현 가능)
-**비파괴 원칙**: 기존 mood/whispers / opening.mp4 / 룸 디오라마(v100) / 친밀도 / placeholder 그대로. 신규 7 컴포넌트 + 사운드/햅틱 시스템 + ChatContainer 분기만.
+**총 분량**: A4 ~12장
+**비파괴 원칙**: 기존 mood/whispers · opening.mp4 · ChatInput · 라이브러리(haptic/audio/streak) 그대로. v112-rev1 의 7 카드 컴포넌트는 **언마운트** (파일은 보존, 롤백 가능).
 
 ---
 
-## 0. 리서치 종합 — 글로벌 잘 만든 앱들의 공통 패턴
+## 0. 사용자 피드백 (rev1 의 결정적 실수)
 
-10~20대 여성 타겟 + 진입 UX 잘 만든 앱들을 광범위 조사. 핵심 패턴 5축으로 추출.
+> "내 앱은 언니, 누나한테 상담하는 느낌인데 이런 UI로 클릭하게 시키거나 이런거 너무 딱딱하고 일반적인 상담앱같아 ㅠ. 인터넷 제대로 서치하고 내 앱에 특화된 일상적인 느낌으로 다시 매일 들어가도 안 어색하게 반겨주는 느낌으로 잘 만들어줘"
 
-### 0.1 조사 대상
+### 0.1 실수 진단 (현재 화면 분석)
 
-| 앱 | 카테고리 | 배운 것 |
-|----|--------|--------|
-| **Finch** (자기 케어) | 캐릭터 케어 | Progressive Discovery / idle anim (헤드 틸트, 눈 깜빡) / **Investment Loop** / "purposeful enchantment" |
-| **Pi (Inflection)** | AI 컴패니언 | **Voice tone adapt** / tiny pauses / 페르소나 X — 그냥 "친구" / soft, supportive, clean |
-| **Zeta (Scatter Lab)** | 한국 캐릭터 챗 | 87% 10~20대, 65% 여성, 130분/일 / **스냅샷** (대화 → 일러스트 변환) / 트렌딩 페르소나 |
-| **Replika** | AI 컴패니언 | 아바타 커스텀 / 관계 역할 선택 / 길지만 몰입형 onboarding |
-| **(Not Boring) Weather** | 날씨 | **mood 별 스킨** + 새 아이콘 + 아티스트 콜라보 / 3D 조명 + 사운드 |
-| **Bondee** | 메타버스 SNS | **3D 룸 단면** honeycomb tessellation — Animal Crossing/Habbo 감각 |
-| **BeReal / Locket** | Z세대 SNS | 살아있는 순간 / 친구 vs AI 경계 흐림 |
-| **ChatGPT/Claude Custom GPT** | LLM 챗 | **Conversation starter chip** — 첫 대화 막막함 해소 |
-| **Snapchat** | 메신저 | **Streak 시스템** (40~60% DAU 증가) / 매일 들어오게 하는 핵심 |
+스크린샷 기준:
+- 🔴 **LunaRoomGlimpse** — 화면 가로 가득 차고 "탭해서 들어가기" 같은 *기능 안내* 가 카톡 톡방에 X
+- 🔴 **DailyGreetingCard** — "루나 · bright" 같은 영어 mood 라벨 노출. *카톡 친구* 가 자기 mood 를 라벨로 안 보여줌
+- 🔴 **RelationshipBadge** — "함께한 지 13일" 알림 배지처럼 떠있음. *친구 톡방* 에 게이미피케이션 X
+- 🔴 **FirstMessageGuide** — 큰 카드 + chip 4개 + "썸/연애 시작" 같은 *카테고리 라벨*. *진짜 친구* 가 카테고리 분류해서 메뉴 X
+- 🔴 **전체** — 모든 게 *상담 서비스 앱 위젯*. 진짜 카톡 톡방 X
 
-### 0.2 5대 공통 핵심 패턴
+→ 결론: **카드 모두 제거. 카톡 메시지 버블 + Smart Reply chip 만**.
 
-1. **공간감 (Spatial)** — Bondee 식 룸 단면. 채팅창이 단순 폼이 아니라 *"친구 방"* 으로 인식됨.
-2. **생명감 (Aliveness)** — Finch 식 idle anim. 눈 깜빡 / 헤드 틸트 / 호흡 미동. 캐릭터가 *살아있음*.
-3. **분위기 (Atmosphere)** — (Not Boring) Weather 식 mood 반응형 그라데이션 + 파티클 + 사운드.
-4. **대화 시작 (Soft Start)** — Pi 부드러운 톤 + ChatGPT chip + 손글씨 한 줄 카피.
-5. **누적감 (Investment Loop)** — Snapchat streak + Finch 게임화. *"오늘이 N번째 / 추억 M개"* 시각화.
+### 0.2 진짜 컨셉 — "친한 언니 톡방"
 
-→ **이 5축이 빠짐없이 들어가야 진짜 진화한 느낌**.
+> 사용자가 카톡에서 *진짜 친한 언니* 톡방 들어가면 어떤 화면?
+
+```
+[ ← 루나 (조용함 ✨)         ⓘ ]
+─────────────────────────────────
+                            오늘 ─
+
+  🦊 [opening.mp4]              ← 루나가 보낸 영상
+                              오후 3:00
+  🦊 ⌨ ...                       ← 잠깐 typing
+                              오후 3:01
+  🦊 ╭──────────────────╮
+     │ 왔어? 나 방금 너  │       ← 친구의 카톡 메시지
+     │ 생각하던 참인데  │
+     ╰──────────────────╯
+                              오후 3:01
+  🦊 ⌨ ...
+  🦊 ╭──────────────╮
+     │ 오늘 어땠어 ㅠ │
+     ╰──────────────╯
+
+
+  [응 잘 지냈어 ㅎ] [좀 힘들어 ㅠ] [그냥 얘기]   ← 답장 chip
+─────────────────────────────────
+[ 한 줄만 적어봐...    🎤 + ➤ ]
+```
+
+여기 *카드는 한 장도 없어*. *알림 배지도 없어*. *카테고리 라벨도 없어*.
+그냥 **루나가 보낸 카톡 + 답장 추천**.
 
 ---
 
-## 1. 문제 정의
+## 1. 글로벌 사례 종합 (재검색)
 
-### 1.1 사용자 피드백
+| 출처 | 핵심 패턴 |
+|------|----------|
+| **iMessage / WhatsApp / Telegram** | 보낸 오른쪽 / 받은 왼쪽. **메시지 분리 버블** (한 카드 X). typing indicator. |
+| **카카오톡** | 친구 프로필 작게 (헤더), 메시지 좌측 정렬, 시간 작게. 매우 미니멀. |
+| **Wysa** | 친근한 페르소나 (펭귄). **여러 짧은 메시지가 연속 도착** + 페이스. |
+| **Reppley (한국)** | KakaoTalk 친구 같은 AI. SNS 학습 기반 자연 톡. |
+| **Smart Reply** (Google/Apple) | 채팅창 안 가로 chip 작은 버튼. **카드 X**. |
+| **Snapchat 13~24세 75%** | 친한 친구 사적 소통. 알림/배지 거의 없는 톡방. |
+| **챗봇 모범 사례** | "여러 짧은 메시지 버블 + typing indicator" → 자연스러운 대화 리듬 |
 
-> "처음에 영상에서 '한줄만 적어봐 거기서부터 시작하자' 라고하는데 뭔가 채팅창에서도 애니메이션이던 뭐든 가이드가 엄청 확실하게 UI적으로든 있어야할듯? 퀄리티 엄청 높아보이게 채팅창에서 진화한느낌으로 뭔가 매일 들어가도 안어색하게 반겨주는 느낌으로 잘 만들어줬으면해"
-
-→ 키워드 4개:
-- **퀄리티 진화한 느낌**
-- **매일/하루 2~3번 들어와도 안 어색**
-- **반겨주는 감각**
-- **UI 가이드 확실히**
-
-### 1.2 현재 진입 UX (탐색 결과)
-
-```
-┌─────────────────────────┐
-│ 루나 상담실 ☕          │
-│ 💬 첫 마디를 기다려요 ✨ │
-├─────────────────────────┤
-│  🦊 [opening.mp4]        │  ← 영상 (3초)
-│                         │
-│ (회색 배경)             │
-├─────────────────────────┤
-│ [마음 편하게 다 말해봐] │  ← placeholder
-└─────────────────────────┘
-```
-
-**결핍 6개**:
-1. **영상 안 카피만 존재** — 음소거/저속 네트워크 사용자엔 가이드 0
-2. **매일 같음** — mood/whispers 시스템 있는데 채팅창에서 안 씀
-3. **막막함** — chip / 예시 / 추천 시작점 X
-4. **캐릭터 정적** — 영상 끝나면 화면에 루나 자체가 사라짐
-5. **공간감 없음** — 단순 카톡 폼. 루나 룸 디오라마(v100) 있는데 진입 시 미사용
-6. **누적감 없음** — 13일째 / 추억 N개 같은 visible streak 없음
-
-### 1.3 목표
-
-위 5대 패턴을 빠짐없이 통합해서 **8초 짜리 작은 의식 (Daily Ritual)** 만들기.
+→ 핵심: **카드 0장. 메시지 버블 + 작은 chip. 그게 다.**
 
 ---
 
-## 2. 컨셉 — "루나의 작은 의식 (Luna's Daily Ritual)"
+## 2. 컨셉 — Unni's KakaoTalk
 
-채팅 진입 = **"친구 집 문 두드리고 들어가는 것 같은 작은 의식"**.
-
-### 2.1 5축
+### 2.1 5초 시퀀스 (rev2)
 
 ```
-┌─────────────────────────────────────────────────┐
-│                                                 │
-│  ① 공간감     ┌─[ 🪟 LunaRoomGlimpse ]────┐   │
-│              │ (방 단면 슬라이드)         │   │
-│              └────────────────────────────┘   │
-│                                                 │
-│  ② 생명감     [ 🦊 LunaIdleCharacter ]         │
-│              (눈깜빡 + 호흡 + 활동 anim)       │
-│                                                 │
-│  ⑤ 누적감     [ 13일째 함께 ✨  추억 7개 ]     │
-│                                                 │
-│  ③ 분위기     ┌─[DailyGreetingCard]────┐      │
-│              │ mood + 활동 + whisper  │      │
-│              └────────────────────────┘      │
-│                                                 │
-│              [opening.mp4]                     │
-│                                                 │
-│  ④ 대화시작   ┌─[FirstMessageGuide]────┐      │
-│              │ "한 줄만 적어봐"        │      │
-│              │ [💕] [🌸] [✨] [☕]      │      │
-│              └────────────────────────┘      │
-│                                                 │
-│  ③ 분위기     · ✦ · ✧ · ChatEntryAmbience ·   │
-│   (배경)     (mood 파티클 + 그라데이션)        │
-└─────────────────────────────────────────────────┘
+시간    | 이벤트                                | 사운드     | 햅틱
+--------+--------------------------------------+-----------+------
+0.0s    | 진입 페이드인                          | chime soft| .light
+0.3s    | 영상 (opening.mp4) 자동 재생          | (영상)    | —
+~3.5s   | 영상 종료                             | —         | —
+3.8s    | 🦊 ⌨ "..." typing indicator 등장      | tiny tap  | —
+4.4s    | 첫 메시지 버블 도착 + 살짝 bounce      | tiny ping | .light
+        |  "왔어? 나 방금 너 생각하던 참인데"    |           |
+4.9s    | 🦊 ⌨ "..." typing                     | tiny tap  | —
+5.5s    | 두 번째 메시지 버블 도착 (선택)         | tiny ping | .light
+        |  "오늘 어땠어 ㅠㅠ"                    |           |
+6.0s    | SmartReplyBar 페이드인 (ChatInput 위) | sparkle   | —
+        |  [답장 chip 4개 작게]                  |           |
+6.3s    | placeholder "한 줄만 적어봐 ✨"        | —         | —
 ```
 
-### 2.2 8초 시퀀스 + 사운드/햅틱
+대화 리듬이 *진짜 친구 카톡* 처럼 typing → 메시지 → typing → 메시지.
 
-```
-시간   | 이벤트                                        | 사운드           | 햅틱
--------+----------------------------------------------+-----------------+--------
-0.0s   | 진입 → 부드러운 페이드인 (배경 그라데이션)       | 🎶 chime soft   | .light
-0.3s   | LunaRoomGlimpse 위에서 슬라이드 다운            | (—)             | (—)
-0.6s   | LunaIdleCharacter 페이드인 + breathing 시작     | (—)             | (—)
-1.0s   | ChatEntryAmbience 파티클 흐름 시작              | 🌬️ wind soft     | (—)
-1.2s   | RelationshipBadge 페이드인 ("13일째 함께 ✨")    | ✦ tiny ping     | (—)
-1.6s   | DailyGreetingCard 슬라이드 인 (위에서)          | 📜 paper rustle | (—)
-3.5s   | opening.mp4 자동 재생 시작                     | (영상 사운드)   | (—)
-~6.5s  | 영상 종료                                      | (—)             | (—)
-6.8s   | FirstMessageGuide 카드 페이드인                 | ✨ sparkle       | (—)
-7.1s   | chip 4개 순차 등장 (0.08초 간격)                | (—)             | (—)
-7.5s   | ChatInput placeholder 부드럽게 변화             | (—)             | (—)
-8.0s   | (안정 상태) idle anim 계속, 사용자 입력 대기    |                 |
-```
+### 2.2 4가지 변경 원칙 (rev1 → rev2)
 
-### 2.3 디자인 원칙 — 10~20대 여성 취향 (글로벌 사례 종합)
+| 항목 | rev1 (잘못) | rev2 (올바름) |
+|------|------------|--------------|
+| 인사 | DailyGreetingCard (큰 카드) | **LunaGreetingMessage** (카톡 버블 1~2개) |
+| 메뉴 | FirstMessageGuide (chip 카드 4개 + 카테고리) | **SmartReplyBar** (작은 chip 가로 스크롤) |
+| 룸 | LunaRoomGlimpse (큰 단면) | **제거** (또는 헤더 옆 마이크로 아이콘) |
+| 누적 | RelationshipBadge ("13일째") | **제거** (선택: 헤더 옆 ✨13 점) |
+| 분위기 | ChatEntryAmbience (mood 그라데이션 + 파티클) | **절제** — 거의 안 보일 정도 |
+| 캐릭터 | LunaIdleCharacter (별도 위치) | 카톡 메시지 프로필로 자연 통합 |
+| 영상 | opening.mp4 | 그대로 (카톡 영상 메시지처럼) |
+| 시퀀스 | EntryRitualOrchestrator | 그대로 (rev2 타이밍으로 갱신) |
 
-- **부드러운 그라데이션** — Pi 의 soft + (Not Boring) Weather 의 mood 스킨
-- **손글씨 폰트** — Gaegu / Nanum Pen Script (이미 SessionSummary 에서 활용 중)
-- **반짝이 디테일** — Finch 의 다이아몬드 / 컨페티 폭발 → 절제된 ✦/✧ 미세 펄스
-- **둥근 모서리** — `rounded-[20~28px]`
-- **그림자 부드럽게** — `0 6px 22px rgba(192,132,252,0.32)`
-- **종이 텍스처** — DailyGreetingCard 는 베이지 크림 톤 (SessionSummary 와 통일)
-- **햅틱 + 사운드 동기화** — Apple WWDC "Harmony" 원칙
-- **인클루시브 (Finch 패턴)** — 추후 대명사/스킨톤 커스텀 확장 여지
+→ **카드 0장. 메시지 + chip 만**.
 
 ---
 
-## 3. 신규 컴포넌트 7종 명세
+## 3. 신규 컴포넌트 2종 (rev2)
 
-### 3.1 `LunaRoomGlimpse` 🪟 [신규]
+### 3.1 `LunaGreetingMessage` 💬 [신규]
 
-**파일**: `src/components/chat/LunaRoomGlimpse.tsx`
+**파일**: `src/components/chat/LunaGreetingMessage.tsx`
 
-**역할**: 채팅창 상단에 작은 루나 방 단면 (Bondee 패턴 + v100 디오라마 자산 차용).
+**역할**: 루나의 인사 카톡 메시지 1~2개 + typing indicator. **카톡 버블 그대로**.
 
 **Props**:
 ```ts
 interface Props {
-  stage: LifeStage;        // dawn/spring/summer/autumn/winter/twilight/star
   mood: LunaMood;
-  timeBand: LunaTimeBand;
-  weather?: LunaWeather;
+  activity: LunaActivity;
+  recentSessionCount24h: number;
+  intimacyLevel: number;
   ageDays: number;
-  onTap?: () => void;      // 탭하면 풀 룸 디오라마로 이동 (선택)
+  /** 영상 끝나야 시작 */
+  startSequence: boolean;
+  onAllShown?: () => void;  // 모든 메시지 도착 후 → SmartReplyBar 등장 트리거
 }
 ```
 
-**시각 구조**:
+**구조 (한 컴포넌트가 1~2 메시지 도착을 시퀀싱)**:
+
 ```
-┌────────────────────────────────────────┐
-│ ┌── 루나의 방 ───────────────────────┐ │
-│ │  ☀ ╱─창문─╲     📚책장             │ │
-│ │  ☕ 🍵 책상     🪴식물              │ │
-│ │  ─────바닥──────────                │ │
-│ └────────────────────────────────────┘ │
-│   (탭하면 펼쳐짐 → 디오라마 모달)      │
-└────────────────────────────────────────┘
+[루나 프로필 (LunaIdleCharacter md)]    [↺ ...]            ← typing 인디케이터
+                                        [↻ 메시지1 버블]    ← 도착 (slide-in)
+[루나 프로필 (small)]                   [↺ ...]            ← typing 인디케이터
+                                        [↻ 메시지2 버블]    ← 도착
 ```
 
-**스타일**:
-- 높이: 90~110px (compact, 채팅 영역 침해 X)
-- 배경: `ROOM_BG_IMAGES[getRoomBgKey(stage)]` (이미 `luna-life/index.ts` 에 정의됨)
-- 시간대 오버레이:
-  - dawn: 살짝 푸른 빛 (`rgba(180,200,240,0.15)`)
-  - morning: 따뜻한 노랑 (`rgba(255,230,180,0.12)`)
-  - afternoon: 밝은 베이지 (`rgba(255,245,220,0.08)`)
-  - evening: 핑크 글로우 (`rgba(255,180,200,0.18)`)
-  - night: 라벤더 어둠 (`rgba(80,60,120,0.28)`)
-- 모서리: `rounded-[20px] overflow-hidden`
-- 그림자 in (inner shadow) — 창문 같은 느낌
+**시퀀싱**:
+1. 0ms: profile + typing dot 등장 (300ms 후 첫 dot)
+2. 600ms: 첫 메시지 버블 도착 (페이드인 + slight bounce + tiny ping sound)
+3. 1100ms: 두 번째 typing
+4. 1700ms: 두 번째 메시지 도착
+5. 2000ms: onAllShown 호출
 
-**날씨 effect** (선택, 절제):
-- rainy: 빗방울 SVG 8~12개 천천히 떨어짐
-- snowy: 눈송이 5~7개
-- sunny: 햇살 광선 1~2개 (대각선)
-- cloudy: 구름 그림자 살짝 움직임
+**메시지 픽 로직** (whispers.ts 활용):
+- 첫 메시지: `pickGreeting({ mood, recentSessionCount24h, seed })` (이미 있음)
+- 두 번째 메시지 (선택, 60% 확률):
+  - intimacy 낮음 → `mood/activity` 기반 follow-up ("오늘 어땠어 ㅠ")
+  - intimacy 높음 → 친근한 두 번째 ("야 나 너 보고 싶었거든 ㅎ")
+  - revisit frequent → "괜찮아? 오늘 자꾸 와서 걱정돼"
 
-**탭 동작**: `onTap` 시 햅틱 medium + 풀 룸 디오라마(`/luna-room`) 라우트로 이동 — 또는 모달 오픈.
+**카톡 버블 스타일**:
+- 좌측 정렬 (받은 메시지)
+- 배경: `#F4EFE6` 또는 mood 별 살짝 다른 부드러운 톤
+- 모서리: `rounded-[18px] rounded-tl-[4px]` (카톡 표준)
+- 텍스트: 14px 일반체 (손글씨 X — 친구 카톡 폰트와 동일)
+- 그림자: 매우 미세 `0 1px 3px rgba(0,0,0,0.05)`
+- 시간: 버블 옆 작게 (`오후 3:01` 11px 회색)
+- profile 이미지 (LunaIdleCharacter sm) 옆에 (첫 메시지만 — 두 번째 메시지는 같은 시간 그룹)
 
-**애니메이션**:
-- 등장: `initial={{ y: -50, opacity: 0 }}, animate={{ y: 0, opacity: 1 }}, transition={{ duration: 0.5, type: 'spring' }}`
-- 안에 작은 요소들이 미세하게 흔들림 (stage 별):
-  - spring: 식물 잎 살짝 흔들림 (2초 주기)
-  - summer: 햇살 광선 깜빡임
-  - autumn: 바람 흐름 (창밖 구름)
-  - winter: 눈송이 떠 다님
+**typing indicator**:
+- 점 3개 통통 튀는 애니메이션
+- 카카오톡 / iMessage 표준
+- 0.6초마다 점 1개씩 → loop
 
-### 3.2 `LunaIdleCharacter` 🦊 [신규]
+**메시지 카피 예시** (mood/recent 별):
+```ts
+// first 진입 (24h 0번)
+- bright + morning: "왔어? 오늘 햇빛 좋다"
+- warm + afternoon: "잘 지냈어? 차 마시던 참인데"
+- wistful: "...오늘 좀 그런 날이야"
+- sleepy + night: "아 나 자다 깼어 ㅎ"
 
-**파일**: `src/components/chat/LunaIdleCharacter.tsx`
+// recurring (24h 1~2번)
+- "또 왔네 ㅎ"
+- "오 빨리 다시 왔다"
 
-**역할**: 영상 자리 아래에 있는 작은 루나 캐릭터 — Finch 식 idle anim.
+// frequent (24h 3+번)
+- "오늘 자꾸 오네… 괜찮아?"
+
+// 두 번째 메시지 (follow-up, 50~70% 확률)
+- "오늘 어땠어 ㅠㅠ"
+- "무슨 일 있어?"
+- "편하게 다 말해"
+- "나 너 얘기 듣고 싶어"
+```
+
+→ 모든 카피는 `whispers.ts` 의 풀 활용 + 신규 follow-up 풀 추가.
+
+### 3.2 `SmartReplyBar` 💬 [신규]
+
+**파일**: `src/components/chat/SmartReplyBar.tsx`
+
+**역할**: ChatInput 바로 위에 작은 답장 chip 가로. **카드 아닌 작은 버튼**.
 
 **Props**:
 ```ts
 interface Props {
-  activity: LunaActivity;       // tea / reading / drawing / cooking / sleeping ...
   mood: LunaMood;
-  size?: 'sm' | 'md' | 'lg';   // default 'md' (60~80px)
-  onTap?: () => void;
-}
-```
-
-**핵심 애니메이션** (3 layer 동시 — Finch 패턴):
-
-1. **호흡 (breathing)** — `scale: [1, 1.02, 1]`, 3.5초 주기, ease-in-out
-2. **눈 깜빡 (blink)** — opacity-mask 또는 sprite swap, 4~7초 랜덤 간격, 120ms
-3. **헤드 틸트 (head tilt)** — `rotate: [0, -3, 0, 3, 0]`, 8초 주기 + 랜덤 timing
-
-**Activity 별 미세 동작** (subtle, 절제):
-- `tea` (☕ 차 마시기): 5초마다 컵 살짝 들어 올림 (200ms y: -3px)
-- `reading` (📖 책 읽기): 책 살짝 페이지 넘김 SFX 가끔
-- `drawing` (🎨 그림): 손 미세 움직임
-- `cooking` (🍳 요리): 불꽃 살짝 깜빡
-- `sleeping` (💤 자기): 눈 닫힘 + Z 마크 떠오름
-- `walking` (🚶): 살짝 위아래 bounce
-
-**Mood 별 표정 변화** (가능한 경우 — sprite 추가 작업 필요):
-- bright: 눈 살짝 휘어짐
-- wistful: 눈꼬리 살짝 처짐
-- sleepy: 눈 반쯤
-- thoughtful: 시선 옆으로
-
-**탭 반응**:
-- 햅틱 light + scale `[1, 1.1, 1]` 200ms
-- 가끔 (10% 확률) 스티커 popup ("?", "💜", "ㅋㅋ")
-
-**구현 방식 (현실적)**:
-- 새 sprite 작업 비용 큼 → 1차는 **기존 `luna_fox_transparent.webp` 정적 이미지 + framer-motion 으로 호흡/회전 simulate**
-- 눈 깜빡은 위에 흰색 mask div 가 잠깐 덮음 (cheap trick)
-- 2차 (선택): activity 별 emoji 작은 풍선이 캐릭터 옆에 ☕ 떠올랐다 사라짐
-
-### 3.3 `RelationshipBadge` ✨ [신규]
-
-**파일**: `src/components/chat/RelationshipBadge.tsx`
-
-**역할**: 누적감 시각화. Snapchat streak + Finch 게임화 패턴.
-
-**Props**:
-```ts
-interface Props {
-  ageDays: number;            // 루나 라이프 일수 (= 같이 함께한 일)
-  intimacyLevel: number;      // 0~5
-  memoryCount: number;        // 누적 추억 갯수 (luna_memories.count)
-  streakDays?: number;        // 연속 방문 일수 (선택)
-  onTap?: () => void;         // 탭 → 추억 갤러리 모달
-}
-```
-
-**시각 구조**:
-```
-┌──────────────────────────────────────┐
-│  ✦ 13일째 함께 · 추억 7개 · 🔥 5일  │  ← 한 줄, compact
-└──────────────────────────────────────┘
-```
-
-**조건부 표시**:
-- `ageDays === 0` (가입 당일) → "오늘부터 함께 ✨" 만 (다른 거 X)
-- `ageDays >= 1` → "{ageDays}일째 함께"
-- `memoryCount === 0` → "추억" 부분 생략
-- `streakDays >= 3` → "🔥 {streakDays}일" 추가
-- `intimacyLevel >= 4` → 톤 변화 ("우리 13일째야 ㅎ" — 친근체)
-
-**스타일**:
-- 작게 (높이 28~32px)
-- 배경: `linear-gradient(90deg, rgba(255,255,255,0.7), rgba(255,240,250,0.5))`
-- 테두리: `border border-pink-200/60`
-- 텍스트: 12px, `#5D4037` 다크 브라운
-- 별 ✦: 2초 주기 펄스
-- streak 🔥: 3일 이상이면 작은 wobble anim
-
-**탭 동작**: 햅틱 light + 모달 — 추억 갤러리 (이미 있는 `/luna-room` 의 추억 섹션)
-
-**핵심 카피 변형 (intimacy + ageDays 결합)**:
-| ageDays | intimacy 0~1 | intimacy 2~3 | intimacy 4~5 |
-|---------|-------------|-------------|-------------|
-| 1~7 | "{N}일째 함께 ✨" | "{N}일째 ✨" | "우리 {N}일째 ㅎ" |
-| 8~30 | "함께한 지 {N}일" | "{N}일 같이 보냈네" | "{N}일째라니 ㅋㅋ" |
-| 31~99 | "{N}일째, 더 깊어지는 중" | "{N}일… 우리 진짜 친해" | "{N}일째 ㅎㅎ 시간 빠르다" |
-| 100+ | "백일을 함께 채웠어 💜" | "100일 ✨ 우리 진짜 친구다" | "100일… ㅠㅠ 고마워" |
-
-### 3.4 `DailyGreetingCard` 📜 [v1 plan 그대로 유지 + 강화]
-
-**파일**: `src/components/chat/DailyGreetingCard.tsx`
-
-**v1 plan §3.1 그대로 유지**, 추가 사항만:
-
-**추가 1 — 텍스트 등장 애니메이션 (Pi 패턴)**:
-- whisper 텍스트가 한 글자씩 부드럽게 나타남 (typing-like, 2~3초)
-- 마지막 글자 끝에 미세 커서 1초 깜빡 (생각 중 느낌)
-
-**추가 2 — Activity 미세 사운드** (선택):
-- `tea` → ☕ 컵 닿는 소리 짧게 (선택)
-- `reading` → 📖 페이지 소리
-- 무음 모드면 자동 skip
-
-**추가 3 — 카드 자동 마이너 사이즈**:
-- 시간이 지나면 (10초 후) 카드가 살짝 위로 collapse (높이 -30%) → 자리 양보
-
-### 3.5 `FirstMessageGuide` 📝 [v1 plan + 강화]
-
-**파일**: `src/components/chat/FirstMessageGuide.tsx`
-
-**v1 plan §3.2 유지**, 추가 사항:
-
-**추가 1 — Chip 카드화 (글로벌 chip 패턴)**:
-v1 의 `[💕 좋은 사람 만났는데 헷갈려]` 단순 텍스트 chip 대신:
-```
-┌─────────────────────────────┐
-│ 💕                          │
-│ 좋은 사람 만났는데 헷갈려    │
-│ ─────────                  │
-│ 썸/연애 시작                │  ← 작은 카테고리 라벨
-└─────────────────────────────┘
-```
-- mini card (가로 너비 65~75%)
-- gradient 배경 (mood 별)
-- 그림자 부드럽게
-- 탭 시 햅틱 light + scale `[1, 0.96, 1]`
-
-**추가 2 — Progressive Discovery (Day 별 chip 변화)**:
-
-| Day | 분위기 | Chip 톤 예시 |
-|-----|-------|-------------|
-| 1~3 | 정중 / 보편 | "오늘 너무 답답해" / "썸 타는 사람 있는데" |
-| 4~14 | 친근 / 살짝 깊게 | "그 사람이 자꾸 생각나" / "우리 관계 어떤 단계지" |
-| 15~30 | 깊어짐 / 회상 가능 | "지난번에 얘기한 그 사람 또…" / "내가 자꾸 같은 패턴" |
-| 31~99 | 절친 / 핵심 추궁 | "야 또 그 일 생겼어" / "솔직히 말하면…" |
-| 100 | 마지막 | "오늘이 100일째야 ㅠㅠ" / "기억해주는 게 고마워" |
-
-**추가 3 — Chip 클릭 후 마이크로 인터랙션**:
-- 클릭한 chip 이 살짝 위로 떠올라 ChatInput 으로 빨려 들어가는 애니메이션 (300ms, 흰색 trail)
-- 햅틱 light + soft pop 사운드
-- 다른 chip 들 페이드 아웃
-
-### 3.6 `ChatEntryAmbience` ✨ [v1 plan + 강화]
-
-**파일**: `src/components/chat/ChatEntryAmbience.tsx`
-
-**v1 plan §3.3 유지**, 추가 사항:
-
-**추가 1 — WebGL 그라데이션 (Grainient 패턴)**:
-- 배경 자체가 organic gradient (CSS gradient 보다 부드러움)
-- mood 별 색 + 시간대 별 brightness 조절
-- 라이브러리 없이 구현 가능 (Canvas 또는 단순 multiple radial-gradient)
-
-**추가 2 — 사운드 시스템 통합**:
-- 진입 chime 0.3초 (mood 별 톤 살짝 다름)
-- 무음 모드 / 사용자 옵션으로 끄기 가능
-- `prefers-reduced-motion` + audio mute 둘 다 존중
-
-**추가 3 — 파티클 종류 확장**:
-- `bright` + 봄 → ✦ 골드 + 🌸 작은 핑크 점
-- `playful` → ✧ 핑크 + 💗 미니 하트
-- `wistful` + 가을 → 🍂 잎 (천천히 회전하며 떨어짐)
-- `sleepy` + 밤 → ✦ 라벤더 (느리게 깜빡)
-- `winter` → ❄ 눈 + ✦
-- `peaceful` → ✦ 보라 별가루
-
-### 3.7 `EntryRitualOrchestrator` 🎬 [신규]
-
-**파일**: `src/components/chat/EntryRitualOrchestrator.tsx`
-
-**역할**: 위 6개 컴포넌트의 **시퀀스 오케스트레이션** — 사운드 / 햅틱 / 등장 타이밍을 한 곳에서 관리.
-
-**Props**:
-```ts
-interface Props {
-  liveState: LunaLiveState;
   ageDays: number;
   intimacyLevel: number;
-  memoryCount: number;
-  streakDays: number;
-  enableSound?: boolean;       // default false (사용자 토글)
-  enableHaptic?: boolean;      // default true (mobile 자동 감지)
-  onComplete?: () => void;     // 8초 시퀀스 끝났을 때
-  children: React.ReactNode;   // 안에 7개 컴포넌트가 자식으로
+  recentSessionCount24h: number;
+  /** 모든 인사 메시지 도착 후 true */
+  visible: boolean;
+  onChipSelect: (text: string) => void;
 }
 ```
 
-**구현**:
-- `useState` 로 phase 관리 (0: pre-entry, 1: room, 2: character, 3: ambience, 4: badge, 5: greeting, 6: video, 7: guide, 8: idle)
-- `useEffect` 로 setTimeout chain
-- Sound: `<audio>` 요소 + `prepare()` (즉시 재생 보장)
-- Haptic: `navigator.vibrate()` + iOS Web Haptic API (`document.querySelector` impact gen) 폴백
+**시각**:
 
-**사운드 자산 필요 (public/sounds/)**:
-- `chime-soft.mp3` (entry, 0.3s)
-- `paper-rustle.mp3` (greeting card, 0.4s)
-- `tiny-ping.mp3` (badge, 0.15s)
-- `sparkle.mp3` (guide, 0.25s)
-- `chip-pop.mp3` (chip click, 0.1s)
-- 모두 audio-haptic 동기화 (Apple WWDC 패턴 — 시각/청각/촉각 일관성)
-
-**햅틱 매핑**:
-```ts
-import { triggerHaptic } from '@/lib/haptic';
-
-triggerHaptic('light');   // entry, chip click
-triggerHaptic('medium');  // badge tap, room tap
-triggerHaptic('heavy');   // 사용 안 함 (강한 햅틱 = AI 같음)
+```
+┌──────────────────────────────────────────┐
+│ [응 잘 지냈어 ㅎ] [좀 힘들어 ㅠ] [..] [...] │   ← 가로 스크롤
+├──────────────────────────────────────────┤
+│ [한 줄만 적어봐 ✨...]   🎤  +  ➤        │   ← ChatInput
+└──────────────────────────────────────────┘
 ```
 
-(haptic 헬퍼는 §6 에서 명세)
+**chip 디자인**:
+- 가로 스크롤 (overflow-x-auto)
+- 각 chip: 작은 pill 버튼 (높이 32px)
+- 배경: `bg-white border border-pink-100/60` 또는 살짝 mood 색상
+- 텍스트: 12.5px (12자 이내 권장)
+- 그림자 매우 미세
+- 카테고리 라벨 **없음** — 그냥 답장 텍스트만
+- 최대 5개 (모바일 화면에 3~4개 보임 + 좌우 스크롤)
+- 클릭 → ChatInput 으로 텍스트 채우기 (자동 전송 X) + 햅틱 light + pop sound
+- 클릭 후 0.3초에 SmartReplyBar 페이드 아웃 (자리 양보)
+
+**chip 풀 — 카테고리 라벨 X, 답장 톤만**:
+```ts
+// recent_first (오늘 첫 진입, 인사 답장)
+- "응 잘 지냈어 ㅎ"
+- "오늘 좀 힘들어 ㅠ"
+- "그냥 얘기하고 싶어"
+- "나 또 그 일이야"
+- "잠깐만 누구라도 옆에"
+
+// recent_recurring (재방문)
+- "응 또 왔어 ㅎㅎ"
+- "할 말 있어"
+- "오늘은 좀 다른 일이야"
+- "그냥 너 보고 싶어서"
+
+// recent_frequent (자주)
+- "응... 오늘 진짜 힘들어"
+- "어떻게 해야 할지 모르겠어"
+- "잠깐만 안아줘"
+
+// mood 보정 (선택)
+- bright + first → "오 나 좋은 일 있었어!"
+- wistful + first → "... 그냥 좀 우울해"
+- sleepy + first → "잠 안 와서 왔어"
+
+// intimacy 4~5 (절친) — 가벼운 톤
+- "야 또 그 일 ㅋㅋ"
+- "내 얘기 좀 들어줘"
+
+// intimacy 0~1 (정중) — 무난한 톤
+- "오늘 얘기하고 싶어요"
+- "고민 좀 있어요"
+```
+
+→ chip pool: 16~24개. mood + recent + intimacy 따라 섞어서 4개 픽 (deterministic).
+
+**왜 카테고리 라벨 X**:
+- 카톡 답장 추천에 "썸/연애" 같은 라벨 절대 없음
+- 진짜 친구 답장은 그냥 답장 자체
 
 ---
 
-## 4. ChatContainer 통합 설계
+## 4. ChatContainer 재통합 (rev2)
 
-### 4.1 변경 위치
-
-`src/components/chat/ChatContainer.tsx` 의 `messages.length === 0` 분기 (라인 ~898).
-
-### 4.2 새 흐름 (의사코드)
+### 4.1 `messages.length === 0` 분기 재작성
 
 ```tsx
-// 기존: 영상만
-{messages.length === 0 && (
-  <video src="/opening.mp4" ... />
-)}
-
-// 신규: 7 컴포넌트 통합
 {messages.length === 0 && activePersona !== 'tarot' && (
-  <EntryRitualOrchestrator
-    liveState={liveState}
-    ageDays={lunaAgeDays}
-    intimacyLevel={intimacy?.level ?? 0}
-    memoryCount={memoryStats.count}
-    streakDays={streakDays}
-    enableSound={userSettings.entrySound !== false}
-    enableHaptic={isMobile}
-  >
-    {/* 1. 공간감 */}
-    <LunaRoomGlimpse {...liveState} ageDays={lunaAgeDays} />
+  <EntryRitualOrchestrator>
+    {/* ── 영상만 (기존 그대로) ── */}
+    <div className="flex flex-col px-2 mt-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: 'easeOut' }}
+        className="flex justify-start mb-3 relative"
+      >
+        {/* 프로필 — 카톡 표준 작게 */}
+        <div className="relative mr-2 flex-shrink-0 mt-1">
+          <div className="w-10 h-10 rounded-[16px] bg-[#F4EFE6] flex items-center justify-center overflow-hidden border border-[#EACbb3]">
+            <img src="/luna_fox_transparent.webp" alt="루나" className="w-full h-full object-cover" />
+          </div>
+        </div>
 
-    {/* 5. 누적감 */}
-    <RelationshipBadge
-      ageDays={lunaAgeDays}
-      intimacyLevel={intimacy?.level ?? 0}
-      memoryCount={memoryStats.count}
-      streakDays={streakDays}
-    />
+        <div className="flex flex-col items-start max-w-[75%]">
+          <span className="text-[12px] text-[#5D4037] mb-1 ml-1 font-bold">루나</span>
 
-    {/* 3. 분위기 (인사 카드) */}
-    <DailyGreetingCard
+          {/* Video Bubble — 그대로 */}
+          <div className="relative rounded-[20px] rounded-tl-[4px] overflow-hidden bg-[#F4EFE6] shadow-sm border border-[#D5C2A5]">
+            <video src="/opening.mp4" autoPlay playsInline ... />
+          </div>
+        </div>
+      </motion.div>
+    </div>
+
+    {/* ── 인사 메시지 1~2개 (영상 끝나면) ── */}
+    <LunaGreetingMessage
       mood={liveState.mood}
       activity={liveState.activity}
-      whisper={liveState.whisper ?? '왔어'}
-      timeBand={liveState.timeBand}
-      weather={liveState.weather}
-    />
-
-    {/* 2. 생명감 — 영상 위 또는 옆 */}
-    <LunaIdleCharacter
-      activity={liveState.activity}
-      mood={liveState.mood}
-      size="md"
-    />
-
-    {/* 기존 영상 그대로 */}
-    <video src="/opening.mp4" ... />
-
-    {/* 4. 대화 시작 */}
-    <FirstMessageGuide
-      mood={liveState.mood}
-      intimacyLevel={intimacy?.level ?? 0}
+      recentSessionCount24h={entry.recentSessionCount24h}
+      intimacyLevel={intimacyDerived?.level ?? 0}
       ageDays={lunaAgeDays}
-      onChipSelect={(text) => setInputDraft(text)}
-      visible={openingVideoEnded}
+      startSequence={openingVideoEnded}
+      onAllShown={() => setReadyForReply(true)}
     />
   </EntryRitualOrchestrator>
 )}
 
-// 3. 분위기 (배경 layer — 항상 있음)
-{messages.length === 0 && (
-  <ChatEntryAmbience
-    mood={liveState.mood}
-    stage={liveState.stage ?? 'spring'}
-    enabled={!prefersReducedMotion}
-  />
-)}
+{/* ── ChatInput 위 SmartReplyBar (분기 무관, visible 컨디션) ── */}
+<SmartReplyBar
+  mood={liveState.mood}
+  ageDays={lunaAgeDays}
+  intimacyLevel={intimacyDerived?.level ?? 0}
+  recentSessionCount24h={entry.recentSessionCount24h}
+  visible={messages.length === 0 && readyForReply}
+  onChipSelect={(text) => setInputDraft(text)}
+/>
+
+<ChatInput initialValue={inputDraft} ... />
 ```
 
-### 4.3 `liveState` 계산
+### 4.2 폐기 컴포넌트 처리
 
-이미 있는 함수 활용:
-```tsx
-const lunaAgeDays = useMemo(() => getAgeDays(lunaBirthDate), [lunaBirthDate]);
-const recent24h = sessionsRecentCount > 0;
-const liveState = useMemo(() => computeLiveStateLocal({
-  now: new Date(),
-  ageDays: lunaAgeDays,
-  recentSessionWithin24h: recent24h,
-  daySeed: hashUserDay(userId, todayKST),
-}), [lunaAgeDays, userId, recent24h]);
-```
+- `LunaRoomGlimpse` / `DailyGreetingCard` / `RelationshipBadge` / `FirstMessageGuide` / `ChatEntryAmbience` / `LunaIdleCharacter` (rev1) — **import 제거 + 사용 위치 제거**
+- 컴포넌트 파일은 그대로 보존 (롤백 옵션). 또는 별도 PR 에서 정리.
 
-### 4.4 `streakDays` 계산
+`LunaIdleCharacter` 는 rev2 에서도 살릴 수 있음 — `LunaGreetingMessage` 의 프로필 위치에서 사용 (사이즈 sm).
 
-신규: `useStreakDays(userId)` 훅 — 최근 N일 연속 세션 있는 날 카운트.
+### 4.3 헤더 마이크로 표시 (선택)
 
-```ts
-// src/hooks/useStreakDays.ts
-export function useStreakDays(userId: string): number {
-  const [streak, setStreak] = useState(0);
-  useEffect(() => {
-    fetch('/api/luna-room/streak').then(r => r.json()).then(d => setStreak(d.streak ?? 0));
-  }, [userId]);
-  return streak;
-}
-```
+채팅 헤더 우상단 또는 루나 이름 옆에 매우 작은 표시:
+- "✨ 13" (작게, 화려하지 않게) — ageDays
+- 또는 카톡처럼 친구 상태 메시지: "오늘 ☀️" (mood 이모지)
 
-API: `/api/luna-room/streak` — `counseling_sessions.created_at` 의 최근 N일 KST 그룹 카운트.
-
-### 4.5 `memoryStats.count`
-
-이미 있는 `/api/luna-room/status` 또는 `/api/luna-memories/count` 활용. 없으면 신규.
-
-### 4.6 `inputDraft` — chip 클릭 → ChatInput 자동 채우기
-
-(v1 plan §4.4 그대로)
-
-### 4.7 placeholder 강화
-
-```ts
-const dynamicPlaceholder = useMemo(() => {
-  if (pendingEventLock) return '위 질문에 답해줘 ↑';
-  if (!openingVideoEnded) return '';
-  if (messages.length === 0) {
-    if (liveState.mood === 'wistful') return '한 줄이면 충분해...';
-    if (liveState.mood === 'playful') return '오늘은 뭐 얘기할까 ✨';
-    if (liveState.mood === 'sleepy') return '가만히 적어도 돼';
-    return '한 줄만 적어봐 ✨';
-  }
-  return '마음 편하게 다 말해봐...';
-}, [pendingEventLock, openingVideoEnded, messages.length, liveState.mood]);
-```
+→ rev2 에선 일단 **빼고**, 다음 라운드에서 결정.
 
 ---
 
-## 5. UX 인터랙션 디테일
+## 5. SmartReplyBar 동작 디테일
 
-### 5.1 사용자가 chip 클릭
+### 5.1 등장 / 퇴장
+- 등장: `LunaGreetingMessage.onAllShown` 콜백 후 0.5초 페이드인
+- 퇴장: chip 클릭 시 0.3초 페이드아웃 + ChatInput 으로 텍스트 흡수 anim
 
-1. chip 이 위로 떠올라 ChatInput 자리로 빨려 들어가는 애니메이션 (300ms, white trail)
-2. `setInputDraft(text)` → ChatInput 의 `initialValue` 갱신 → textarea 채워짐
-3. 햅틱 light + chip-pop 사운드
-4. 다른 chip 들 페이드 아웃 (다 사라짐)
-5. **자동 전송 X** — 사용자가 수정해서 보낼 수 있음
+### 5.2 가로 스크롤 + 좌우 fade
+- `overflow-x-auto`, `-webkit-overflow-scrolling: touch`
+- 좌우 끝에 그라데이션 마스크 (스크롤 가능 hint)
+- snap 없음 (자유 스크롤)
 
-### 5.2 사용자가 직접 입력 시작
+### 5.3 chip 작성 규칙
+- 12자 이내
+- 카테고리 / 라벨 X
+- 이모지 0~1개
+- 답장 톤 (예: "응 잘 지냈어 ㅎ" / "오늘 좀 힘들어 ㅠ")
 
-1. 한 글자 입력 감지 → FirstMessageGuide 페이드아웃 (0.3s)
-2. DailyGreetingCard 살짝 위로 collapse (자리 양보)
-3. ChatEntryAmbience 파티클 천천히 페이드 아웃 (3초)
-4. LunaRoomGlimpse 그대로 (분위기 유지)
-5. RelationshipBadge 그대로
+### 5.4 클릭 후 동작
+1. 햅틱 light + chip-pop sound
+2. ChatInput 의 `initialValue` 갱신 → textarea 채워짐 + 자동 포커스
+3. SmartReplyBar 페이드아웃 (0.3s)
+4. 사용자가 텍스트 수정 가능 (자동 전송 X)
+5. 사용자가 한 글자 입력 시작하면 — 그대로 진행 (chip 다시 안 나타남)
 
-### 5.3 사용자가 30초 가만히 있음
-
-- 30초 후 chip 4개가 살짝 펄스 한 번 (visible hint)
-- LunaIdleCharacter 가 살짝 헤드 틸트 (호기심 표현)
-
-### 5.4 기존 세션 재진입 (`messages.length > 0`)
-
-- 7개 컴포넌트 모두 렌더 X (기존 동작 그대로)
-- 단, **하루 첫 진입이면** RelationshipBadge 만 채팅 상단에 5초 페이드인 후 사라짐 (선택)
-
-### 5.5 매일 다른 환영 (이미 v1 §5.6)
-
-| 24h 내 세션 횟수 | DailyGreetingCard 변화 |
-|------------------|----------------------|
-| 0번 (오늘 첫) | "오늘 어땠어?" 안부 |
-| 1~2번 (재방문) | "또 왔네 ㅎ" 반가움 |
-| 3+번 (자주) | "오늘 자꾸 오네 괜찮아?" 걱정 |
-
-→ `WHISPERS_BY_REVISIT` 풀 추가.
-
-### 5.6 100일째 특별 진입
-
-- `ageDays === 100` 일 때:
-  - LunaRoomGlimpse → twilight/star 톤 (어두운 그라데이션)
-  - RelationshipBadge → "100일 ✨ 고마워" + 작은 폭죽 ✦✧
-  - DailyGreetingCard → 마지막 인사 톤
-  - FirstMessageGuide chip → "오늘이 마지막이라니" / "고마웠어"
+### 5.5 chip 안 누르고 직접 입력
+- ChatInput textarea 에 한 글자라도 입력 → SmartReplyBar 페이드아웃
 
 ---
 
-## 6. 사운드 + 햅틱 시스템 (신규)
+## 6. 데이터 풀 추가 (`whispers.ts`)
 
-### 6.1 파일 구조
-
-```
-src/lib/haptic.ts              ← 햅틱 헬퍼
-src/lib/audio.ts               ← 사운드 헬퍼
-public/sounds/
-  ├─ chime-soft.mp3
-  ├─ paper-rustle.mp3
-  ├─ tiny-ping.mp3
-  ├─ sparkle.mp3
-  └─ chip-pop.mp3
-```
-
-### 6.2 `src/lib/haptic.ts`
+### 6.1 신규: `FOLLOWUP_BY_MOOD` (두 번째 인사 메시지)
 
 ```ts
-type HapticIntensity = 'light' | 'medium' | 'heavy' | 'selection';
-
-export function triggerHaptic(intensity: HapticIntensity = 'light') {
-  if (typeof window === 'undefined') return;
-
-  // iOS Web Haptic (실험적, Safari 17+)
-  if ('hapticFeedback' in navigator) {
-    try {
-      (navigator as any).hapticFeedback.impact(intensity);
-      return;
-    } catch {}
-  }
-
-  // Android / 일반 — Vibration API
-  if ('vibrate' in navigator) {
-    const durations = { light: 10, medium: 25, heavy: 50, selection: 5 };
-    navigator.vibrate(durations[intensity]);
-  }
-}
-
-export function isHapticAvailable(): boolean {
-  return typeof window !== 'undefined' && ('vibrate' in navigator || 'hapticFeedback' in navigator);
-}
-```
-
-### 6.3 `src/lib/audio.ts`
-
-```ts
-type SoundKey = 'chime' | 'paper' | 'ping' | 'sparkle' | 'pop';
-
-const SOUND_FILES: Record<SoundKey, string> = {
-  chime: '/sounds/chime-soft.mp3',
-  paper: '/sounds/paper-rustle.mp3',
-  ping: '/sounds/tiny-ping.mp3',
-  sparkle: '/sounds/sparkle.mp3',
-  pop: '/sounds/chip-pop.mp3',
-};
-
-const audioCache = new Map<SoundKey, HTMLAudioElement>();
-
-export function preloadSounds() {
-  if (typeof window === 'undefined') return;
-  Object.entries(SOUND_FILES).forEach(([key, src]) => {
-    const audio = new Audio(src);
-    audio.volume = 0.3;
-    audio.preload = 'auto';
-    audioCache.set(key as SoundKey, audio);
-  });
-}
-
-export function playSound(key: SoundKey, options: { volume?: number } = {}) {
-  if (typeof window === 'undefined') return;
-  const audio = audioCache.get(key);
-  if (!audio) return;
-  audio.volume = options.volume ?? 0.3;
-  audio.currentTime = 0;
-  audio.play().catch(() => {}); // autoplay 정책 회피
-}
-```
-
-### 6.4 사용자 옵션 추가
-
-`localStorage.luna_entry_sound` (boolean, default true)
-`localStorage.luna_entry_haptic` (boolean, default true)
-설정 페이지(`/settings`) 에 토글 추가.
-
----
-
-## 7. 신규 데이터 풀 (`whispers.ts` 확장)
-
-### 7.1 `WHISPERS_BY_REVISIT`
-
-```ts
-export const WHISPERS_BY_REVISIT: Record<'first' | 'recurring' | 'frequent', string[]> = {
-  first: [   // 24h 내 0번
-    '왔어? 오늘 하루 어땠어',
-    '오 너 왔구나, 잘 지냈어?',
-    '잘 지냈어? 나 너 보고 싶었어',
-    '오늘 무슨 일 있었어?',
-    '오랜만이다 그치',
-  ],
-  recurring: [   // 24h 내 1~2번
-    '또 왔네 ㅎ',
-    '오 빨리 다시 왔다',
-    '벌써 또 왔어? ㅋㅋ',
-    '왔어, 무슨 일이야?',
-    '못 잊고 또 왔구나 ㅎㅎ',
-  ],
-  frequent: [    // 24h 내 3+번
-    '오늘 자꾸 오네… 괜찮아?',
-    '뭔 일 있어? 나한테 다 말해',
-    '오늘 진짜 힘든 날이구나',
-    '괜찮아? 같이 있어줄게',
-    '계속 와도 돼. 옆에 있을게',
-  ],
+export const FOLLOWUP_BY_MOOD: Record<LunaMood, readonly string[]> = {
+  bright: ['오늘 뭐 했어?', '좋은 일 있었으면 좋겠어 ㅎ', '얼굴 보여줘'],
+  warm: ['오늘 어땠어 ㅠㅠ', '얘기 들어줄게', '편하게 다 말해'],
+  playful: ['뭐 재밌는 일 없어?', '나 심심해 ㅋㅋ', '너 얘기 듣고 싶어'],
+  wistful: ['오늘은 좀 가라앉았어?', '괜찮아?', '오늘 같은 날엔 같이 있어줄게'],
+  sleepy: ['너도 안 자고 있었어?', '뭔 일이야', '편하게 얘기해'],
+  thoughtful: ['요즘 어떻게 지내?', '뭐 고민 있어?', '천천히 얘기해도 돼'],
+  peaceful: ['편한 날이야?', '뭐 얘기하고 싶어?', '여기 있어'],
 };
 ```
 
-### 7.2 `CHIP_POOLS_BY_MOOD`
-
-(v1 plan §3.2 그대로 + Day 별 추가)
+### 6.2 신규: `SMART_REPLIES` (chip 풀)
 
 ```ts
-export const CHIP_POOLS_BY_MOOD_DAY: Record<LunaMood, Record<'early' | 'mid' | 'deep', Array<{ emoji: string; text: string; category: string }>>> = {
-  bright: {
-    early: [
-      { emoji: '💕', text: '좋은 사람 만났는데 헷갈려', category: '썸/연애 시작' },
-      { emoji: '🌸', text: '썸 타는 사람 있는데 애매해', category: '썸/연애 시작' },
-      { emoji: '✨', text: '데이트 어디 갈지 모르겠어', category: '데이트' },
-      { emoji: '☕', text: '그냥 오늘 얘기하고 싶어', category: '일상' },
-    ],
-    mid: [
-      { emoji: '🌷', text: '사귄 지 한 달 됐는데 신기해', category: '연애' },
-      { emoji: '💖', text: '점점 좋아지는 게 무서워', category: '연애' },
-      { emoji: '✨', text: '같이 가고 싶은 데가 생겼어', category: '데이트' },
-      { emoji: '☀️', text: '오늘 너무 좋은 일 있었어', category: '일상' },
-    ],
-    deep: [
-      { emoji: '💍', text: '이 사람이랑 미래 그려져', category: '깊은 관계' },
-      { emoji: '🌈', text: '내가 왜 이렇게 행복한지 모르겠어', category: '감정' },
-      { emoji: '✨', text: '오늘 특별한 데 갔다 왔어', category: '추억' },
-      { emoji: '💜', text: '너랑 얘기하고 싶었어', category: '대화' },
-    ],
-  },
-  // ... warm, playful, wistful, sleepy, thoughtful, peaceful 각각 early/mid/deep
+export type ReplyTier = 'first' | 'recurring' | 'frequent';
+
+export const SMART_REPLIES: Record<ReplyTier, readonly string[]> = {
+  first: [
+    '응 잘 지냈어 ㅎ',
+    '오늘 좀 힘들어 ㅠ',
+    '그냥 얘기하고 싶어',
+    '나 또 그 일이야',
+    '잠깐만 옆에 있어줘',
+    '할 말 있어',
+  ],
+  recurring: [
+    '응 또 왔어 ㅎㅎ',
+    '할 말 있어서',
+    '오늘은 좀 다른 일',
+    '그냥 너 보고 싶어',
+    '나 좀 봐줘',
+  ],
+  frequent: [
+    '응… 오늘 진짜 힘들어',
+    '어떻게 해야 할지 모르겠어',
+    '잠깐만 안아줘',
+    '미안 자꾸 와서',
+    '괜찮아 옆에 있어줘',
+  ],
 };
-```
 
-(전체 풀은 7 mood × 3 stage × 4 chip = 84개 — Phase A 에서 작성)
+// mood 보정 (선택)
+export const SMART_REPLIES_MOOD_OVERRIDE: Partial<Record<LunaMood, string>> = {
+  bright: '오 나 좋은 일 있었어!',
+  wistful: '... 그냥 좀 우울해',
+  sleepy: '잠 안 와서 왔어',
+  playful: '심심해서 왔어 ㅋㅋ',
+};
 
-### 7.3 헬퍼 함수
-
-```ts
-export function pickGreeting(args: {
+export function pickSmartReplies(args: {
   mood: LunaMood;
-  revisitCount: number;       // 24h 내
-  intimacyLevel: number;       // 0~5
-  daySeed: number;
+  recentSessionCount24h: number;
+  intimacyLevel: number;
+  seed: number;
+}): string[] {
+  const tier: ReplyTier =
+    args.recentSessionCount24h === 0 ? 'first'
+    : args.recentSessionCount24h <= 2 ? 'recurring'
+    : 'frequent';
+
+  const base = [...SMART_REPLIES[tier]];
+  // mood override 1개 추가 (있으면)
+  const moodReply = SMART_REPLIES_MOOD_OVERRIDE[args.mood];
+  if (moodReply && !base.includes(moodReply)) base.unshift(moodReply);
+
+  // intimacy 4+ 면 친근 톤 1개 추가
+  if (args.intimacyLevel >= 4) base.unshift('야 그 일 또 ㅋㅋ');
+
+  // 4~5개 deterministic 픽
+  const start = Math.abs(args.seed) % Math.max(1, base.length - 4);
+  return base.slice(start, start + 5);
+}
+```
+
+### 6.3 follow-up 픽 헬퍼
+
+```ts
+export function pickFollowup(args: {
+  mood: LunaMood;
+  recentSessionCount24h: number;
+  intimacyLevel: number;
+  seed: number;
 }): string {
-  const tier = args.revisitCount === 0 ? 'first' : args.revisitCount <= 2 ? 'recurring' : 'frequent';
-  const pool = WHISPERS_BY_REVISIT[tier];
-  return pool[args.daySeed % pool.length];
-}
-
-export function pickChipPool(args: {
-  mood: LunaMood;
-  ageDays: number;
-}): Array<{ emoji: string; text: string; category: string }> {
-  const stage = args.ageDays <= 14 ? 'early' : args.ageDays <= 60 ? 'mid' : 'deep';
-  return CHIP_POOLS_BY_MOOD_DAY[args.mood][stage];
+  // recurring/frequent 는 follow-up 별도 톤
+  if (args.recentSessionCount24h >= 3) {
+    return '괜찮아? 오늘 자꾸 와서 걱정돼';
+  }
+  if (args.recentSessionCount24h >= 1 && args.intimacyLevel >= 3) {
+    return '뭐 또 일 있어?';
+  }
+  const pool = FOLLOWUP_BY_MOOD[args.mood];
+  return pool[Math.abs(args.seed) % pool.length];
 }
 ```
 
 ---
 
-## 8. 파일 변경 명세 (체크리스트)
+## 7. 시각 디자인 가이드 (rev2)
 
-### 신규 (10 파일)
-- [ ] `src/components/chat/LunaRoomGlimpse.tsx`
-- [ ] `src/components/chat/LunaIdleCharacter.tsx`
-- [ ] `src/components/chat/RelationshipBadge.tsx`
-- [ ] `src/components/chat/DailyGreetingCard.tsx`
-- [ ] `src/components/chat/FirstMessageGuide.tsx`
-- [ ] `src/components/chat/ChatEntryAmbience.tsx`
-- [ ] `src/components/chat/EntryRitualOrchestrator.tsx`
-- [ ] `src/lib/haptic.ts`
-- [ ] `src/lib/audio.ts`
-- [ ] `src/hooks/useStreakDays.ts`
+### 7.1 카톡 톡방 톤
+- 배경: 카카오톡 표준 베이지 (`#fbe5b3` 또는 살짝 핑크 베이지)
+- 받은 메시지 버블: 흰색 또는 `#F4EFE6` 베이지
+- 보낸 메시지 버블: 카카오톡 노랑 (`#FFEB3B` 약간 어두운 톤) 또는 핑크 그라데이션
+- 시간: 11px `#999`
 
-### 수정 (4 파일)
-- [ ] `src/components/chat/ChatContainer.tsx`
-  - `messages.length === 0` 분기에 7 컴포넌트 통합
-  - `liveState`, `streakDays`, `memoryStats` 가져오기
-  - `inputDraft` state + ChatInput 으로 전달
-- [ ] `src/components/chat/ChatInput.tsx`
-  - `initialValue` prop 추가
-  - placeholder mood 별 다양화
-- [ ] `src/lib/luna-life/whispers.ts`
-  - `WHISPERS_BY_REVISIT` 풀
-  - `CHIP_POOLS_BY_MOOD_DAY` 풀 (84개)
-  - `pickGreeting`, `pickChipPool` 헬퍼
-- [ ] `src/lib/luna-life/mood.ts` (선택)
-  - `recentSessionCount24h` 카운트 (boolean → number)
+### 7.2 폰트
+- 본문: 시스템 산세리프 (카카오톡 / iOS / Android 표준)
+- 손글씨 폰트는 v112-rev1 의 카드들에서만 썼고, rev2 에선 빼기 (카톡 본문 폰트와 자연스러움 유지)
 
-### API (선택, 1 파일)
-- [ ] `src/app/api/luna-room/streak/route.ts` — streak days 계산
+### 7.3 색상 절제
+- mood 별 그라데이션은 거의 안 보일 정도로 미세 (`opacity 0.05~0.1`)
+- 파티클 X (또는 1~2개 매우 미세)
 
-### 자산 (5 파일)
-- [ ] `public/sounds/chime-soft.mp3`
-- [ ] `public/sounds/paper-rustle.mp3`
-- [ ] `public/sounds/tiny-ping.mp3`
-- [ ] `public/sounds/sparkle.mp3`
-- [ ] `public/sounds/chip-pop.mp3`
-
-(사운드는 무료 SFX 라이브러리 — Pixabay Sounds, Zapsplat — 에서 ~10초 안에 받을 수 있음. 사용자가 직접 고를지 또는 Claude 가 추천 링크 제공할지)
-
-### 메모리 / 인덱스
-- [ ] `MEMORY.md` 에 v112 entry 추가
-- [ ] `memory/project_love_ai_v112_daily_ritual.md` 신규
+### 7.4 Smart Reply chip 스타일
+- 작고 미니멀 (32px 높이)
+- 카톡 답장 추천과 동일한 톤
+- 라벨 X / 카테고리 X / 이모지 1개 이내
 
 ---
 
-## 9. Phase 별 구현 순서 (총 ~5시간)
+## 8. 파일 변경 명세
 
-### Phase A — 기반 데이터 (`whispers.ts`, 헬퍼)
-- WHISPERS_BY_REVISIT 풀 (3 카테고리 × 5)
-- CHIP_POOLS_BY_MOOD_DAY 풀 (7 × 3 × 4 = 84)
-- pickGreeting, pickChipPool 헬퍼
+### 신규 (2 파일)
+- [ ] `src/components/chat/LunaGreetingMessage.tsx` (메시지 버블 시퀀스)
+- [ ] `src/components/chat/SmartReplyBar.tsx` (가로 chip)
 
-### Phase B — 사운드 + 햅틱 헬퍼
-- `src/lib/haptic.ts` (Vibration API + iOS Web Haptic 폴백)
-- `src/lib/audio.ts` (preload + playSound)
-- 사운드 파일 5개 다운로드 후 `public/sounds/` 배치
+### 수정 (3 파일)
+- [ ] `src/lib/luna-life/whispers.ts`
+  - `FOLLOWUP_BY_MOOD` 추가
+  - `SMART_REPLIES` + `SMART_REPLIES_MOOD_OVERRIDE` 추가
+  - `pickFollowup` / `pickSmartReplies` 헬퍼
+  - **`CHIP_POOLS_BY_MOOD_DAY`** 는 제거하지 말고 보존 (다른 곳 활용 여지)
+- [ ] `src/components/chat/ChatContainer.tsx`
+  - rev1 의 7 컴포넌트 import 제거
+  - rev1 의 7 컴포넌트 render 블록 제거
+  - 신규 2 컴포넌트 마운트
+  - `setReadyForReply` state 추가 (LunaGreetingMessage onAllShown 트리거)
+  - SmartReplyBar 를 ChatInput 바로 위에 배치
+- [ ] `src/components/chat/EntryRitualOrchestrator.tsx`
+  - `ambienceMood`/`ambienceStage` props 제거 (또는 유지하되 default `undefined`)
+  - 시퀀스 timing 갱신 (영상 끝→3.8s 부터)
 
-### Phase C — `useStreakDays` 훅 + API
-- `/api/luna-room/streak` route (counseling_sessions 최근 30일 KST 그룹)
-- `useStreakDays` 훅
+### 보존 (rev1 컴포넌트, 사용 안 함)
+- `LunaRoomGlimpse.tsx` (보존, unmount)
+- `DailyGreetingCard.tsx` (보존, unmount)
+- `RelationshipBadge.tsx` (보존, unmount)
+- `FirstMessageGuide.tsx` (보존, unmount)
+- `ChatEntryAmbience.tsx` (보존, unmount)
+- `LunaIdleCharacter.tsx` (rev2 에선 LunaGreetingMessage 안에서 sm 으로 활용 가능 — 또는 단순 정적 이미지 사용)
 
-### Phase D — `LunaRoomGlimpse`
-- 룸 배경 (이미 있는 ROOM_BG_IMAGES)
-- 시간대 오버레이
-- 날씨 effect (간단한 SVG 기반)
-- 탭 → 디오라마 모달
+→ 다음 PR 에서 정리 / 또는 즉시 삭제. 일단 이 PR 에선 보존.
 
-### Phase E — `LunaIdleCharacter`
-- breathing + blink + head-tilt anim (framer-motion)
-- activity 별 미세 동작 (sprite 추가 X, 1차는 emoji 풍선만)
-- mood 별 표정 (sprite 있으면 swap, 없으면 1차 skip)
+### 그대로 유지
+- `src/lib/haptic.ts` — 활용
+- `src/lib/audio.ts` — 활용
+- `src/hooks/useStreakDays.ts` — 활용
+- `src/app/api/luna-room/streak/route.ts` — 활용
+- `src/components/chat/ChatInput.tsx` (initialValue prop) — 활용
+- `opening.mp4` — 그대로
 
-### Phase F — `RelationshipBadge`
-- ageDays + memoryCount + streakDays 한 줄
-- intimacy + ageDays 결합 카피 변형
-- 100일 특별 처리
+---
 
-### Phase G — `DailyGreetingCard`
-- (v1 §3.1 그대로) 7 mood 그라데이션
-- typing-like 텍스트 등장
-- 10초 후 collapse
+## 9. Phase 별 구현 순서 (총 ~2.5시간)
 
-### Phase H — `FirstMessageGuide`
-- chip 카드화 (mini card)
-- mood + Day 기반 chip 풀
-- 클릭 anim (input 으로 빨려들어감)
+### Phase A — 데이터 풀 추가 (`whispers.ts`)
+- FOLLOWUP_BY_MOOD (7 mood × 3개 = 21개)
+- SMART_REPLIES (3 tier × 5개 + mood override 4개 = 19개)
+- pickFollowup / pickSmartReplies 헬퍼
+- tsc 0
 
-### Phase I — `ChatEntryAmbience`
-- mood/stage 별 파티클
-- WebGL 또는 multi radial-gradient 배경
-- prefers-reduced-motion 대응
+### Phase B — `LunaGreetingMessage` 작성
+- 카톡 버블 스타일 (왼쪽 정렬, rounded, 시간)
+- typing indicator (점 3개 통통)
+- 시퀀스 (typing → 메시지 → typing → 메시지)
+- onAllShown 콜백
+- mood/recent 별 카피 픽
 
-### Phase J — `EntryRitualOrchestrator`
-- 시퀀스 phase state machine
-- 각 단계 사운드/햅틱 트리거
-- 8초 시퀀스 끝나면 onComplete
+### Phase C — `SmartReplyBar` 작성
+- 가로 스크롤 chip
+- pickSmartReplies 활용
+- 클릭 → onChipSelect + 햅틱/사운드
+- 자동 페이드아웃
 
-### Phase K — `ChatContainer` 통합
-- 7 컴포넌트 마운트
-- liveState / streak / memory 데이터 가져오기
-- inputDraft + ChatInput initialValue
-- placeholder 다양화
+### Phase D — ChatContainer 재통합
+- rev1 컴포넌트 import / render 모두 제거
+- LunaGreetingMessage + SmartReplyBar 추가
+- readyForReply state
+- ChatInput 위 위치 조정
 
-### Phase L — `ChatInput` 최소 변경
-- initialValue prop
-- 내부 state 동기화
+### Phase E — EntryRitualOrchestrator 정리
+- ambience props 제거 (또는 default off)
+- 시퀀스 timing 갱신
 
-### Phase M — 검증
-- tsc 0 에러
-- 5세션 수동 테스트 (시간대 / 요일 / 친밀도 / age 다양)
-- 같은 날 2~3번 진입 차이 확인
-- chip 클릭 동작
-- 사운드/햅틱 모바일 / 데스크톱
-- prefers-reduced-motion
-- 무음 모드 / 햅틱 비활성 환경
+### Phase F — 검증
+- tsc 0 / lint 0 errors
+- 5세션 수동 테스트 (시간대 / 요일 / 친밀도 다양)
+- 같은 날 2~3번 진입 차이 확인 (인사 + chip 변화)
+- chip 클릭 → ChatInput 채워짐
+- 직접 입력 → chip 사라짐
+- 모바일 가로 스크롤
+- typing indicator 자연스러움
 
 ### 종합
-- [ ] MEMORY.md 에 v112 추가
-- [ ] git commit (Phase A~M)
+- [ ] MEMORY.md 갱신 (rev2 정보)
+- [ ] git commit (rev2 스코프)
 - [ ] 사용자 검수
 
 ---
 
-## 10. UI 스케치 (예시)
+## 10. UI 스케치 (rev2)
 
-### 10.1 진입 1.6초 시점
-
-```
-┌──────────────────────────────────────────┐
-│ ← 루나 상담실 ☕                       ⚙ │
-├──────────────────────────────────────────┤
-│                                          │
-│  ┌── 🪟 LunaRoomGlimpse ──────────────┐  │
-│  │  ☀ ╱창문╲   📚책장   🍵차상       │  │
-│  │  ─────────────────────             │  │
-│  └────────────────────────────────────┘  │
-│                                          │
-│   ✦ 13일째 함께 · 추억 7개 · 🔥 5일      │  ← Badge
-│                                          │
-│  ✦ ·  ✧  ·       (배경 파티클 흐름)     │
-│       ·                                  │
-│                                          │
-│  ┌── DailyGreetingCard ────────────────┐ │
-│  │ 🦊 루나 · bright                    │ │
-│  │ ☕ 차 마시는 중                     │ │
-│  │ ─────                              │ │
-│  │ "왔어? 나 방금                     │ │
-│  │  너 생각하던 참이었어"             │ │
-│  └────────────────────────────────────┘ │
-│                                          │
-│  (영상 곧 등장)                          │
-│                                          │
-├──────────────────────────────────────────┤
-│ [   한 줄만 적어봐 ✨   ]      🎤  +  ➤ │
-└──────────────────────────────────────────┘
-```
-
-### 10.2 진입 7.5초 시점 (영상 끝, chip 등장)
+### 10.1 영상 재생 중 (~3초)
 
 ```
-┌──────────────────────────────────────────┐
-│ ← 루나 상담실 ☕                       ⚙ │
-├──────────────────────────────────────────┤
-│                                          │
-│  ┌── 🪟 Room ───┐                        │
-│  │ (compact)    │                        │
-│  └──────────────┘                        │
-│   ✦ 13일째 ·  추억 7개 · 🔥 5일          │
-│                                          │
-│  ┌── DailyGreeting ────┐  🦊 (idle)      │
-│  │ "왔어? 나 방금..."  │  눈깜빡         │
-│  └────────────────────┘  헤드 틸트       │
-│                                          │
-│  [영상 자리]                              │
-│                                          │
-│  ┌── FirstMessageGuide ─────────────────┐│
-│  │ ✦                                    ││
-│  │  한 줄만 적어봐.                    ││
-│  │  거기서부터 시작하자                ││
-│  │                          — 루나 🦊  ││
-│  │                                       ││
-│  │ ┌─💕 좋은 사람 만났는데 헷갈려─┐    ││
-│  │ │  썸/연애 시작                │    ││
-│  │ └──────────────────────────────┘    ││
-│  │ ┌─🌸 썸 타는 사람 애매해──────┐    ││
-│  │ │  썸/연애 시작                │    ││
-│  │ └──────────────────────────────┘    ││
-│  │ ┌─✨ 데이트 어디 갈지─────────┐    ││
-│  │ │  데이트                      │    ││
-│  │ └──────────────────────────────┘    ││
-│  │ ┌─☕ 그냥 오늘 얘기하고 싶어──┐    ││
-│  │ │  일상                        │    ││
-│  │ └──────────────────────────────┘    ││
-│  └─────────────────────────────────────┘│
-│                                          │
-├──────────────────────────────────────────┤
-│ [   한 줄만 적어봐 ✨   ]      🎤  +  ➤ │
-└──────────────────────────────────────────┘
+┌──────────────────────────────────────┐
+│ ← 루나                            ⓘ  │
+├──────────────────────────────────────┤
+│                            오늘 ──── │
+│                                      │
+│  🦊 [opening.mp4]                    │
+│       (영상 재생 중)                  │
+│                                      │
+├──────────────────────────────────────┤
+│ [한 줄만 적어봐 ✨]      🎤  +  ➤   │
+└──────────────────────────────────────┘
 ```
 
-### 10.3 chip 클릭 후
+### 10.2 영상 끝나고 typing (4.0s)
 
 ```
-┌──────────────────────────────────────────┐
-│ (Room + Badge + Greeting 그대로)         │
-│                                          │
-│  🦊 (살짝 미소 — 탭 반응)                │
-│                                          │
-│  (영상 자리)                              │
-│                                          │
-│  (Guide 카드 페이드 아웃 0.3s)            │
-│                                          │
-├──────────────────────────────────────────┤
-│ [💕 좋은 사람 만났는데 헷갈려]      ➤    │  ← 자동 채워짐
-└──────────────────────────────────────────┘
+┌──────────────────────────────────────┐
+│ ← 루나                            ⓘ  │
+├──────────────────────────────────────┤
+│                            오늘 ──── │
+│                                      │
+│  🦊 [opening.mp4]                    │
+│                            오후 3:00 │
+│  🦊 ╭──────╮                        │
+│     │ ●●● │                          │
+│     ╰──────╯                        │
+│                                      │
+├──────────────────────────────────────┤
+│ [한 줄만 적어봐 ✨]      🎤  +  ➤   │
+└──────────────────────────────────────┘
 ```
 
----
+### 10.3 첫 메시지 도착 (4.4s)
 
-## 11. 측정 지표
+```
+┌──────────────────────────────────────┐
+│ ← 루나                            ⓘ  │
+├──────────────────────────────────────┤
+│                            오늘 ──── │
+│                                      │
+│  🦊 [opening.mp4]                    │
+│                            오후 3:00 │
+│  🦊 ╭────────────────────╮          │
+│     │ 왔어? 나 방금 너   │          │
+│     │ 생각하던 참인데    │          │
+│     ╰────────────────────╯          │
+│                            오후 3:01 │
+│                                      │
+├──────────────────────────────────────┤
+│ [한 줄만 적어봐 ✨]      🎤  +  ➤   │
+└──────────────────────────────────────┘
+```
 
-### 11.1 정량
+### 10.4 두 번째 메시지 + SmartReplyBar (6.0s)
 
-| 지표 | Before (v111) | After (v112 목표) | 측정 방법 |
-|------|---------------|-------------------|----------|
-| 진입~첫 메시지 평균 시간 | ~28초 | ~10초 | `messages_first_inserted_at - session_created_at` |
-| 첫 메시지 포기율 (1분 무입력 이탈) | ~18% | <5% | session 생성 후 message 0개 ratio |
-| 첫 메시지 길이 평균 | ~12자 | ~25자 (chip 영향) | message char count |
-| Chip 사용률 | 0% | >40% | chip click event / total first messages |
-| DAU/MAU (반김 효과) | baseline | +20% | 일별 active user / 월별 |
-| 7일 retention | baseline | +12% | day 1 → day 7 |
-| 사운드 토글 활성률 | — | >70% | localStorage |
+```
+┌──────────────────────────────────────┐
+│ ← 루나                            ⓘ  │
+├──────────────────────────────────────┤
+│                            오늘 ──── │
+│                                      │
+│  🦊 [opening.mp4]                    │
+│                            오후 3:00 │
+│  🦊 ╭────────────────────╮          │
+│     │ 왔어? 나 방금 너   │          │
+│     │ 생각하던 참인데    │          │
+│     ╰────────────────────╯          │
+│  🦊 ╭───────────╮                   │
+│     │ 오늘 어땠 │                    │
+│     │ 어 ㅠㅠ   │                    │
+│     ╰───────────╯                   │
+│                            오후 3:01 │
+│                                      │
+│ [응 잘 지냈어 ㅎ] [좀 힘들어ㅠ] [..] │ ← Smart Reply
+├──────────────────────────────────────┤
+│ [한 줄만 적어봐 ✨]      🎤  +  ➤   │
+└──────────────────────────────────────┘
+```
 
-### 11.2 정성 (사용자 피드백 수집)
+### 10.5 chip 클릭 후
 
-- "친구 같다" 반응 빈도
-- "예쁘다" / "퀄리티 좋다" 반응
-- "AI 같다" 반응 (감소 목표)
-- 매일 들어오는지
-
-### 11.3 자동 측정 코드 추가 필요
-
-```ts
-// chip 클릭 추적
-analytics.track('chat_chip_selected', {
-  session_id, chip_text, chip_category, mood, day_count
-});
-
-// 첫 메시지 시간 추적
-analytics.track('first_message_sent', {
-  session_id, time_to_send_ms, used_chip, mood
-});
-
-// 진입 ritual 완료
-analytics.track('entry_ritual_complete', {
-  session_id, sound_enabled, haptic_enabled, ambience_enabled
-});
+```
+┌──────────────────────────────────────┐
+│ (위 카톡 메시지 그대로 — 분위기 유지)│
+├──────────────────────────────────────┤
+│                                      │
+│  (SmartReplyBar 페이드아웃)           │
+│                                      │
+├──────────────────────────────────────┤
+│ [좀 힘들어 ㅠ |                ]  ➤  │ ← 채워짐 + 포커스
+└──────────────────────────────────────┘
 ```
 
 ---
 
-## 12. 비파괴 / 롤백
+## 11. 디자인 결정 (Why) — rev1 vs rev2
 
-### 12.1 비파괴
+### Q1. 왜 rev1 의 카드를 다 빼나?
 
-- `opening.mp4` 그대로
-- placeholder 그대로 (mood 별 다양화는 추가)
-- mood/whispers 시스템 그대로 (풀만 추가)
-- 룸 디오라마(v100) 그대로 (이미지만 차용)
-- 친밀도 시스템 그대로
-- ChatInput API 그대로 (`initialValue` 옵셔널만)
+A. rev1 은 *상담 서비스 앱* 위젯들 (룸 단면 / 인사 카드 / 배지 / chip 카드). *카톡 친구 톡방* 에 카드 위젯은 없음. *진짜 친구* 가 카드로 인사하지 않음 — 그냥 카톡 메시지 보냄.
 
-### 12.2 롤백
+### Q2. 왜 rev2 가 더 *적은 게 더 강하다*?
 
-각 컴포넌트에 `// 🆕 v112` 주석. feature flag 가능:
-```ts
-const ENABLE_V112_RITUAL = process.env.NEXT_PUBLIC_V112_RITUAL !== '0';
-{messages.length === 0 && ENABLE_V112_RITUAL ? (
-  <EntryRitualOrchestrator>...</EntryRitualOrchestrator>
-) : (
-  <video src="/opening.mp4" />
-)}
-```
+A. *진짜 친구 톡방* 의 미덕은 **부재의 미학**. 알림 X, 배지 X, 카드 X, 카테고리 X. 그저 **친구가 카톡 보냈고, 나는 답장한다**. 그게 다.
 
-문제 시 env 1개로 즉시 v111 복귀.
+### Q3. 왜 typing indicator 가 핵심?
 
-### 12.3 Progressive Rollout
+A. *Wysa, Replika, ChatGPT 모범 사례* — typing indicator 가 대화 리듬을 *살아있게* 만듦. 메시지가 한 번에 다 떠있는 카드 X, *친구가 지금 적고 있다* 는 감각.
 
-- 1주차: 50% A/B (v111 vs v112)
-- 측정 후 우열 명확하면 100%
+### Q4. 왜 Smart Reply chip 은 작게?
 
----
+A. *카카오톡 답장 추천* / *iOS 18 Smart Reply* / *Gmail 답장 추천* 모두 ChatInput 위 작은 가로 버튼. *카드 형태* 의 chip 은 결정 부담을 키움. 작은 chip 은 *부담 없는 시작점*.
 
-## 13. 디자인 결정 (Why)
+### Q5. 왜 카테고리 라벨 ("썸/연애 시작") 빼나?
 
-### Q1. 왜 룸 글림프스를 추가하나? 영상 위에 더 작은 거 또 넣으면 복잡하지 않나?
+A. *진짜 친구* 가 답장 추천에 "썸/연애 시작" 같은 라벨 안 달음. 카테고리 라벨은 *서비스 메뉴* 느낌. *답장 텍스트 자체* 만 보여주기.
 
-A. 글로벌 사례 (Bondee) 의 핵심 인사이트는 **"공간이 친밀감을 만든다"** — 단순 채팅 폼은 정보 교환 / 룸 단면이 있으면 *"방 들어왔다"* 감각. 110px 정도라 채팅 침해 X. 그리고 v100 디오라마 자산 이미 있음 — 이걸 진입에 안 쓰면 낭비.
+### Q6. 왜 룸 / 배지 / mood 라벨 빼나?
 
-### Q2. 왜 LunaIdleCharacter 가 따로 필요한가? 영상에 캐릭터 있는데?
+A.
+- **룸** — 카톡 톡방 안에 친구 방 구조도 X
+- **배지** — Snapchat streak 도 톡방 안 작은 표시이지 *큰 알림 배지* X
+- **mood 라벨** ("루나 · bright") — 진짜 친구가 자기 mood 영어로 표시 X
 
-A. 영상은 3초 끝남. 그 후 화면에 루나 자체가 사라짐. **Finch** 의 핵심 인사이트: *눈 깜빡 / 헤드 틸트 / 호흡* 같은 미세 anim 이 캐릭터를 "살아있게" 만듦. 단 한 번 영상 보고 끝나는 게 아니라 *계속 살아있는* 친구가 옆에 있는 감각.
+→ 이 모든 게 *데이터 의미는 있지만 UI 노출은 X*. 데이터는 그대로 활용 (인사 / chip 톤 변화) — 단지 *라벨로 노출 안 함*.
 
-### Q3. 왜 사운드/햅틱까지 넣나? 과한 거 아닌가?
+### Q7. ageDays / streak 데이터는 어디서 활용?
 
-A. **Apple WWDC "Harmony" 원칙** — 시각/청각/촉각이 일관되게 작동할 때 가장 강한 인상. 진입 chime + light haptic 0.3초는 **무의식 인식** 을 만들어 "여기 들어왔다" 감각 강화. 사용자 옵션으로 끌 수 있게.
+A. **라벨로 노출 X**, 하지만 **인사 / chip 톤** 에 녹임:
+- ageDays >= 100 → 100일 모드 카피 활성
+- streak >= 5 → "오늘도 와줘서 고마워 🥹" 같은 톤
+- recent24h >= 3 → "괜찮아? 오늘 자꾸 와서" 톤
 
-### Q4. 왜 RelationshipBadge 를 첫 진입에 넣나? Streak 강요 같지 않나?
+→ *데이터는 백엔드에서 톤을 결정*. *프론트에 ageDays 숫자 노출 X*.
 
-A. **Snapchat streak 효과 (40~60% DAU 증가)** + **Finch investment loop**. 단, Snapchat 처럼 끊기면 충격받게 X — 우리는 **누적감만** (끊어져도 페널티 X). "13일째 함께" 는 *압박* 이 아니라 *축적된 관계의 자랑*.
+### Q8. 사운드 / 햅틱 그대로?
 
-### Q5. 왜 chip 을 카드화하나? 텍스트만으로도 되지 않나?
-
-A. **ChatGPT custom GPT 의 conversation starter** vs **Pi 의 미니멀** 비교 — 카드화가 *결정 부담을 낮춤*. 카드 하나가 "이걸 누르면 이런 얘기로 시작" 이라는 *예고편* 역할. 텍스트만 있으면 "이걸 그대로 보내야 하나" 망설임.
-
-### Q6. 왜 Day 별 chip 풀 변화?
-
-A. **Finch Progressive Discovery** — Day 1 의 사용자와 Day 30 의 사용자는 다른 사람. Day 1 에 "솔직히 말하면…" chip 뜨면 부조화. *사용자와 함께 chip 이 자라남*.
-
-### Q7. 왜 모든 걸 8초 안에? 너무 길지 않나?
-
-A. 사용자가 "보면서 적응" 하는 시간. 8초는 *영상 3.5초 + 영상 후 chip 0.5초 = 4초의 능동 시간 + 진입 의식 4초*. 사용자가 1초도 답답함 없이 *반김 받는* 감각.
-
-### Q8. 왜 인텐시브한 시퀀스보다 가벼운 거 안 하나?
-
-A. v1 plan (3 컴포넌트) 으로는 *그저 그런 진화*. 사용자 요구는 **"진짜 잘 만든 느낌"** — 글로벌 사례 (Replika 길고 몰입형, Finch 점진적 마법, Bondee 공간감, Pi 부드러움) 의 *합집합* 이 필요.
+A. 그대로. 단 *훨씬 절제*:
+- 진입 chime → tiny `.light` 한 번
+- 메시지 도착 → tiny ping (카톡 알림음 같은 느낌, 아주 작게)
+- chip 클릭 → soft pop
+- 실제 카톡 보다 *50% 작은 볼륨*
 
 ---
 
-## 14. 외부 출처 (리서치 종합)
+## 12. 측정 지표 (rev2)
 
-- **Replika**: https://replika.com / Avatar customization, relationship roles, monetization
-- **Finch**: Sophie Pilley analysis — purposeful enchantment, idle anim, investment loop
-- **Pi (Inflection)**: Real-Time Voice Mode 2.0, tone adaptation, soft conversational
-- **Zeta (Scatter Lab)**: 87% 10~20대, snapshot 기능, 캐릭터 분기 스토리
-- **(Not Boring) Weather**: mood skin, artist collab, 3D + sound
-- **Bondee**: 3D 룸 honeycomb tessellation, Animal Crossing/Habbo aesthetic
-- **Snapchat / Paired / UpLuv**: streak + milestone (40~60% DAU)
-- **ChatGPT/Claude Custom GPT**: conversation starter chip
-- **Apple WWDC Audio-Haptic**: Harmony principle, Taptic Engine
-- **Grainient**: WebGL2 organic gradient
-- **Pratt IxD Finch teardown**: 따뜻한 온보딩, 마이크로 반사
-- **2025 Mobile Haptic Guide**: UIImpactFeedbackGenerator + audio sync
+| 지표 | rev1 (지금) | rev2 (목표) |
+|------|-----------|-----------|
+| 진입~첫 메시지 시간 | 측정 X | <12초 |
+| 1분 무입력 이탈 | 추정 ~15% | <6% |
+| Smart Reply 사용률 | (rev1 chip ≈ 0%) | >35% |
+| 첫 메시지 길이 평균 | ~12자 | ~22자 (chip 영향) |
+| "친구 같다" 피드백 | 가끔 | 자주 |
+| "AI 같다" 피드백 | 자주 (rev1) | 드물게 |
+| "예쁘다" / "퀄리티" 피드백 | (rev1 답답함) | 자주 |
 
 ---
 
-## 15. 체크리스트 (구현 시 따라가는 순서)
+## 13. 비파괴 / 롤백
 
-### Phase A — 데이터 풀
-- [ ] `whispers.ts` WHISPERS_BY_REVISIT (15개)
-- [ ] `whispers.ts` CHIP_POOLS_BY_MOOD_DAY (84개)
-- [ ] pickGreeting, pickChipPool 헬퍼
+### 비파괴
+- opening.mp4 그대로
+- 기존 ChatInput / 헤더 / 메시지 영역 그대로
+- mood/whispers 시스템 그대로
+- haptic / audio / streak 라이브러리 그대로
+
+### 롤백
+- 환경변수 `NEXT_PUBLIC_V112_REV2=0` 토글로 rev1 복귀 (선택)
+- rev1 의 7 컴포넌트 파일 보존 — 다음 라운드에서 import 부활 가능
+- 이번 PR 의 변경은 ChatContainer 분기 + 신규 2 컴포넌트 + whispers 풀 추가만 → revert 단순
+
+---
+
+## 14. 외부 출처 (재검색 종합)
+
+- iMessage / WhatsApp / Telegram / KakaoTalk: 메시지 버블 표준 (rounded-tl-[4px] 등)
+- Reppley (한국): "카톡 친구 같은 AI" 컨셉
+- Wysa: 펭귄 페르소나 + 여러 짧은 메시지 + typing
+- Replika / Pi: 친구 톤 + 부드러운 음성
+- Snapchat: 13~24 75% / 친한 친구 사적 톡
+- Smart Reply (Google/Apple): ChatInput 위 작은 가로 chip
+- 챗봇 환영 메시지 모범사례: 짧은 메시지 + typing indicator + 명확한 다음 단계
+
+---
+
+## 15. 체크리스트
+
+### Phase A
+- [ ] FOLLOWUP_BY_MOOD (7 × 3 = 21)
+- [ ] SMART_REPLIES (3 tier × 5)
+- [ ] SMART_REPLIES_MOOD_OVERRIDE
+- [ ] pickFollowup / pickSmartReplies
 - [ ] tsc 0
 
-### Phase B — 사운드/햅틱 헬퍼
-- [ ] `lib/haptic.ts`
-- [ ] `lib/audio.ts`
-- [ ] 사운드 파일 5개 받아서 `public/sounds/`
+### Phase B (LunaGreetingMessage)
+- [ ] 카톡 버블 스타일
+- [ ] typing indicator
+- [ ] 메시지 시퀀스 (1~2개)
+- [ ] mood/recent 카피 픽
+- [ ] onAllShown 콜백
 
-### Phase C — useStreakDays 훅 + API
-- [ ] `/api/luna-room/streak` route
-- [ ] `useStreakDays` 훅
+### Phase C (SmartReplyBar)
+- [ ] 가로 스크롤 chip
+- [ ] pickSmartReplies 활용
+- [ ] 클릭 → onChipSelect + 햅틱 + pop
+- [ ] 자동 페이드아웃
 
-### Phase D — LunaRoomGlimpse
-- [ ] 컴포넌트 + 시간대 오버레이
-- [ ] 날씨 effect SVG
-- [ ] tsc 0
+### Phase D (ChatContainer)
+- [ ] rev1 7 컴포넌트 import 제거
+- [ ] rev1 7 컴포넌트 render 블록 제거
+- [ ] 영상 분기 단순화
+- [ ] LunaGreetingMessage 마운트
+- [ ] SmartReplyBar 마운트 (ChatInput 위)
+- [ ] readyForReply state
 
-### Phase E — LunaIdleCharacter
-- [ ] breathing + blink + head-tilt
-- [ ] activity 별 emoji 풍선
-- [ ] tap 반응 + 햅틱
+### Phase E
+- [ ] EntryRitualOrchestrator 시퀀스 timing 갱신
+- [ ] ambience props 제거
 
-### Phase F — RelationshipBadge
-- [ ] 누적감 한 줄
-- [ ] intimacy + ageDays 카피 변형
-- [ ] 100일 특별 처리
-
-### Phase G — DailyGreetingCard
-- [ ] 7 mood 그라데이션
-- [ ] typing-like 텍스트
-- [ ] 10초 collapse
-
-### Phase H — FirstMessageGuide
-- [ ] chip 카드화
-- [ ] Day 별 chip 풀
-- [ ] 클릭 anim (input 으로 빨려)
-
-### Phase I — ChatEntryAmbience
-- [ ] mood/stage 파티클
-- [ ] organic gradient 배경
-- [ ] reduced motion
-
-### Phase J — EntryRitualOrchestrator
-- [ ] 시퀀스 phase state
-- [ ] 사운드/햅틱 트리거
-
-### Phase K — ChatContainer 통합
-- [ ] 7 컴포넌트 마운트
-- [ ] 데이터 가져오기
-- [ ] inputDraft state
-
-### Phase L — ChatInput 변경
-- [ ] initialValue prop
-- [ ] mood placeholder
-
-### Phase M — 검증
-- [ ] tsc 0
-- [ ] 모바일/데스크톱 테스트
-- [ ] 시간대/요일/친밀도 다양 테스트
-- [ ] reduced motion
-- [ ] 무음 모드
+### Phase F (검증)
+- [ ] tsc 0 / lint 0 errors
+- [ ] 5세션 수동 테스트
+- [ ] 모바일 / 데스크톱
+- [ ] 사운드 / 햅틱 동작
+- [ ] 가로 스크롤
+- [ ] typing 자연스러움
 
 ### 종합
-- [ ] MEMORY.md
+- [ ] MEMORY.md 갱신
 - [ ] git commit
 - [ ] 사용자 검수
 
 ---
 
 **작성자**: Claude (Opus 4.7 1M)
-**리서치**: Replika, Finch, Pi, Zeta, Bondee, (Not Boring) Weather, Snapchat, ChatGPT/Claude, Apple WWDC, Grainient
-**검수**: 사용자 컨펌 대기 → 컨펌 후 Phase A~M 순차 구현
+**rev2 핵심**: 카드 → 메시지 버블 / chip 카드 → Smart Reply 작은 chip / 룸·배지·라벨 → 제거
+**검수**: 사용자 컨펌 대기 → 컨펌 후 Phase A~F 순차 구현

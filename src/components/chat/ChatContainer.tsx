@@ -55,14 +55,12 @@ import LunaRetrying from './LunaRetrying';
 // 🆕 v41: 친밀도 레벨업 축하 팝업
 import IntimacyLevelUp from '@/components/intimacy/IntimacyLevelUp';
 import IntimacyDeltaHint from '@/components/intimacy/IntimacyDeltaHint';
-// 🆕 v112: 진입 의식 (Daily Ritual) — 7대 컴포넌트
-import LunaRoomGlimpse from './LunaRoomGlimpse';
-import LunaIdleCharacter from './LunaIdleCharacter';
-import RelationshipBadge from './RelationshipBadge';
-import DailyGreetingCard from './DailyGreetingCard';
-import FirstMessageGuide from './FirstMessageGuide';
-import ChatEntryAmbience from './ChatEntryAmbience';
+// 🆕 v112-rev2: 카톡 친구 톡방 — 메시지 버블 + Smart Reply
+//   rev1 의 카드 7개 (RoomGlimpse / GreetingCard / Badge / Guide / Ambience / IdleCharacter / Orchestrator-w-ambience)
+//   는 사용 중단 (파일 보존, 롤백 가능). EntryRitualOrchestrator 만 시퀀스/사운드 용으로 유지.
 import EntryRitualOrchestrator from './EntryRitualOrchestrator';
+import LunaGreetingMessage from './LunaGreetingMessage';
+import SmartReplyBar from './SmartReplyBar';
 import { useStreakDays } from '@/hooks/useStreakDays';
 import {
   computeLiveStateLocal,
@@ -72,7 +70,6 @@ import {
   getAgeDays,
   getLifeStageInfo,
 } from '@/lib/luna-life';
-import { pickGreeting } from '@/lib/luna-life/whispers';
 import { preloadSounds } from '@/lib/audio';
 // 🆕 v35: 모드별 SOLVE 이벤트 UI
 import ToneSelector from './events/ToneSelector';
@@ -248,20 +245,11 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
     });
   }, [lunaAgeDays, lifeStageInfo.stage, entry.recentSessionCount24h]);
 
-  // 인사말 픽 (whispers 풀 기반, 결정형)
-  const greetingWhisper = useMemo(() => {
-    const daySeed =
-      Math.floor((Date.now() + 9 * 60 * 60 * 1000) / (24 * 60 * 60 * 1000)) +
-      lunaAgeDays;
-    return pickGreeting({
-      mood: liveState.mood,
-      recentSessionCount24h: entry.recentSessionCount24h,
-      seed: daySeed,
-    });
-  }, [liveState.mood, entry.recentSessionCount24h, lunaAgeDays]);
-
-  // 🆕 v112: chip 클릭 → ChatInput 자동 채우기
+  // 🆕 v112-rev2: chip 클릭 → ChatInput 자동 채우기
   const [inputDraft, setInputDraft] = useState<string | undefined>(undefined);
+
+  // 🆕 v112-rev2: LunaGreetingMessage 도착 완료 후 SmartReplyBar 등장
+  const [readyForReply, setReadyForReply] = useState(false);
   const [xrayResult, setXrayResult] = useState<XRayResult | null>(null);
   const [xrayLoading, setXrayLoading] = useState(false);
   const [isInsightCollapsed, setIsInsightCollapsed] = useState(false);
@@ -956,61 +944,31 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
             </div>
           )}
 
-          {/* 🆕 v112: 루나 — Daily Ritual 진입 의식 */}
+          {/* 🆕 v112-rev2: 카톡 친구 톡방 — 영상 + 메시지 버블 (카드 X) */}
           {messages.length === 0 && activePersona !== 'tarot' && (
-            <EntryRitualOrchestrator
-              ambienceMood={liveState.mood}
-              ambienceStage={lifeStageInfo.stage}
-            >
-              {/* ① 공간감 — 루나 방 단면 */}
-              <LunaRoomGlimpse
-                stage={lifeStageInfo.stage}
-                mood={liveState.mood}
-                timeBand={liveState.timeBand}
-                weather={liveState.weather}
-                ageDays={lunaAgeDays}
-              />
-
-              {/* ⑤ 누적감 — Relationship Badge */}
-              <div className="flex justify-center mb-3">
-                <RelationshipBadge
-                  ageDays={lunaAgeDays}
-                  intimacyLevel={intimacyDerived?.level ?? 0}
-                  memoryCount={entry.memoryCount}
-                  streakDays={entry.streak}
-                />
-              </div>
-
-              {/* ③ 분위기 — Daily Greeting Card */}
-              <DailyGreetingCard
-                mood={liveState.mood}
-                activity={liveState.activity}
-                whisper={greetingWhisper}
-                timeBand={liveState.timeBand}
-                weather={liveState.weather}
-              />
-
-              {/* ② 생명감 + 영상: 카톡 버블 옆에 idle character */}
-              <div className="flex flex-col px-2 mt-1">
+            <EntryRitualOrchestrator>
+              {/* 영상 — 카톡 비디오 메시지처럼 */}
+              <div className="flex flex-col px-2 mt-4">
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95, y: 10 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
-                  transition={{ duration: 0.4, ease: 'easeOut', delay: 0.6 }}
+                  transition={{ duration: 0.4, ease: 'easeOut' }}
                   className="flex justify-start mb-3 relative"
                 >
-                  {/* Idle Character (살아있는 루나) */}
                   <div className="relative mr-2 flex-shrink-0 mt-1">
-                    <LunaIdleCharacter
-                      activity={liveState.activity}
-                      mood={liveState.mood}
-                      size="md"
-                    />
+                    <div className="w-10 h-10 rounded-[16px] bg-[#F4EFE6] flex items-center justify-center overflow-hidden border border-[#EACbb3]">
+                      <img
+                        src="/luna_fox_transparent.webp"
+                        alt="루나"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
                   </div>
 
                   <div className="flex flex-col items-start max-w-[75%]">
                     <span className="text-[12px] text-[#5D4037] mb-1 ml-1 font-bold">루나</span>
 
-                    {/* Video Bubble (기존 그대로) */}
+                    {/* Video Bubble */}
                     <div className="relative rounded-[20px] rounded-tl-[4px] overflow-hidden bg-[#F4EFE6] shadow-sm border border-[#D5C2A5]">
                       <video
                         src="/opening.mp4"
@@ -1030,13 +988,14 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
                 </motion.div>
               </div>
 
-              {/* ④ 대화 시작 — First Message Guide (영상 끝나면 등장) */}
-              <FirstMessageGuide
+              {/* 영상 끝나면 → 카톡 인사 메시지 1~2개 도착 */}
+              <LunaGreetingMessage
                 mood={liveState.mood}
-                ageDays={lunaAgeDays}
+                recentSessionCount24h={entry.recentSessionCount24h}
                 intimacyLevel={intimacyDerived?.level ?? 0}
-                onChipSelect={(text) => setInputDraft(text)}
-                visible={openingVideoEnded}
+                ageDays={lunaAgeDays}
+                startSequence={openingVideoEnded}
+                onAllShown={() => setReadyForReply(true)}
               />
             </EntryRitualOrchestrator>
           )}
@@ -1316,6 +1275,18 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
                   </span>
                 </div>
               )}
+              {/* 🆕 v112-rev2: ChatInput 바로 위 Smart Reply chip (가로) */}
+              {activePersona !== 'tarot' && (
+                <SmartReplyBar
+                  mood={liveState.mood}
+                  ageDays={lunaAgeDays}
+                  intimacyLevel={intimacyDerived?.level ?? 0}
+                  recentSessionCount24h={entry.recentSessionCount24h}
+                  visible={messages.length === 0 && readyForReply && !inputDraft}
+                  onChipSelect={(text) => setInputDraft(text)}
+                />
+              )}
+
               <ChatInput
                 onSend={sendMessage}
                 onImageAttach={activePersona !== 'tarot' ? handleImageAttach : undefined}
