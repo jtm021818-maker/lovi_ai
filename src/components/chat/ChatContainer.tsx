@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import MessageBubble from './MessageBubble';
 // 🆕 v88: 루나 대화형 "같이 찾기" 블록 렌더러
@@ -55,6 +55,25 @@ import LunaRetrying from './LunaRetrying';
 // 🆕 v41: 친밀도 레벨업 축하 팝업
 import IntimacyLevelUp from '@/components/intimacy/IntimacyLevelUp';
 import IntimacyDeltaHint from '@/components/intimacy/IntimacyDeltaHint';
+// 🆕 v112: 진입 의식 (Daily Ritual) — 7대 컴포넌트
+import LunaRoomGlimpse from './LunaRoomGlimpse';
+import LunaIdleCharacter from './LunaIdleCharacter';
+import RelationshipBadge from './RelationshipBadge';
+import DailyGreetingCard from './DailyGreetingCard';
+import FirstMessageGuide from './FirstMessageGuide';
+import ChatEntryAmbience from './ChatEntryAmbience';
+import EntryRitualOrchestrator from './EntryRitualOrchestrator';
+import { useStreakDays } from '@/hooks/useStreakDays';
+import {
+  computeLiveStateLocal,
+  type LunaLiveState,
+} from '@/lib/luna-life/mood';
+import {
+  getAgeDays,
+  getLifeStageInfo,
+} from '@/lib/luna-life';
+import { pickGreeting } from '@/lib/luna-life/whispers';
+import { preloadSounds } from '@/lib/audio';
 // 🆕 v35: 모드별 SOLVE 이벤트 UI
 import ToneSelector from './events/ToneSelector';
 import DraftWorkshop from './events/DraftWorkshop';
@@ -200,6 +219,49 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
   const [userOverrideScenario, setUserOverrideScenario] = useState<RelationshipScenario | null>(null);
   const [isThoughtHistoryOpen, setIsThoughtHistoryOpen] = useState(false);
   const [openingVideoEnded, setOpeningVideoEnded] = useState(false);
+
+  // 🆕 v112: 진입 의식 데이터 (streak / 24h 세션수 / birthDate / memoryCount)
+  const entry = useStreakDays();
+
+  // 🆕 v112: 사운드 미리 로드 (autoplay 정책 회피 위해 사용자 인터랙션 전에 시도)
+  useEffect(() => {
+    preloadSounds();
+  }, []);
+
+  // 🆕 v112: 루나 라이프 컨텍스트 (ageDays + stage + liveState)
+  const lunaAgeDays = useMemo(() => {
+    if (!entry.birthDate) return 0;
+    return getAgeDays(new Date(entry.birthDate));
+  }, [entry.birthDate]);
+
+  const lifeStageInfo = useMemo(() => getLifeStageInfo(lunaAgeDays), [lunaAgeDays]);
+
+  // liveState — mood / activity / timeBand / weather (결정형, 외부 호출 X)
+  const liveState: LunaLiveState = useMemo(() => {
+    return computeLiveStateLocal({
+      ageDays: lunaAgeDays,
+      stage: lifeStageInfo.stage,
+      serverNowMs: Date.now(),
+      recentSessionWithin24h: entry.recentSessionCount24h > 0,
+      recentMessageCount24h: 0, // 정확한 카운트 필요 X (mood 영향 미미)
+      isDeceased: lifeStageInfo.stage === 'star',
+    });
+  }, [lunaAgeDays, lifeStageInfo.stage, entry.recentSessionCount24h]);
+
+  // 인사말 픽 (whispers 풀 기반, 결정형)
+  const greetingWhisper = useMemo(() => {
+    const daySeed =
+      Math.floor((Date.now() + 9 * 60 * 60 * 1000) / (24 * 60 * 60 * 1000)) +
+      lunaAgeDays;
+    return pickGreeting({
+      mood: liveState.mood,
+      recentSessionCount24h: entry.recentSessionCount24h,
+      seed: daySeed,
+    });
+  }, [liveState.mood, entry.recentSessionCount24h, lunaAgeDays]);
+
+  // 🆕 v112: chip 클릭 → ChatInput 자동 채우기
+  const [inputDraft, setInputDraft] = useState<string | undefined>(undefined);
   const [xrayResult, setXrayResult] = useState<XRayResult | null>(null);
   const [xrayLoading, setXrayLoading] = useState(false);
   const [isInsightCollapsed, setIsInsightCollapsed] = useState(false);
@@ -498,6 +560,22 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
       sendMessage(' ', meta);
     } else {
       sendMessage(text, meta || { source: 'suggestion' });
+    }
+
+    // 🆕 v110.1: 마무리 의도 표현 → 루나 마지막 응답 끝나면 세션 자동 종료
+    //   GrowthReport "내일 또 올게 고마워!" / WarmWrap 마무리 CTA 가 그냥 메시지로
+    //   처리되어 complete/route.ts 호출 누락 → session_summary / luna_memories /
+    //   v110 메모리 파이프라인 모두 미발동 버그 수정.
+    //
+    //   completeSessionNow 자체에 inFlight/completed/turn<2 guard 있어 중복 안전.
+    //   페이지를 5초 안에 떠나도 useSessionAutoComplete 의 beforeunload/pagehide 가 받쳐줌.
+    const isFarewellIntent =
+      meta?.source === 'growth_report_promise' ||
+      (meta?.source as string) === 'warm_wrap' ||
+      // 🆕 v110.2: SESSION_SUMMARY 하단 세션종료 버튼
+      (meta?.source as string) === 'session_summary_end';
+    if (isFarewellIntent) {
+      setTimeout(() => completeSessionNow(), 5000);
     }
   }
 
@@ -878,44 +956,89 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
             </div>
           )}
 
-          {/* 루나: 오프닝 영상 */}
+          {/* 🆕 v112: 루나 — Daily Ritual 진입 의식 */}
           {messages.length === 0 && activePersona !== 'tarot' && (
-            <div className="flex flex-col px-2 mt-4">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ duration: 0.4, ease: 'easeOut' }}
-                className="flex justify-start mb-3 relative"
-              >
-                {/* Profile Image (Kakao style) */}
-                <div className="relative mr-2 flex-shrink-0 mt-1">
-                  <div className="w-10 h-10 rounded-[16px] bg-[#F4EFE6] flex items-center justify-center overflow-hidden border border-[#EACbb3]">
-                    <img src="/luna_fox_transparent.webp" alt="루나" className="w-full h-full object-cover" />
-                  </div>
-                </div>
+            <EntryRitualOrchestrator
+              ambienceMood={liveState.mood}
+              ambienceStage={lifeStageInfo.stage}
+            >
+              {/* ① 공간감 — 루나 방 단면 */}
+              <LunaRoomGlimpse
+                stage={lifeStageInfo.stage}
+                mood={liveState.mood}
+                timeBand={liveState.timeBand}
+                weather={liveState.weather}
+                ageDays={lunaAgeDays}
+              />
 
-                <div className="flex flex-col items-start max-w-[75%]">
-                  <span className="text-[12px] text-[#5D4037] mb-1 ml-1 font-bold">루나</span>
+              {/* ⑤ 누적감 — Relationship Badge */}
+              <div className="flex justify-center mb-3">
+                <RelationshipBadge
+                  ageDays={lunaAgeDays}
+                  intimacyLevel={intimacyDerived?.level ?? 0}
+                  memoryCount={entry.memoryCount}
+                  streakDays={entry.streak}
+                />
+              </div>
 
-                  {/* Video Bubble */}
-                  <div className="relative rounded-[20px] rounded-tl-[4px] overflow-hidden bg-[#F4EFE6] shadow-sm border border-[#D5C2A5]">
-                    <video
-                      src="/opening.mp4"
-                      autoPlay
-                      playsInline
-                      onPlay={() => {
-                        if (typeof navigator !== 'undefined' && navigator.vibrate) {
-                          navigator.vibrate(50);
-                        }
-                      }}
-                      onEnded={() => setOpeningVideoEnded(true)}
-                      className="w-full object-cover"
-                      style={{ maxHeight: '260px', objectPosition: 'center top' }}
+              {/* ③ 분위기 — Daily Greeting Card */}
+              <DailyGreetingCard
+                mood={liveState.mood}
+                activity={liveState.activity}
+                whisper={greetingWhisper}
+                timeBand={liveState.timeBand}
+                weather={liveState.weather}
+              />
+
+              {/* ② 생명감 + 영상: 카톡 버블 옆에 idle character */}
+              <div className="flex flex-col px-2 mt-1">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ duration: 0.4, ease: 'easeOut', delay: 0.6 }}
+                  className="flex justify-start mb-3 relative"
+                >
+                  {/* Idle Character (살아있는 루나) */}
+                  <div className="relative mr-2 flex-shrink-0 mt-1">
+                    <LunaIdleCharacter
+                      activity={liveState.activity}
+                      mood={liveState.mood}
+                      size="md"
                     />
                   </div>
-                </div>
-              </motion.div>
-            </div>
+
+                  <div className="flex flex-col items-start max-w-[75%]">
+                    <span className="text-[12px] text-[#5D4037] mb-1 ml-1 font-bold">루나</span>
+
+                    {/* Video Bubble (기존 그대로) */}
+                    <div className="relative rounded-[20px] rounded-tl-[4px] overflow-hidden bg-[#F4EFE6] shadow-sm border border-[#D5C2A5]">
+                      <video
+                        src="/opening.mp4"
+                        autoPlay
+                        playsInline
+                        onPlay={() => {
+                          if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                            navigator.vibrate(50);
+                          }
+                        }}
+                        onEnded={() => setOpeningVideoEnded(true)}
+                        className="w-full object-cover"
+                        style={{ maxHeight: '260px', objectPosition: 'center top' }}
+                      />
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+
+              {/* ④ 대화 시작 — First Message Guide (영상 끝나면 등장) */}
+              <FirstMessageGuide
+                mood={liveState.mood}
+                ageDays={lunaAgeDays}
+                intimacyLevel={intimacyDerived?.level ?? 0}
+                onChipSelect={(text) => setInputDraft(text)}
+                visible={openingVideoEnded}
+              />
+            </EntryRitualOrchestrator>
           )}
 
           {messageGroups.map(({ dateKey, messages: groupMsgs }) => (
@@ -1197,14 +1320,25 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
                 onSend={sendMessage}
                 onImageAttach={activePersona !== 'tarot' ? handleImageAttach : undefined}
                 disabled={isLoading || pendingEventLock}
-                placeholder={pendingEventLock ? '위 질문에 답해줘 ↑' : '마음 편하게 다 말해봐...'}
-                typingPlaceholder={
-                  isLoading 
-                    ? (activePersona === 'tarot' ? '타로냥이 카드를 읽고 있어' : '루나가 답장을 고민하고 있어') 
-                    : (activePersona !== 'tarot' && openingVideoEnded && messages.length === 0 
-                        ? '무슨 고민이야? 연애 얘긴 나한테 다 말해!' 
-                        : undefined)
+                placeholder={
+                  pendingEventLock
+                    ? '위 질문에 답해줘 ↑'
+                    : (activePersona !== 'tarot' && openingVideoEnded && messages.length === 0)
+                      ? (liveState.mood === 'wistful'
+                          ? '한 줄이면 충분해…'
+                          : liveState.mood === 'playful'
+                            ? '오늘은 뭐 얘기할까 ✨'
+                            : liveState.mood === 'sleepy'
+                              ? '가만히 적어도 돼'
+                              : '한 줄만 적어봐 ✨')
+                      : '마음 편하게 다 말해봐...'
                 }
+                typingPlaceholder={
+                  isLoading
+                    ? (activePersona === 'tarot' ? '타로냥이 카드를 읽고 있어' : '루나가 답장을 고민하고 있어')
+                    : undefined
+                }
+                initialValue={inputDraft}
               />
             </div>
           )}

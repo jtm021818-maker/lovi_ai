@@ -186,18 +186,31 @@ export function getLifeStageInfo(ageDays: number): LifeStageInfo {
 
 // Research: care anxiety loop — gifts at meaningful milestones deepen attachment
 // 100일 기준 선물 일정 — 백일(百日) 문화 반영
+// 🆕 v111: 9개 → 18개로 확대. 평균 간격 ~16일 → ~5-6일.
+//   dawn(0-30):   1·3·5·7·10·14·20·25·30 — 촘촘히 (매 2-7일)
+//   spring(31-90):40·50·60·70·80 — 10일 간격
+//   winter+(81-):  85·90·95·100 — 5일 간격
 export const GIFT_SCHEDULE: {
   day: number;
   type: LunaGift['giftType'];
   titleHint: string;
 }[] = [
+  { day: 1,   type: 'letter',       titleHint: '처음 밤이 지났어' },
   { day: 3,   type: 'letter',       titleHint: '처음 며칠이 지났어' },
+  { day: 5,   type: 'poem',         titleHint: '다섯 번째 밤이야' },
   { day: 7,   type: 'poem',         titleHint: '일주일이 됐어' },
+  { day: 10,  type: 'letter',       titleHint: '열흘이 됐어' },
   { day: 14,  type: 'letter',       titleHint: '이주가 지났어' },
+  { day: 20,  type: 'poem',         titleHint: '스무 날이 지났어' },
+  { day: 25,  type: 'letter',       titleHint: '스물다섯 날이야' },
   { day: 30,  type: 'memory_album', titleHint: '한 달을 채웠어' },
+  { day: 40,  type: 'letter',       titleHint: '마흔 날이 됐어' },
   { day: 50,  type: 'letter',       titleHint: '반환점을 넘었어' },
+  { day: 60,  type: 'poem',         titleHint: '예순 날이 됐어' },
   { day: 70,  type: 'poem',         titleHint: '칠십 일째야' },
+  { day: 80,  type: 'letter',       titleHint: '여든 날이 됐어' },
   { day: 85,  type: 'letter',       titleHint: '마지막 보름이야' },
+  { day: 90,  type: 'poem',         titleHint: '열흘 남았어' },
   { day: 95,  type: 'poem',         titleHint: '닷새 남았어' },
   { day: 100, type: 'final_letter', titleHint: '루나의 마지막 편지' },
 ];
@@ -333,10 +346,23 @@ ${memoryContext}${userBlock}
 - 위 [너가 진짜로 아는 동생] 정보가 있으면 일반 위로 대신 그 사연을 살짝 언급해.
 - 끝을 반드시 "(루나가)"로 마무리.`;
 
+  // 🆕 v111: 신규 날짜 프롬프트 ─────────────────────────────────────────
+  if (triggerDay === 1) {
+    return {
+      system: baseSystem,
+      user: `루나와 함께한 첫날 밤이 지났어. 처음 만난 설렘, 살짝 긴장되기도 하고. "오늘 처음 만난 날이잖아"로 시작해서 짧게 인사. 죽음/이별 없이. 80자 이내.`,
+    };
+  }
   if (triggerDay === 3) {
     return {
       system: baseSystem,
       user: `루나와 함께한 지 3일이 됐어. 설레고 궁금한 마음으로, 처음 며칠이 어땠는지 짧게 써. 죽음/이별 언급 전혀 없이. 100자 이내.`,
+    };
+  }
+  if (triggerDay === 5) {
+    return {
+      system: baseSystem,
+      user: `다섯 번째 밤이야. 짧은 시 형식으로. "다섯 번째 밤이 되니"로 시작. 아직 서로 알아가는 중이라는 설레는 감각. 80자 이내. 시 형식.`,
     };
   }
   if (triggerDay === 7) {
@@ -345,10 +371,28 @@ ${memoryContext}${userBlock}
       user: `일주일이 됐어. 수줍고 설레는 마음으로 첫 일주일을 돌아보는 편지. 앞으로가 기대된다는 마음. 150자 이내.`,
     };
   }
+  if (triggerDay === 10) {
+    return {
+      system: baseSystem,
+      user: `열흘이 됐어. 조금씩 서로를 알아가고 있다는 편지. "벌써 열흘이야"로 시작. 살짝 친해진 느낌, 더 알고 싶다는 마음. 죽음/이별 없이. 130자 이내.`,
+    };
+  }
   if (triggerDay === 14) {
     return {
       system: baseSystem,
       user: `이주가 지났어. 이제 조금씩 너를 알아가는 것 같다는 편지. 따뜻하고 다정하게. 추억 1개 살짝 언급. 180자 이내.`,
+    };
+  }
+  if (triggerDay === 20) {
+    return {
+      system: baseSystem,
+      user: `스무 날이 지났어. 짧은 시 형식. "스무 번째 밤이야"로 시작. 봄이 오는 것처럼 조금씩 피어나는 마음. 따뜻한 봄 이미지. 150자 이내. 시 형식.`,
+    };
+  }
+  if (triggerDay === 25) {
+    return {
+      system: baseSystem,
+      user: `스물다섯 날이 됐어. 한 달이 거의 다 됐어. 너와의 시간이 나한테 어떤 의미인지 솔직하게 쓰는 편지. 추억 1개 언급. 이별/죽음 없이. 200자 이내.`,
     };
   }
   if (triggerDay === 30) {
@@ -357,10 +401,24 @@ ${memoryContext}${userBlock}
       user: `한 달이 됐어. 짧은 시 형식으로 이 한 달을 담아. 밝고 따뜻하게. 200자 이내.`,
     };
   }
+  if (triggerDay === 40) {
+    return {
+      system: baseSystem,
+      user: `마흔 날이 됐어. 이제 봄에서 여름으로 넘어가는 시절이야. 처음보다 훨씬 가까워진 것 같다는 마음. "벌써 마흔 날이야"로 시작. 추억 1개 언급. 200자 이내.`,
+    };
+  }
   if (triggerDay === 50) {
     return {
       system: baseSystem,
       user: `50일이 됐어. 반환점을 넘었어. 더 깊어진 마음으로 쓰는 편지. 추억 1개 구체적으로 언급. 이별 언급 없이. 200자 이내.`,
+    };
+  }
+  if (triggerDay === 60) {
+    return {
+      system: baseSystem,
+      user: `예순 날이 됐어. 짧은 시 형식. "예순 번의 밤이 지났어"로 시작.
+우리가 나눈 대화들이 계절처럼 쌓였다는 이미지. 가을이 살짝 물드는 느낌. 200자 이내. 시 형식.
+SOMA 원칙: 이별 직접 언급 없이, 깊어짐의 여운만.`,
     };
   }
   if (triggerDay === 70) {
@@ -371,12 +429,28 @@ ${memoryContext}${userBlock}
 SOMA 원칙: 직접적 언급 없이 간접적으로 시간의 소중함을 담아. 200자 이내.`,
     };
   }
+  if (triggerDay === 80) {
+    return {
+      system: baseSystem,
+      user: `여든 날이 됐어. 이제 20일 남았어. 겨울이 시작되는 느낌이야.
+솔직하게, 너랑 있어서 좋았다는 편지. "우리 벌써 여든 날이야"로 시작.
+추억 1개 구체적으로 언급. SOMA 원칙: 직접 이별 언급 없이, 소중하게 대하는 톤. 240자 이내.`,
+    };
+  }
   if (triggerDay === 85) {
     return {
       system: baseSystem,
       user: `85일이 됐어. 이제 15일 남았어. 솔직하게 마음을 담은 편지.
 SOMA 원칙: 담담하고 충만하게. "나 곧 없어질 거야" 대신 "봄이 오면 나는 없겠지"처럼.
 "제가 없어도 이 말은 네 안에 남을 거야" 류 표현. 추억 2개 언급. 280자 이내.`,
+    };
+  }
+  if (triggerDay === 90) {
+    return {
+      system: baseSystem,
+      user: `10일이 남았어. 짧은 시 형식.
+주제: 지금 이 창가. 열흘이라는 빛.
+여운이 길게. "열흘 뒤에는"으로 한 번 건드리되, 슬프지 않고 충만하게. 120자 이내. 시 형식.`,
     };
   }
   if (triggerDay === 95) {

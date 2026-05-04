@@ -42,7 +42,7 @@ import { analyzeAcc, ACC_CONFIG } from '@/engines/acc';
 
 // 📱 v55: KBE (Kakao Behavior Engine) — 카톡 행동 LLM 판단
 import { runKBE, KBE_CONFIG } from '@/engines/kbe';
-import { createEmotionThermometer, createMindReading, createSituationSummary, createEmotionMirror, createPatternMirror, createSolutionPreview, createSolutionCard, createMessageDraft, createGrowthReport, createSessionSummary, createHomeworkCard, createTarotAxisCollect, createTarotDraw, createTarotInsight, createTarotSessionSummary, createTarotHomework, createLunaStory, createLunaStrategy, createToneSelect, createDraftWorkshop, createRoleplayFeedback, createPanelReport, createIdeaRefine, createActionPlan, createWarmWrap, createSongSearching, createSongRecommendation, createDateSpotSearching, createDateSpotRecommendation, createGiftSearching, createGiftRecommendation, createActivitySearching, createActivityRecommendation, createAnniversarySearching, createAnniversaryRecommendation, createMovieSearching, createMovieRecommendation, createBrowseSearching, createBrowseSession, createBrowseStreamStart, createBrowseStreamBlock, createBrowseStreamEnd } from '@/engines/phase-manager/events';
+import { createEmotionThermometer, createMindReading, createSituationSummary, createEmotionMirror, createPatternMirror, createSolutionPreview, createSolutionCard, createMessageDraft, createGrowthReport, createSessionSummary, createHomeworkCard, createTarotAxisCollect, createTarotDraw, createTarotInsight, createTarotSessionSummary, createTarotHomework, createLunaStory, createLunaStrategy, createToneSelect, createDraftWorkshop, createRoleplayFeedback, createPanelReport, createIdeaRefine, createActionPlan, /* createWarmWrap — v110.2 제거 */ createSongSearching, createSongRecommendation, createDateSpotSearching, createDateSpotRecommendation, createGiftSearching, createGiftRecommendation, createActivitySearching, createActivityRecommendation, createAnniversarySearching, createAnniversaryRecommendation, createMovieSearching, createMovieRecommendation, createBrowseSearching, createBrowseSession, createBrowseStreamStart, createBrowseStreamBlock, createBrowseStreamEnd } from '@/engines/phase-manager/events';
 // 🆕 v84: 루나 자율 판단형 인터넷 검색 모듈
 import { runSongSearch } from '@/lib/ai/song-search';
 import { runDateSpotSearch } from '@/lib/ai/date-spot-search';
@@ -57,7 +57,8 @@ import { runBrowseTogetherSearch } from '@/lib/ai/browse-together-search';
 import { startBrowseAgent, resumeBrowseAgent } from '@/lib/ai/browse-agent';
 // 🆕 v87: EMPOWER 진입 시 ACTION_PLAN/WARM_WRAP/SessionLetter 자동 합성 폴백
 import { synthesizeActionPlan } from '@/lib/ai/action-plan-synthesizer';
-import { synthesizeWarmWrap } from '@/lib/ai/warm-wrap-synthesizer';
+// synthesizeWarmWrap — v110.2 에서 WARM_WRAP 카드 제거로 미사용 (SESSION_SUMMARY 버튼으로 통합)
+// import { synthesizeWarmWrap } from '@/lib/ai/warm-wrap-synthesizer';
 import { synthesizeSessionLetter } from '@/lib/ai/session-summary-synthesizer';
 // 🆕 v104: Spirit Random Events 오케스트레이터
 import { runSpiritOrchestrator } from '@/engines/spirits/spirit-event-orchestrator';
@@ -1005,9 +1006,33 @@ export class CounselingPipeline {
       updatedLastEventTurn = turnCount;
     }
 
-    // 🆕 v20: 세션 요약 (EMPOWER 구간 — 숙제/리포트보다 먼저)
+    // 🆕 v110.2: 숙제 카드를 SESSION_SUMMARY 보다 먼저 발동
+    //   변경 전: SESSION_SUMMARY → HOMEWORK_CARD
+    //   변경 후: HOMEWORK_CARD → SESSION_SUMMARY(세션종료 버튼 내장)
+    //   canFireEvent() = eventsToFire.length===0 이므로 한 턴에 하나씩 순차 발동됨.
+    if (canFireEvent() && PhaseManager.shouldTriggerEvent(newPhaseV2, 'HOMEWORK_CARD', makeCtxForEvent())) {
+      // 🆕 v23: 타로 전용 숙제 (카드 에너지 기반)
+      if (persona === 'tarot') {
+        const keyCard = tarotMeta?.cards?.[0]; // 첫 번째 카드를 핵심 카드로
+        eventsToFire.push(createTarotHomework(
+          currentScenario,
+          updatedAccumulator.deepEmotionHypothesis?.primaryEmotion,
+          keyCard,
+        ));
+      } else {
+        eventsToFire.push(createHomeworkCard(
+          currentScenario,
+          updatedAccumulator.deepEmotionHypothesis?.primaryEmotion,
+        ));
+      }
+      updatedCompletedEvents.push('HOMEWORK_CARD');
+      updatedLastEventTurn = turnCount;
+    }
+
+    // 🆕 v20: 세션 요약 (EMPOWER 구간 — v110.2: 숙제 카드 다음 턴)
     // 🆕 v87: EMPOWER 진입 시 필수 카드 안전망 — ACTION_PLAN 이 누락돼 있으면 먼저 합성해서 발동,
-    //        그 다음 SESSION_SUMMARY 를 "언니 쪽지" 톤으로 합성해서 발동, WARM_WRAP 도 없으면 합성 발동.
+    //        그 다음 SESSION_SUMMARY 를 "언니 쪽지" 톤으로 합성해서 발동.
+    //        WARM_WRAP 은 v110.2 에서 제거 — SESSION_SUMMARY 하단 세션종료 버튼으로 통합.
     if (canFireEvent() && PhaseManager.shouldTriggerEvent(newPhaseV2, 'SESSION_SUMMARY', makeCtxForEvent())) {
       // 🆕 v87: 루나 페르소나 한정 — 타로냥은 기존 플로우 유지
       if (persona !== 'tarot') {
@@ -1051,6 +1076,8 @@ export class CounselingPipeline {
         }
 
         // 📝 SESSION_SUMMARY — "언니 쪽지" 톤으로 합성
+        // 🆕 v110.2: WARM_WRAP 제거 — SESSION_SUMMARY 쪽지 하단에 세션종료 버튼 통합.
+        //           HOMEWORK_CARD 는 SESSION_SUMMARY 보다 앞 턴에 발동 (pipeline 순서 변경).
         let letterExtras: Parameters<typeof createSessionSummary>[2] | undefined;
         try {
           const letter = await synthesizeSessionLetter({
@@ -1077,27 +1104,6 @@ export class CounselingPipeline {
         eventsToFire.push(createSessionSummary(insights, journey, letterExtras));
         updatedCompletedEvents.push('SESSION_SUMMARY');
         updatedLastEventTurn = turnCount;
-
-        // 💜 WARM_WRAP — 없으면 합성해서 함께 발동
-        if (!updatedCompletedEvents.includes('WARM_WRAP')) {
-          try {
-            const wrap = await synthesizeWarmWrap({
-              recentTurns,
-              emotionShiftHint: shiftHint,
-            });
-            eventsToFire.push(createWarmWrap(
-              wrap.strengthFound,
-              wrap.emotionShift,
-              wrap.nextStep,
-              wrap.lunaMessage,
-            ));
-            updatedCompletedEvents.push('WARM_WRAP');
-            updatedLastEventTurn = turnCount;
-            console.log(`[Pipeline:v87] 💜 WARM_WRAP 자동 합성 완료: "${wrap.strengthFound.slice(0, 24)}..."`);
-          } catch (err) {
-            console.error(`[Pipeline:v87] 💜 WARM_WRAP 자동 합성 실패 (무시):`, err);
-          }
-        }
       } else {
         // 타로냥 — 기존 플로우 유지
         const insights = [
@@ -1114,28 +1120,16 @@ export class CounselingPipeline {
       }
     }
 
-    // 🆕 v20: 숙제 카드 (EMPOWER 구간 — 세션 요약 후)
-    if (canFireEvent() && PhaseManager.shouldTriggerEvent(newPhaseV2, 'HOMEWORK_CARD', makeCtxForEvent())) {
-      // 🆕 v23: 타로 전용 숙제 (카드 에너지 기반)
-      if (persona === 'tarot') {
-        const keyCard = tarotMeta?.cards?.[0]; // 첫 번째 카드를 핵심 카드로
-        eventsToFire.push(createTarotHomework(
-          currentScenario,
-          updatedAccumulator.deepEmotionHypothesis?.primaryEmotion,
-          keyCard,
-        ));
-      } else {
-        eventsToFire.push(createHomeworkCard(
-          currentScenario,
-          updatedAccumulator.deepEmotionHypothesis?.primaryEmotion,
-        ));
-      }
-      updatedCompletedEvents.push('HOMEWORK_CARD');
-      updatedLastEventTurn = turnCount;
-    }
-
     // 성장 리포트 (EMPOWER 구간 — 숙제 후)
-    if (canFireEvent() && PhaseManager.shouldTriggerEvent(newPhaseV2, 'GROWTH_REPORT', makeCtxForEvent()) && emotionBaseline !== undefined) {
+    // 🆕 v110.1 옵션 A: GROWTH_REPORT 발동 OFF — WARM_WRAP 만으로 마무리 통일 (UX 중복 제거).
+    //   배경: WARM_WRAP("오늘의 마무리") 와 GROWTH_REPORT("대화가 마무리되었어요") 가 같은
+    //         EMPOWER phase 에서 둘 다 표출되어 사용자에게 "마무리 카드 두 번" 으로 보임.
+    //         WARM_WRAP 의 strengthFound/nextStep 과 GROWTH_REPORT 의 keyDiscoveries/actionPlan
+    //         이 의미상 겹쳐서, 사용자가 "어디가 진짜 끝이지?" 혼란.
+    //   결정: WARM_WRAP 한 장만 유지. 점수 변화 시각화는 향후 옵션 B (WARM_WRAP 통합)로 보강 가능.
+    //   복구: 아래 GROWTH_REPORT_ENABLED 를 true 로 바꾸면 원복.
+    const GROWTH_REPORT_ENABLED = false;
+    if (GROWTH_REPORT_ENABLED && canFireEvent() && PhaseManager.shouldTriggerEvent(newPhaseV2, 'GROWTH_REPORT', makeCtxForEvent()) && emotionBaseline !== undefined) {
       // 🆕 v20: 동적 발견/액션 생성 (누적기 + 진단 데이터 기반)
       const dynamicDiscoveries: string[] = [];
       const dynamicActions: string[] = [];
@@ -2509,16 +2503,7 @@ ${researchResult.insight}
             console.log(`[Pipeline] 🎯 ACTION_PLAN 발동: "${title}" | ${planType}`);
           }
 
-          // 🆕 v39: 💜 EMPOWER 마무리 — [WARM_WRAP:...] → WARM_WRAP 이벤트
-          // 학술 요약 대신 "언니의 다독임 + 재방문 약속" 카드
-          // 🆕 v78.4: EMPOWER(변화 응원) Phase 에서만 발동.
-          if (hlrePost.warmWrap && newPhaseV2 === 'EMPOWER' && canFireEvent() && !updatedCompletedEvents.includes('WARM_WRAP')) {
-            const { strengthFound, emotionShift, nextStep, lunaMessage } = hlrePost.warmWrap;
-            eventsToFire.push(createWarmWrap(strengthFound, emotionShift, nextStep, lunaMessage));
-            updatedCompletedEvents.push('WARM_WRAP');
-            updatedLastEventTurn = turnCount;
-            console.log(`[Pipeline] 💜 WARM_WRAP 발동: "${strengthFound.slice(0, 30)}..."`);
-          }
+          // 🆕 v39: WARM_WRAP — v110.2 에서 SESSION_SUMMARY 하단 세션종료 버튼으로 통합, 카드 제거.
 
           // 🆕 v37: 이전 턴들의 히스토리 복원 (stateResult는 매 턴 새로 생성되므로 seed 필요)
           if (savedSituationReadHistory && savedSituationReadHistory.length > 0) {

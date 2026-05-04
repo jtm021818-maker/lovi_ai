@@ -10,10 +10,12 @@ interface ChatInputProps {
   placeholder?: string;
   typingPlaceholder?: string;
   onImageAttach?: (imageBase64: string) => void;
+  /** 🆕 v112: 외부에서 채워주는 초기값 (chip 클릭 → 자동 채우기). */
+  initialValue?: string;
 }
 
-export default function ChatInput({ onSend, disabled, placeholder, typingPlaceholder, onImageAttach }: ChatInputProps) {
-  const [text, setText] = useState('');
+export default function ChatInput({ onSend, disabled, placeholder, typingPlaceholder, onImageAttach, initialValue }: ChatInputProps) {
+  const [text, setText] = useState(initialValue ?? '');
   const [showExtras, setShowExtras] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -41,6 +43,26 @@ export default function ChatInput({ onSend, disabled, placeholder, typingPlaceho
       }
     }
   }, [transcript]);
+
+  // 🆕 v112: 외부 initialValue 동기화 (chip 클릭 → 자동 채우기)
+  useEffect(() => {
+    if (initialValue !== undefined && initialValue !== text) {
+      setText(initialValue);
+      // textarea 높이 재계산
+      requestAnimationFrame(() => {
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+          textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px';
+          // 포커스 + 끝으로 커서
+          textareaRef.current.focus();
+          const len = initialValue.length;
+          textareaRef.current.setSelectionRange(len, len);
+        }
+      });
+    }
+    // text 변화에 따라 effect 재실행 X — initialValue 만 트리거
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialValue]);
 
   const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

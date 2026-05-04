@@ -17,7 +17,7 @@ interface LetterData {
   lunaMessage?: string;
 }
 
-export default function SessionSummary({ event }: Props) {
+export default function SessionSummary({ event, onSelect, disabled }: Props) {
   const data = event.data as LetterData;
 
   const letter = data.letter?.trim();
@@ -144,6 +144,48 @@ export default function SessionSummary({ event }: Props) {
             >
               {footerLine}
             </span>
+          </motion.div>
+
+          {/* ✨ 세션 종료 버튼 */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.85 }}
+            className="px-5 pb-5 pt-0"
+          >
+            <motion.button
+              whileTap={{ scale: 0.96 }}
+              whileHover={{ scale: 1.025 }}
+              disabled={disabled}
+              onClick={() => onSelect('루나야 오늘 고마워 💜', { source: 'session_summary_end' })}
+              className="w-full relative overflow-hidden rounded-[18px] py-3.5 text-white text-[14.5px] font-bold tracking-wide disabled:opacity-50"
+              style={{
+                background: 'linear-gradient(135deg, #f9a8d4 0%, #c084fc 55%, #818cf8 100%)',
+                boxShadow: '0 6px 22px rgba(192,132,252,0.42), 0 2px 8px rgba(249,168,212,0.3)',
+              }}
+            >
+              {/* 흐르는 반짝이 shimmer */}
+              <motion.div
+                className="absolute inset-0 pointer-events-none"
+                animate={{ x: ['-110%', '110%'] }}
+                transition={{ duration: 2.8, repeat: Infinity, repeatDelay: 3.5, ease: 'easeInOut' }}
+                style={{
+                  background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.28) 50%, transparent 100%)',
+                }}
+              />
+              {/* 반짝이 파티클 */}
+              <motion.span
+                className="absolute top-2 left-5 text-[11px] opacity-80"
+                animate={{ opacity: [0.5, 1, 0.5], y: [0, -2, 0] }}
+                transition={{ duration: 1.8, repeat: Infinity, delay: 0.3 }}
+              >✦</motion.span>
+              <motion.span
+                className="absolute bottom-2 right-6 text-[9px] opacity-70"
+                animate={{ opacity: [0.4, 0.9, 0.4], y: [0, -2, 0] }}
+                transition={{ duration: 2.1, repeat: Infinity, delay: 0.9 }}
+              >✦</motion.span>
+              <span className="relative z-10">루나야 오늘 고마워 ✨💜</span>
+            </motion.button>
           </motion.div>
 
           {/* 종이 모서리 fold 장식 */}

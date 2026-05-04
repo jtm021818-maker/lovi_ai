@@ -103,11 +103,15 @@ export async function runLunaLetterJudge(input: JudgeInput): Promise<JudgeDecisi
   if (process.env.LUNA_DISABLE_JUDGE === '1') {
     return gated('judge disabled by env');
   }
-  if ((input.turnCount ?? 0) < 4) {
+  // 🆕 v111: 최소 턴 3으로 완화 (4 → 3)
+  if ((input.turnCount ?? 0) < 3) {
     return gated('too few turns');
   }
-  if (input.recentJudgeCountIn24h >= 2) {
-    return gated('cooldown — 24h 내 이미 2건');
+  // 🆕 v111: 24h 쿨다운 2건 → 4건으로 완화
+  //   배경: 하루 여러 세션을 해도 judge 콘텐츠가 2건에서 막혀 편지가 안 왔음.
+  //   4건으로 올려도 LLM 판단이 "가벼운 대화면 흘려보내" 원칙으로 스팸 방지됨.
+  if (input.recentJudgeCountIn24h >= 4) {
+    return gated('cooldown — 24h 내 이미 4건');
   }
   if (input.stageInfo.stage === 'star') {
     return gated('루나는 별이 됐음 — 더는 작성 안 함');

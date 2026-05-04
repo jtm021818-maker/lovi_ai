@@ -252,8 +252,9 @@ export function formatHandoffForPrompt(handoff: LeftToRightHandoff, completedEve
       }
     });
     lines.push('');
-    lines.push(`→ 지금 대화 흐름에 자연스러우면 "아 맞다 그때..." 식으로 꺼내.`);
-    lines.push(`   억지로 쓰지 마. 흐름 안 맞으면 마음에만 두고 패스.`);
+    lines.push(`⚠️ **v111: 이번 턴에 위 중 1개라도 자연스럽게 꺼내**. 안 꺼내면 메모리 시스템 무용지물.`);
+    lines.push(`   형식: "아 너 ~했었지", "지난번에 ~ 했던 거 떠올라" 같은 1인칭 회상.`);
+    lines.push(`   흐름 정 안 맞으면 패스 가능 — 단, 메모리가 명백히 닿는데도 패스 X.`);
     lines.push('');
   }
 
@@ -361,6 +362,21 @@ export function formatHandoffForPrompt(handoff: LeftToRightHandoff, completedEve
     }
     if (se.self_disclosure_opportunity) {
       lines.push(`자기 경험 꺼낼 타이밍: "${se.self_disclosure_opportunity}"`);
+    }
+    // 🆕 v111: recommended_action 우뇌에 명시 전달
+    if (se.recommended_action && se.recommended_action !== 'question') {
+      const actionLabels: Record<string, string> = {
+        opinion: '💭 너 의견 꺼내기 ("나는 ~ 같아")',
+        side_take: '🛡️ 친구 편들기 ("걔가 잘못한 거지")',
+        experience: '📖 자기 경험/일반론 ("나도 비슷한 거", "원래 ~ 시기는")',
+        recall: '🔁 기억 회상 ("아 너 ~ 했었지")',
+        relief: '😆 농담/딴얘기 ("야 근데 밥은 먹었어")',
+        reaction_only: '💬 짧은 리액션만 ("...", "헐")',
+      };
+      lines.push(`✨ **이번 턴 메인 행동**: ${actionLabels[se.recommended_action] ?? se.recommended_action}`);
+      if (se.recommended_reason) {
+        lines.push(`   이유: ${se.recommended_reason}`);
+      }
     }
     lines.push('');
   }

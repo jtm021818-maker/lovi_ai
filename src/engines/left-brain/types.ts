@@ -314,6 +314,14 @@ export interface LeftBrainAnalysis {
     must_avoid_question: boolean;
     /** 자기개방 기회 — 친밀도 + 유사 경험 있을 때만 */
     self_disclosure_opportunity: string | null;
+    /**
+     * 🆕 v111: 이번 턴 권장 메인 행동
+     * 좌뇌가 6가지 자연 행동 중 가장 자연스러운 것을 골라 우뇌에 제안.
+     * 우뇌는 이걸 메인으로 응답을 짠다.
+     */
+    recommended_action?: 'question' | 'opinion' | 'side_take' | 'experience' | 'recall' | 'relief' | 'reaction_only';
+    /** 🆕 v111: 왜 그 행동인지 한 줄 — 우뇌 참고용 */
+    recommended_reason?: string | null;
   };
 
   // 기존 dual-brain 호환 필드
