@@ -103,7 +103,7 @@ export default function GiveToLunaCeremony({
                   루나에게 주기
                 </div>
                 <div className="text-[11.5px] text-[#7c5738]/80 leading-relaxed mb-4 italic"
-                  style={{ fontFamily: 'serif' }}
+                  style={{ fontFamily: 'var(--font-handwrite-soft)' }}
                 >
                   {itemName} — 루나에게 줄까?<br />
                   <span className="text-[10px] text-[#a1887f]">(가방에서 사라지고, 루나의 추억으로 보관돼)</span>
@@ -195,7 +195,7 @@ export default function GiveToLunaCeremony({
                 <div className="min-h-[60px] flex items-center justify-center mb-4">
                   <p
                     className="text-[#3a2418] text-[13.5px] leading-relaxed font-semibold"
-                    style={{ fontFamily: 'serif' }}
+                    style={{ fontFamily: 'var(--font-handwrite-soft)' }}
                   >
                     “{reaction ?? '...'}”
                   </p>

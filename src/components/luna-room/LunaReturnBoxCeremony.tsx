@@ -115,7 +115,7 @@ export default function LunaReturnBoxCeremony({
                 animate={{ opacity: 1 }}
                 transition={{ delay: 1.2 }}
                 className="text-white/55 text-[12px] italic mb-1"
-                style={{ fontFamily: 'serif' }}
+                style={{ fontFamily: 'var(--font-handwrite-soft)' }}
               >
                 "잠깐만 — 너에게 줄 게 있어"
               </motion.div>
@@ -221,7 +221,7 @@ export default function LunaReturnBoxCeremony({
                     {it.lunaThought && (
                       <div
                         className="text-[10.5px] italic text-[#5a3e2b] leading-relaxed"
-                        style={{ fontFamily: 'serif' }}
+                        style={{ fontFamily: 'var(--font-handwrite-soft)' }}
                       >
                         “{it.lunaThought}”
                       </div>
@@ -272,7 +272,7 @@ export default function LunaReturnBoxCeremony({
               >
                 <p
                   className="text-[#3a2418] text-[13.5px] leading-relaxed font-semibold"
-                  style={{ fontFamily: 'serif' }}
+                  style={{ fontFamily: 'var(--font-handwrite-soft)' }}
                 >
                   “{lunaWords}”
                 </p>

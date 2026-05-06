@@ -88,7 +88,7 @@ export default function SessionSummary({ event, onSelect, disabled }: Props) {
             <div className="flex-1 min-w-0">
               <div
                 className="text-[13px] text-[#6b4a2b] leading-tight"
-                style={{ fontFamily: 'var(--font-gaegu), Gaegu, "Nanum Pen Script", cursive', fontWeight: 700 }}
+                style={{ fontFamily: 'var(--font-handwrite), Gaegu, "Nanum Pen Script", cursive', fontWeight: 700 }}
               >
                 루나가 놓고 가는 쪽지
               </div>
@@ -116,7 +116,7 @@ export default function SessionSummary({ event, onSelect, disabled }: Props) {
             <p
               className="text-[17px] text-[#4b3418] leading-[1.85] whitespace-pre-line"
               style={{
-                fontFamily: 'var(--font-gaegu), Gaegu, "Nanum Pen Script", "Apple SD Gothic Neo", cursive',
+                fontFamily: 'var(--font-handwrite), Gaegu, "Nanum Pen Script", "Apple SD Gothic Neo", cursive',
                 fontWeight: 400,
                 letterSpacing: '-0.2px',
               }}
@@ -134,13 +134,13 @@ export default function SessionSummary({ event, onSelect, disabled }: Props) {
           >
             <span
               className="text-[12px] text-[#a0784b]"
-              style={{ fontFamily: 'var(--font-gaegu), Gaegu, cursive', fontWeight: 700 }}
+              style={{ fontFamily: 'var(--font-handwrite), Gaegu, cursive', fontWeight: 700 }}
             >
               — 루나 🦊
             </span>
             <span
               className="text-[11px] text-[#c08b5c]/90 italic"
-              style={{ fontFamily: 'var(--font-gaegu), Gaegu, cursive' }}
+              style={{ fontFamily: 'var(--font-handwrite), Gaegu, cursive' }}
             >
               {footerLine}
             </span>

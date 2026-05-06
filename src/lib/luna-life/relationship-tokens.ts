@@ -38,21 +38,14 @@ export const BOND_TOKENS = {
   inkBarTrack: 'rgba(123,94,167,0.12)',
 } as const;
 
-/**
- * 손글씨 폰트 — v114 self-hosted via next/font/google.
- * 상업적 이용 안전 (SIL OFL): Nanum Pen Script → Gowun Dodum → Gaegu 폴백.
- * `--font-nanum-pen`, `--font-gowun-dodum`, `--font-gaegu` 는 layout.tsx 에서 주입.
- */
-export const HANDWRITE_FONT =
-  'var(--font-nanum-pen), var(--font-gowun-dodum), var(--font-gaegu), "Comic Sans MS", cursive';
+/** 일지 타이틀/강조 — 붓 손글씨 (SIL OFL, 상업적 이용 안전) */
+export const HANDWRITE_FONT = 'var(--font-handwrite-brush)';
 
-/** 본문용 — 둥근 한글 손글씨 (제목보다 가독성 우선) */
-export const SOFT_HANDWRITE_FONT =
-  'var(--font-gowun-dodum), var(--font-gaegu), var(--font-nanum-pen), system-ui, sans-serif';
+/** 일지 카피/캡션 — 둥글고 부드러운 한글 */
+export const SOFT_HANDWRITE_FONT = 'var(--font-handwrite-soft)';
 
-/** 숫자/본문 폰트 — Pretendard self-host 없으면 system 폴백 */
-export const NUMERIC_FONT =
-  'var(--font-gowun-batang), Pretendard, ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif';
+/** 숫자·날짜 — 한국 명조 포인트 */
+export const NUMERIC_FONT = 'var(--font-serif-kr)';
 
 /** 이즈 / 지속 */
 export const BOND_EASE = {

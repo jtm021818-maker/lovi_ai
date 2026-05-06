@@ -48,6 +48,24 @@
   --color-cyan-300: #67e8f9;
   --color-teal-300: #5eead4;
   --font-sans: var(--font-geist);
+
+  /* ─── 시맨틱 폰트 별칭 — 컴포넌트는 이 변수만 참조 ─── */
+  /* 모두 SIL OFL / Apache 2.0 — 상업적 이용/앱 내장 100% 가능 */
+
+  /* 한국어 UI 본문/라벨 (채팅·루나룸 HUD) */
+  --font-korean: var(--font-noto-sans-kr), system-ui, -apple-system, sans-serif;
+
+  /* 강한 감성 손글씨 — 붓 (편지·쪽지·이벤트 타이틀) */
+  --font-handwrite-brush: var(--font-nanum-brush), var(--font-nanum-pen), var(--font-gaegu), cursive;
+
+  /* 부드러운 손글씨 — 펜 (그리팅·배지·일반 감성 UI) */
+  --font-handwrite: var(--font-nanum-pen), var(--font-gaegu), cursive;
+
+  /* 둥근 손글씨 — 카피/캡션 (도감·일지 본문) */
+  --font-handwrite-soft: var(--font-gowun-dodum), var(--font-nanum-pen), var(--font-gaegu), cursive;
+
+  /* 명조 — 숫자·날짜·일지 강조 */
+  --font-serif-kr: var(--font-gowun-batang), var(--font-noto-sans-kr), serif;
 }
 
 /* 스크롤바 커스텀 */

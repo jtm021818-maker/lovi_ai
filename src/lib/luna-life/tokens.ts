@@ -11,8 +11,8 @@ export const ROOM_TOKENS = {
   cardShadowDark:
     '0 4px 20px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.25)',
   cardRadius: 20,
-  hudFont: "'Pretendard', system-ui, sans-serif",
-  whisperFont: "var(--font-gaegu), 'Gaegu', cursive",
+  hudFont: "var(--font-korean)",
+  whisperFont: "var(--font-handwrite)",
   springSoft: { type: 'spring', stiffness: 220, damping: 26 } as const,
   springTap: { type: 'spring', stiffness: 380, damping: 18 } as const,
   springGentle: { type: 'spring', stiffness: 180, damping: 28 } as const,

@@ -257,7 +257,7 @@ export function WishMakeModal({ open, inventoryItemId, onClose, onMade }: WishPr
                     background: 'rgba(255,255,255,0.06)',
                     border: '1px solid rgba(167,139,250,0.3)',
                     color: '#fff',
-                    fontFamily: 'serif',
+                    fontFamily: 'var(--font-handwrite-soft)',
                   }}
                 />
                 <div className="text-right text-[9px] text-white/40 mb-4 tabular-nums">
@@ -310,7 +310,7 @@ export function WishMakeModal({ open, inventoryItemId, onClose, onMade }: WishPr
                 animate={{ opacity: [0, 1, 1, 0] }}
                 transition={{ duration: 3.2, times: [0, 0.3, 0.85, 1] }}
                 className="absolute bottom-32 text-white/85 text-[12px] italic"
-                style={{ fontFamily: 'serif' }}
+                style={{ fontFamily: 'var(--font-handwrite-soft)' }}
               >
                 — 소원이 어딘가로 흘러갔어
               </motion.div>

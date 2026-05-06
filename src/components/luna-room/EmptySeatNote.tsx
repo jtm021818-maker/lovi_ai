@@ -159,7 +159,7 @@ export default function EmptySeatNote({
             background: '#fff8e7',
             border: '1px solid rgba(212,175,55,0.45)',
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            fontFamily: 'serif',
+            fontFamily: 'var(--font-handwrite-soft)',
             color: '#5a3e2b',
             fontSize: 11,
             lineHeight: 1.5,

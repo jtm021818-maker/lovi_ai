@@ -385,7 +385,7 @@ function ItemDetailSheet({ item, onClose, onUsed }: {
             </div>
             <div
               className="text-[#3a2418] text-[12px] leading-relaxed"
-              style={{ fontFamily: 'serif' }}
+              style={{ fontFamily: 'var(--font-handwrite-soft)' }}
             >
               “{item.lunaNote}”
             </div>

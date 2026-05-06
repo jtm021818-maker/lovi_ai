@@ -77,7 +77,7 @@ export default function LunaShowReaction({ open, inventoryItemId, onClose }: Pro
                   <span className="text-[11px] text-[#a1887f] italic">루나가 보고 있어…</span>
                 ) : (
                   <p className="text-[#3a2418] text-[14px] leading-relaxed font-semibold"
-                    style={{ fontFamily: 'serif' }}
+                    style={{ fontFamily: 'var(--font-handwrite-soft)' }}
                   >
                     “{reaction ?? '...'}”
                   </p>

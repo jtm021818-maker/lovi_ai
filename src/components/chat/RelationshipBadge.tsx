@@ -109,7 +109,7 @@ export default function RelationshipBadge({
         className="text-[12px] font-bold text-[#5D4037] whitespace-nowrap"
         style={{
           fontFamily:
-            'var(--font-gaegu), Gaegu, "Nanum Pen Script", cursive',
+            'var(--font-handwrite), Gaegu, "Nanum Pen Script", cursive',
           letterSpacing: '-0.2px',
         }}
       >

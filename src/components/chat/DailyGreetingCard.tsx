@@ -202,7 +202,7 @@ export default function DailyGreetingCard({
               style={{
                 color: accent,
                 fontFamily:
-                  'var(--font-gaegu), Gaegu, "Nanum Pen Script", cursive',
+                  'var(--font-handwrite), Gaegu, "Nanum Pen Script", cursive',
                 fontWeight: 700,
               }}
             >
@@ -244,7 +244,7 @@ export default function DailyGreetingCard({
                 style={{
                   color: '#4b3418',
                   fontFamily:
-                    'var(--font-gaegu), Gaegu, "Nanum Pen Script", cursive',
+                    'var(--font-handwrite), Gaegu, "Nanum Pen Script", cursive',
                   letterSpacing: '-0.2px',
                   fontWeight: 400,
                 }}

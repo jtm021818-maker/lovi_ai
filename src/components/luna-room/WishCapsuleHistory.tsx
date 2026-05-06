@@ -155,7 +155,7 @@ export default function WishCapsuleHistory({ open, onClose }: Props) {
                     {formatKr(w.createdAt)} · {daysAgo(w.createdAt)}일 전
                   </div>
                   <div className="text-[12.5px] text-white/85 leading-relaxed italic"
-                    style={{ fontFamily: 'serif' }}
+                    style={{ fontFamily: 'var(--font-handwrite-soft)' }}
                   >
                     “{w.text}”
                   </div>
@@ -231,7 +231,7 @@ function CapsuleRow({ c }: { c: Capsule }) {
       </div>
       <div
         className="text-[12px] text-white/80 italic leading-relaxed line-clamp-3"
-        style={{ fontFamily: 'serif', filter: c.status === 'sealed' ? 'blur(3px)' : 'none' }}
+        style={{ fontFamily: 'var(--font-handwrite-soft)', filter: c.status === 'sealed' ? 'blur(3px)' : 'none' }}
       >
         “{c.message}”
       </div>

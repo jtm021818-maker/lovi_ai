@@ -162,7 +162,7 @@ export default function FirstMessageGuide({
                   className="text-[19px] leading-[1.4] text-[#5D4037]"
                   style={{
                     fontFamily:
-                      'var(--font-gaegu), Gaegu, "Nanum Pen Script", cursive',
+                      'var(--font-handwrite), Gaegu, "Nanum Pen Script", cursive',
                     fontWeight: 700,
                     letterSpacing: '-0.3px',
                   }}
@@ -173,7 +173,7 @@ export default function FirstMessageGuide({
                   className="text-[19px] leading-[1.4] text-[#5D4037] mt-0.5"
                   style={{
                     fontFamily:
-                      'var(--font-gaegu), Gaegu, "Nanum Pen Script", cursive',
+                      'var(--font-handwrite), Gaegu, "Nanum Pen Script", cursive',
                     fontWeight: 700,
                     letterSpacing: '-0.3px',
                   }}
@@ -189,7 +189,7 @@ export default function FirstMessageGuide({
                 className="text-[11px] text-[#a0784b]/85 italic"
                 style={{
                   fontFamily:
-                    'var(--font-gaegu), Gaegu, "Nanum Pen Script", cursive',
+                    'var(--font-handwrite), Gaegu, "Nanum Pen Script", cursive',
                 }}
               >
                 — 루나 🦊

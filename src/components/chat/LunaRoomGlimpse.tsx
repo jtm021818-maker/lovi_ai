@@ -197,7 +197,7 @@ export default function LunaRoomGlimpse({
           className="text-[11px] font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]"
           style={{
             fontFamily:
-              'var(--font-gaegu), Gaegu, "Nanum Pen Script", cursive',
+              'var(--font-handwrite), Gaegu, "Nanum Pen Script", cursive',
           }}
         >
           루나의 방

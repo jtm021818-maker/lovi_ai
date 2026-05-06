@@ -1,5 +1,13 @@
 import type { Metadata, Viewport } from 'next';
-import { Geist, Gaegu, Nanum_Pen_Script, Gowun_Dodum, Gowun_Batang } from 'next/font/google';
+import {
+  Geist,
+  Gaegu,
+  Nanum_Pen_Script,
+  Nanum_Brush_Script,
+  Gowun_Dodum,
+  Gowun_Batang,
+  Noto_Sans_KR,
+} from 'next/font/google';
 import './globals.css';
 import FxRoot from '@/components/fx/FxRoot';
 
@@ -17,21 +25,42 @@ const gaegu = Gaegu({
   display: 'swap',
 });
 
-// 🆕 v114: 관계 일지(폴라로이드 스크랩북) 폰트 패밀리.
-// 모두 SIL Open Font License — 상업적 이용/앱 내장 100% 안전.
-// next/font/google 이 빌드시 자체 호스트 → 런타임 외부 호출 0.
+// 🆕 v114+: 앱 전체 폰트 시스템 (모두 SIL OFL / Apache 2.0 — 상업적 이용 100% 안전)
+// next/font/google 빌드시 자체 호스트 → 런타임 Google CDN 호출 없음
+
+/** 한국어 UI 본문 — 가장 완성도 높은 Korean sans, 글자 완전 커버 */
+const notoSansKr = Noto_Sans_KR({
+  variable: '--font-noto-sans-kr',
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '700'],
+  display: 'swap',
+});
+
+/** 강한 감성 손글씨 — 붓글씨, 편지/쪽지/이벤트 타이틀 */
+const nanumBrushScript = Nanum_Brush_Script({
+  variable: '--font-nanum-brush',
+  subsets: ['latin'],
+  weight: ['400'],
+  display: 'swap',
+});
+
+/** 부드러운 펜 손글씨 — 그리팅, 배지, 감성 캡션 */
 const nanumPenScript = Nanum_Pen_Script({
   variable: '--font-nanum-pen',
   subsets: ['latin'],
   weight: ['400'],
   display: 'swap',
 });
+
+/** 둥근 한글 — 일지/도감 카피 본문 */
 const gowunDodum = Gowun_Dodum({
   variable: '--font-gowun-dodum',
   subsets: ['latin'],
   weight: ['400'],
   display: 'swap',
 });
+
+/** 한국 명조 — 숫자·날짜 강조, 일지 포인트 */
 const gowunBatang = Gowun_Batang({
   variable: '--font-gowun-batang',
   subsets: ['latin'],
@@ -64,7 +93,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko" className={`${geist.variable} ${gaegu.variable} ${nanumPenScript.variable} ${gowunDodum.variable} ${gowunBatang.variable} h-full`}>
+    <html lang="ko" className={`${geist.variable} ${gaegu.variable} ${notoSansKr.variable} ${nanumBrushScript.variable} ${nanumPenScript.variable} ${gowunDodum.variable} ${gowunBatang.variable} h-full`}>
       <body className="h-full bg-[#0B0A1D] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-mystic-700/60 via-mystic-900 to-[#05040B] font-[family-name:var(--font-geist)] antialiased text-white overflow-hidden">
         {/* 🆕 v79: 전역 FX 레이어 (ScreenShake/Particle 등) */}
         <FxRoot />

@@ -185,7 +185,7 @@ export default function CapsuleUnlockCeremony({ open, capsule, onClose }: Props)
               >
                 <div
                   className="text-[#3a2418] text-[13px] leading-relaxed text-left whitespace-pre-wrap"
-                  style={{ fontFamily: 'serif' }}
+                  style={{ fontFamily: 'var(--font-handwrite-soft)' }}
                 >
                   {capsule.message}
                 </div>
