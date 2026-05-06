@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Geist, Gaegu } from 'next/font/google';
+import { Geist, Gaegu, Nanum_Pen_Script, Gowun_Dodum, Gowun_Batang } from 'next/font/google';
 import './globals.css';
 import FxRoot from '@/components/fx/FxRoot';
 
@@ -14,6 +14,28 @@ const gaegu = Gaegu({
   variable: '--font-gaegu',
   subsets: ['latin'],
   weight: ['300', '400', '700'],
+  display: 'swap',
+});
+
+// 🆕 v114: 관계 일지(폴라로이드 스크랩북) 폰트 패밀리.
+// 모두 SIL Open Font License — 상업적 이용/앱 내장 100% 안전.
+// next/font/google 이 빌드시 자체 호스트 → 런타임 외부 호출 0.
+const nanumPenScript = Nanum_Pen_Script({
+  variable: '--font-nanum-pen',
+  subsets: ['latin'],
+  weight: ['400'],
+  display: 'swap',
+});
+const gowunDodum = Gowun_Dodum({
+  variable: '--font-gowun-dodum',
+  subsets: ['latin'],
+  weight: ['400'],
+  display: 'swap',
+});
+const gowunBatang = Gowun_Batang({
+  variable: '--font-gowun-batang',
+  subsets: ['latin'],
+  weight: ['400', '700'],
   display: 'swap',
 });
 
@@ -42,7 +64,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko" className={`${geist.variable} ${gaegu.variable} h-full`}>
+    <html lang="ko" className={`${geist.variable} ${gaegu.variable} ${nanumPenScript.variable} ${gowunDodum.variable} ${gowunBatang.variable} h-full`}>
       <body className="h-full bg-[#0B0A1D] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-mystic-700/60 via-mystic-900 to-[#05040B] font-[family-name:var(--font-geist)] antialiased text-white overflow-hidden">
         {/* 🆕 v79: 전역 FX 레이어 (ScreenShake/Particle 등) */}
         <FxRoot />
