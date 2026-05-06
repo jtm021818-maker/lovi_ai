@@ -13,7 +13,7 @@
  */
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { LunaMood } from '@/lib/luna-life/mood';
 import { pickGreeting, pickFollowup } from '@/lib/luna-life/whispers';
 import { triggerHaptic } from '@/lib/haptic';
@@ -28,6 +28,35 @@ interface Props {
   startSequence: boolean;
   /** 1~2개 메시지 모두 도착 후 호출 (SmartReplyBar 등장 트리거) */
   onAllShown?: () => void;
+}
+
+// ─── v113: 최근 인사 localStorage (반복 방지) ────────────────────────
+const RECENT_KEY = 'luna:recentGreetings';
+const RECENT_MAX = 8;
+
+function loadRecentGreetings(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(RECENT_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr)
+      ? arr.filter((s: unknown): s is string => typeof s === 'string').slice(0, RECENT_MAX)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function pushRecentGreeting(g: string): void {
+  if (typeof window === 'undefined' || !g) return;
+  try {
+    const cur = loadRecentGreetings();
+    const next = [g, ...cur.filter((x) => x !== g)].slice(0, RECENT_MAX);
+    window.localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
 }
 
 // ─── KST hour:min ────────────────────────────────────────────────────
@@ -133,28 +162,70 @@ export default function LunaGreetingMessage({
 }: Props) {
   const [phase, setPhase] = useState<Phase>('idle');
 
-  // 결정형 seed (오늘 + ageDays)
+  // 결정형 seed (오늘 + ageDays) — LLM 실패 시 폴백 용
   const daySeed =
     Math.floor((Date.now() + 9 * 60 * 60 * 1000) / (24 * 60 * 60 * 1000)) +
     ageDays;
 
-  const greeting = pickGreeting({
+  // 결정형 폴백 (LLM 실패 시 사용)
+  const fallbackGreeting = pickGreeting({
     mood,
     recentSessionCount24h,
     seed: daySeed,
   });
 
-  const followup = pickFollowup({
+  const fallbackFollowup = pickFollowup({
     mood,
     recentSessionCount24h,
     intimacyLevel,
     seed: daySeed + 3,
   });
 
-  const showFollowup = shouldShowFollowup({
-    recentSessionCount24h,
-    seed: daySeed,
-  });
+  // ─── v113: LLM 인사 fetch ─────────────────────────────────────────
+  // 마운트 직후(영상 재생 중) 백그라운드로 받아두면 startSequence 시점에 보통 준비됨.
+  const [llmResult, setLlmResult] = useState<{ greeting: string; followup: string } | null>(null);
+  const fetchStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (fetchStartedRef.current) return;
+    fetchStartedRef.current = true;
+
+    const ac = new AbortController();
+    const recent = loadRecentGreetings();
+
+    fetch('/api/luna-room/greeting', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lastGreetings: recent, intimacyLevel }),
+      signal: ac.signal,
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { greeting?: string; followup?: string } | null) => {
+        if (!data || typeof data.greeting !== 'string' || !data.greeting) return;
+        setLlmResult({
+          greeting: data.greeting,
+          followup: typeof data.followup === 'string' ? data.followup : '',
+        });
+        pushRecentGreeting(data.greeting);
+      })
+      .catch(() => {
+        /* 네트워크/abort — 폴백 사용 */
+      });
+
+    return () => ac.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const greeting = llmResult?.greeting ?? fallbackGreeting;
+
+  // followup 노출 여부:
+  //   LLM 응답 있으면 LLM 의 결정 따름 (빈 문자열 = 표시 X)
+  //   없으면 폴백 60% 확률 로직
+  const showFollowup = llmResult != null
+    ? llmResult.followup.length > 0
+    : shouldShowFollowup({ recentSessionCount24h, seed: daySeed });
+
+  const followup = llmResult?.followup || fallbackFollowup;
 
   // 시퀀스 진행
   useEffect(() => {

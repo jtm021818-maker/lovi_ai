@@ -31,6 +31,7 @@ import SpiritsRoomLayer from './SpiritsRoomLayer';
 import PlacedSpiritsChip from './PlacedSpiritsChip';
 // v104
 import BagButton from './BagButton';
+import RelationshipChip from './journal/RelationshipChip';
 import EmptySeatNote from './EmptySeatNote';
 import LunaReturnCeremony from './LunaReturnCeremony';
 // v104 M3
@@ -348,6 +349,10 @@ export default function LunaRoomDiorama({
           {/* v103: 오늘 같이 있는 친구들 칩 */}
           {!isDeceased && (
             <PlacedSpiritsChip isDark={isDark} accentColor={accentColor} />
+          )}
+          {/* v114: 관계 일지 */}
+          {!isDeceased && (
+            <RelationshipChip isDark={isDark} accentColor={accentColor} />
           )}
           {/* v104: 가방 */}
           {!isDeceased && (

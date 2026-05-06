@@ -11,8 +11,7 @@ import { useLunaVoice } from '@/hooks/useLunaVoice';
 import { isFxEnabled } from '@/lib/fx/effect-bus';
 import type { PersonaMode } from '@/types/persona.types';
 // 🆕 v41: 친밀도 카드
-import IntimacyCard from '@/components/intimacy/IntimacyCard';
-import type { IntimacyDerivedInfo } from '@/engines/intimacy';
+// v114: 관계 상태 UI 는 루나 룸 헤더 🌸 관계 칩 (LunaJournalSheet) 으로 이동
 // 🆕 v82.20: Luna 설정 페이지 스프라이트 (7×7 49프레임)
 import LunaSprite from '@/components/common/LunaSprite';
 // 🆕 v85.5: 필드 편집 bottom-sheet (인라인 편집 UI 깨짐 해결)
@@ -93,8 +92,6 @@ export default function SettingsPage() {
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   // 🆕 v41.1: 페르소나별 친밀도 상태 (루나 + 타로냥 독립)
-  const [intimacyLuna, setIntimacyLuna] = useState<IntimacyDerivedInfo | null>(null);
-  const [intimacyTarot, setIntimacyTarot] = useState<IntimacyDerivedInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingNick, setEditingNick] = useState(false);
   const [nickInput, setNickInput] = useState('');
@@ -104,7 +101,6 @@ export default function SettingsPage() {
   const [confirmModal, setConfirmModal] = useState<'reset' | 'delete' | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [showPersonaDetail, setShowPersonaDetail] = useState<string | null>(null);
-  const [intimacyTab, setIntimacyTab] = useState<'luna' | 'tarot'>('luna');
   const [fxEnabled, setFxEnabled] = useState(true);
 
   useEffect(() => {
@@ -158,22 +154,14 @@ export default function SettingsPage() {
           .single()
           .then((r: any) => r.data?.locked_scenario ?? null);
       }),
-      // ③ 🆕 v41: 친밀도 상태
-      fetch('/api/user/intimacy').then(r => r.json()).catch(() => null),
-    ]).then(([profileData, scenario, intimacyData]) => {
+      // v114: 친밀도 fetch 는 루나 룸 LunaJournalSheet 가 직접 호출
+    ]).then(([profileData, scenario]) => {
       if (profileData) {
         setProfile(profileData);
         setNickInput(profileData.nickname || '');
         setGenderInput(profileData.onboarding_situation || 'other');
       }
       if (scenario) setLatestScenario(scenario);
-      // 🆕 v41.1: 둘 다 반환 응답 처리 ({ luna: {raw, derived}, tarot: {raw, derived} })
-      if (intimacyData?.luna?.derived) {
-        setIntimacyLuna(intimacyData.luna.derived as IntimacyDerivedInfo);
-      }
-      if (intimacyData?.tarot?.derived) {
-        setIntimacyTarot(intimacyData.tarot.derived as IntimacyDerivedInfo);
-      }
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -486,167 +474,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* 🆕 v41.2: 친밀도 카드 — 탭 전환 방식 (모바일 화면 짤림 방지) */}
-        {(intimacyLuna || intimacyTarot) && (
-          <div className="settings-section">
-            <h2 className="settings-section-title">관계 상태</h2>
-
-            {/* 탭 전환 버튼 — 루나 & 타로냥 둘 다 있을 때만 */}
-            {intimacyLuna && intimacyTarot && (
-              <div style={{
-                display: 'flex',
-                gap: 8,
-                marginBottom: 12,
-                background: 'rgba(168, 85, 247, 0.06)',
-                borderRadius: 16,
-                padding: 4,
-              }}>
-                <motion.button
-                  onClick={() => setIntimacyTab('luna')}
-                  whileTap={{ scale: 0.95 }}
-                  style={{
-                    flex: 1,
-                    padding: '8px 12px',
-                    borderRadius: 13,
-                    border: 'none',
-                    fontSize: 13,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    transition: 'all 0.25s ease',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 8,
-                    background: intimacyTab === 'luna'
-                      ? 'linear-gradient(135deg, #a855f7, #c084fc)'
-                      : 'transparent',
-                    color: intimacyTab === 'luna' ? '#fff' : '#9ca3af',
-                    boxShadow: intimacyTab === 'luna'
-                      ? '0 2px 8px rgba(168, 85, 247, 0.35)'
-                      : 'none',
-                  }}
-                >
-                  <img
-                    src="/luna_fox_transparent.webp"
-                    alt="루나"
-                    style={{
-                      width: 24,
-                      height: 24,
-                      borderRadius: '50%',
-                      objectFit: 'cover',
-                      border: intimacyTab === 'luna' ? '2px solid rgba(255,255,255,0.6)' : '2px solid rgba(168,85,247,0.2)',
-                    }}
-                  />
-                  루나
-                </motion.button>
-                <motion.button
-                  onClick={() => setIntimacyTab('tarot')}
-                  whileTap={{ scale: 0.95 }}
-                  style={{
-                    flex: 1,
-                    padding: '8px 12px',
-                    borderRadius: 13,
-                    border: 'none',
-                    fontSize: 13,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    transition: 'all 0.25s ease',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 8,
-                    background: intimacyTab === 'tarot'
-                      ? 'linear-gradient(135deg, #2d1b69, #1a1a3e)'
-                      : 'transparent',
-                    color: intimacyTab === 'tarot' ? '#ffd54f' : '#9ca3af',
-                    boxShadow: intimacyTab === 'tarot'
-                      ? '0 2px 8px rgba(45, 27, 105, 0.4)'
-                      : 'none',
-                  }}
-                >
-                  <img
-                    src="/taronaong_kakao.webp"
-                    alt="타로냥"
-                    style={{
-                      width: 24,
-                      height: 24,
-                      borderRadius: '50%',
-                      objectFit: 'cover',
-                      border: intimacyTab === 'tarot' ? '2px solid rgba(255,213,79,0.6)' : '2px solid rgba(45,27,105,0.2)',
-                    }}
-                  />
-                  타로냥
-                </motion.button>
-              </div>
-            )}
-
-            {/* 카드 영역 — AnimatePresence로 전환 애니메이션 */}
-            <AnimatePresence mode="wait">
-              {intimacyTab === 'luna' && intimacyLuna && (
-                <motion.div
-                  key="intimacy-luna"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  transition={{ duration: 0.25 }}
-                >
-                  <IntimacyCard
-                    level={intimacyLuna.level}
-                    levelEmoji={intimacyLuna.levelEmoji}
-                    levelName={intimacyLuna.levelName}
-                    levelLabel={intimacyLuna.levelLabel}
-                    trust={intimacyLuna.dimensions.trust}
-                    openness={intimacyLuna.dimensions.openness}
-                    bond={intimacyLuna.dimensions.bond}
-                    respect={intimacyLuna.dimensions.respect}
-                    avgScore={intimacyLuna.avgScore}
-                    progressPercent={intimacyLuna.progressPercent}
-                    daysSinceFirst={intimacyLuna.daysSinceFirst}
-                    totalSessions={intimacyLuna.totalSessions}
-                    consecutiveDays={intimacyLuna.consecutiveDays}
-                    persona="luna"
-                  />
-                  <p style={{ fontSize: 9, color: '#9ca3af', marginTop: 6, textAlign: 'center', fontStyle: 'italic', lineHeight: 1.4 }}>
-                    💭 {intimacyLuna.depthHint}
-                  </p>
-                </motion.div>
-              )}
-              {intimacyTab === 'tarot' && intimacyTarot && (
-                <motion.div
-                  key="intimacy-tarot"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{ duration: 0.25 }}
-                >
-                  <IntimacyCard
-                    level={intimacyTarot.level}
-                    levelEmoji={intimacyTarot.levelEmoji}
-                    levelName={intimacyTarot.levelName}
-                    levelLabel={intimacyTarot.levelLabel}
-                    trust={intimacyTarot.dimensions.trust}
-                    openness={intimacyTarot.dimensions.openness}
-                    bond={intimacyTarot.dimensions.bond}
-                    respect={intimacyTarot.dimensions.respect}
-                    avgScore={intimacyTarot.avgScore}
-                    progressPercent={intimacyTarot.progressPercent}
-                    daysSinceFirst={intimacyTarot.daysSinceFirst}
-                    totalSessions={intimacyTarot.totalSessions}
-                    consecutiveDays={intimacyTarot.consecutiveDays}
-                    persona="tarot"
-                  />
-                  <p style={{ fontSize: 9, color: '#9ca3af', marginTop: 6, textAlign: 'center', fontStyle: 'italic', lineHeight: 1.4 }}>
-                    💭 {intimacyTarot.depthHint}
-                  </p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <p style={{ fontSize: 10, color: '#a855f7', marginTop: 12, textAlign: 'center', fontWeight: 600 }}>
-              💜 루나와 타로냥은 각자 독립된 관계로 발전해
-            </p>
-          </div>
-        )}
+        {/* v114: 관계 상태 섹션은 루나 룸 헤더의 🌸 관계 칩으로 이동 (LunaJournalSheet) */}
 
         {/* ⑤ 화면 연출 */}
         <div className="settings-toggles-row">
