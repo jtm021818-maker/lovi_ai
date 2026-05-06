@@ -319,7 +319,7 @@ export default function LunaRoomDiorama({
         transition={{ delay: 0.1, ...ROOM_TOKENS.springSoft }}
         className="relative z-[60] flex flex-col items-start px-5 pt-12 pb-2 gap-1"
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto">
           <DayBadge
             ageDays={ageDays}
             showCountdown={showCountdown}
