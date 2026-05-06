@@ -103,8 +103,8 @@ export default function LunaEnvelope({ gift, accentColor, isDark, onClose, onOpe
           <button onClick={onClose} className="text-[20px] opacity-50 hover:opacity-80">✕</button>
         </div>
 
-        {/* Content area */}
-        <div className="px-5 pb-6 min-h-[220px]">
+        {/* Content area — max-h + scroll so long letters don't get clipped by overflow-hidden */}
+        <div className="px-5 pb-6 min-h-[180px] max-h-[55vh] overflow-y-auto">
           <AnimatePresence mode="wait">
             {phase === 'sealed' && (
               <motion.div

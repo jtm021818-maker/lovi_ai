@@ -1,15 +1,15 @@
 'use client';
 
 /**
- * 🆕 v112-rev2: 카톡 친구 톡방 — 루나의 인사 메시지 (1~2개)
+ * 🆕 v114: 카톡 친구 톡방 — 루나의 LLM-driven 첫 톡 N개 (1~3개)
  *
- * 컨셉: 영상 끝나면 typing → 첫 인사 → typing → 두 번째 메시지 (선택).
- * 카드 X. 카톡 메시지 버블 그대로. iMessage / WhatsApp / 카카오톡 표준.
+ * 컨셉: 영상 끝나면 typing → 첫 메시지 → typing → 다음 메시지 ... (LLM 이 결정한 개수만큼)
+ * 카드 X. 카톡 메시지 버블 그대로. 친구가 카톡 빠르게 연달아 보낼 때처럼.
  *
- * - 카피: whispers.ts (pickGreeting + pickFollowup) 활용
- * - 타이밍: typing 600ms → 메시지 도착 → typing 500ms → 두 번째 도착
- * - 사운드: tiny ping (메시지 도착)
- * - 햅틱: 메시지 도착 시 .light
+ * - 본문: /api/luna-room/greeting (LLM 본인 사고로 1~3개 결정)
+ * - 폴백: whispers.ts (pickGreeting + pickFollowup) — 안전장치만
+ * - 타이밍: typing 600ms → 메시지 도착 → typing 500ms → 다음 ...
+ * - 사운드/햅틱: 메시지 도착마다
  */
 
 import { motion, AnimatePresence } from 'framer-motion';
@@ -26,11 +26,11 @@ interface Props {
   ageDays: number;
   /** 영상 끝나면 true — 시퀀스 시작 트리거 */
   startSequence: boolean;
-  /** 1~2개 메시지 모두 도착 후 호출 (SmartReplyBar 등장 트리거) */
+  /** 모든 메시지 도착 후 호출 (SmartReplyBar 등장 트리거) */
   onAllShown?: () => void;
 }
 
-// ─── v113: 최근 인사 localStorage (반복 방지) ────────────────────────
+// ─── v113: 최근 인사 localStorage (반복 방지 — 첫 줄만 저장) ──────────
 const RECENT_KEY = 'luna:recentGreetings';
 const RECENT_MAX = 8;
 
@@ -139,18 +139,13 @@ function MessageBubble({
   );
 }
 
-// ─── Phase ─────────────────────────────────────────────────────────
-type Phase = 'idle' | 'typing1' | 'msg1' | 'typing2' | 'msg2' | 'done';
+// ─── 메시지 N개 시퀀스 진행 ──────────────────────────────────────────
+//   각 메시지마다 typing(600ms) → 메시지 도착(haptic+ping) → 짧은 갭(500ms) → 다음 메시지의 typing
+type SlotState = 'hidden' | 'typing' | 'shown';
 
-// recurring/frequent 는 follow-up 항상. first 는 60% 확률.
-function shouldShowFollowup(args: {
-  recentSessionCount24h: number;
-  seed: number;
-}): boolean {
-  if (args.recentSessionCount24h >= 1) return true;
-  // 결정형: seed 5/10 = 50%
-  return Math.abs(Math.floor(args.seed)) % 10 < 6;
-}
+const TYPING_MS = 600;
+const GAP_MS = 500;
+const FINAL_MS = 400;
 
 export default function LunaGreetingMessage({
   mood,
@@ -160,30 +155,22 @@ export default function LunaGreetingMessage({
   startSequence,
   onAllShown,
 }: Props) {
-  const [phase, setPhase] = useState<Phase>('idle');
-
   // 결정형 seed (오늘 + ageDays) — LLM 실패 시 폴백 용
   const daySeed =
     Math.floor((Date.now() + 9 * 60 * 60 * 1000) / (24 * 60 * 60 * 1000)) +
     ageDays;
 
-  // 결정형 폴백 (LLM 실패 시 사용)
-  const fallbackGreeting = pickGreeting({
-    mood,
-    recentSessionCount24h,
-    seed: daySeed,
-  });
+  // 결정형 폴백 메시지 (LLM 도착 전/실패 시)
+  const fallbackMessages = (() => {
+    const g = pickGreeting({ mood, recentSessionCount24h, seed: daySeed });
+    const f = pickFollowup({ mood, recentSessionCount24h, intimacyLevel, seed: daySeed + 3 });
+    // first 진입은 폴백도 1개로 (자연스러움)
+    if (recentSessionCount24h === 0 && daySeed % 10 < 4) return [g];
+    return f ? [g, f] : [g];
+  })();
 
-  const fallbackFollowup = pickFollowup({
-    mood,
-    recentSessionCount24h,
-    intimacyLevel,
-    seed: daySeed + 3,
-  });
-
-  // ─── v113: LLM 인사 fetch ─────────────────────────────────────────
-  // 마운트 직후(영상 재생 중) 백그라운드로 받아두면 startSequence 시점에 보통 준비됨.
-  const [llmResult, setLlmResult] = useState<{ greeting: string; followup: string } | null>(null);
+  // ─── v114: LLM 메시지 fetch ────────────────────────────────────────
+  const [llmMessages, setLlmMessages] = useState<string[] | null>(null);
   const fetchStartedRef = useRef(false);
 
   useEffect(() => {
@@ -200,13 +187,15 @@ export default function LunaGreetingMessage({
       signal: ac.signal,
     })
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { greeting?: string; followup?: string } | null) => {
-        if (!data || typeof data.greeting !== 'string' || !data.greeting) return;
-        setLlmResult({
-          greeting: data.greeting,
-          followup: typeof data.followup === 'string' ? data.followup : '',
-        });
-        pushRecentGreeting(data.greeting);
+      .then((data: { messages?: unknown } | null) => {
+        if (!data || !Array.isArray(data.messages)) return;
+        const cleaned = data.messages
+          .map((m: unknown) => (typeof m === 'string' ? m.trim() : ''))
+          .filter((m: string) => m.length > 0)
+          .slice(0, 3);
+        if (cleaned.length === 0) return;
+        setLlmMessages(cleaned);
+        pushRecentGreeting(cleaned[0]);
       })
       .catch(() => {
         /* 네트워크/abort — 폴백 사용 */
@@ -216,126 +205,114 @@ export default function LunaGreetingMessage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const greeting = llmResult?.greeting ?? fallbackGreeting;
+  const messages = llmMessages ?? fallbackMessages;
 
-  // followup 노출 여부:
-  //   LLM 응답 있으면 LLM 의 결정 따름 (빈 문자열 = 표시 X)
-  //   없으면 폴백 60% 확률 로직
-  const showFollowup = llmResult != null
-    ? llmResult.followup.length > 0
-    : shouldShowFollowup({ recentSessionCount24h, seed: daySeed });
+  // 각 슬롯 상태: hidden → typing → shown
+  const [slots, setSlots] = useState<SlotState[]>(() => messages.map(() => 'hidden'));
+  const sequenceStartedRef = useRef(false);
+  const allShownFiredRef = useRef(false);
 
-  const followup = llmResult?.followup || fallbackFollowup;
+  // messages 길이 바뀌면 (LLM 도착) slots 리셋 — 단, 시퀀스 시작 전에만
+  useEffect(() => {
+    if (sequenceStartedRef.current) return;
+    setSlots(messages.map(() => 'hidden'));
+  }, [messages]);
 
   // 시퀀스 진행
   useEffect(() => {
     if (!startSequence) return;
-    if (phase !== 'idle') return;
+    if (sequenceStartedRef.current) return;
+    sequenceStartedRef.current = true;
 
     const timers: NodeJS.Timeout[] = [];
+    const total = messages.length;
 
-    // 0.3s: typing 1
-    timers.push(setTimeout(() => setPhase('typing1'), 300));
-    // 0.9s: 메시지 1 도착
-    timers.push(
-      setTimeout(() => {
-        setPhase('msg1');
+    let cursor = 300; // 첫 typing 까지 약간의 텀
+
+    for (let i = 0; i < total; i++) {
+      const idx = i;
+      // typing 시작
+      timers.push(setTimeout(() => {
+        setSlots((prev) => {
+          const next = [...prev];
+          next[idx] = 'typing';
+          return next;
+        });
+      }, cursor));
+      cursor += TYPING_MS;
+
+      // 메시지 도착
+      timers.push(setTimeout(() => {
+        setSlots((prev) => {
+          const next = [...prev];
+          next[idx] = 'shown';
+          return next;
+        });
         triggerHaptic('light');
         playSound('ping');
-      }, 900),
-    );
+      }, cursor));
 
-    if (showFollowup) {
-      // 1.4s: typing 2
-      timers.push(setTimeout(() => setPhase('typing2'), 1400));
-      // 2.0s: 메시지 2 도착
-      timers.push(
-        setTimeout(() => {
-          setPhase('msg2');
-          triggerHaptic('light');
-          playSound('ping');
-        }, 2000),
-      );
-      // 2.4s: 완료
-      timers.push(
-        setTimeout(() => {
-          setPhase('done');
-          onAllShown?.();
-        }, 2400),
-      );
-    } else {
-      // 1.4s: 완료 (1개 메시지만)
-      timers.push(
-        setTimeout(() => {
-          setPhase('done');
-          onAllShown?.();
-        }, 1400),
-      );
+      // 다음 typing 까지 갭 (마지막은 짧게)
+      cursor += idx === total - 1 ? FINAL_MS : GAP_MS;
     }
 
+    timers.push(setTimeout(() => {
+      if (allShownFiredRef.current) return;
+      allShownFiredRef.current = true;
+      onAllShown?.();
+    }, cursor));
+
     return () => timers.forEach((t) => clearTimeout(t));
-    // 시퀀스 시작은 1회
+    // 시퀀스 시작은 1회. messages 길이는 시작 전에만 영향.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startSequence]);
 
-  const showMsg1 = phase === 'msg1' || phase === 'typing2' || phase === 'msg2' || phase === 'done';
-  const showMsg2 = phase === 'msg2' || phase === 'done';
-  const showTyping1 = phase === 'typing1';
-  const showTyping2 = phase === 'typing2';
-
   return (
     <div className="flex flex-col px-3 mt-1 mb-2">
-      {/* 메시지 1 — 또는 typing */}
-      <AnimatePresence mode="wait">
-        {showTyping1 && (
-          <motion.div
-            key="typing1"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            className="flex items-end gap-1.5 mb-1.5"
-          >
-            <div className="w-9 h-9 rounded-[14px] bg-[#F4EFE6] flex items-center justify-center overflow-hidden border border-[#EACBB3] flex-shrink-0">
-              <img
-                src="/luna_fox_transparent.webp"
-                alt="루나"
-                className="w-full h-full object-cover"
+      {messages.map((text, i) => {
+        const state = slots[i] ?? 'hidden';
+        const showProfile = i === 0;
+        const isLastShown = state === 'shown'
+          && (i === messages.length - 1 || (slots[i + 1] ?? 'hidden') === 'hidden');
+
+        return (
+          <div key={`slot-${i}`}>
+            <AnimatePresence mode="wait">
+              {state === 'typing' && (
+                <motion.div
+                  key={`typing-${i}`}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.25 }}
+                  className="flex items-end gap-1.5 mb-1.5"
+                >
+                  {showProfile ? (
+                    <div className="w-9 h-9 rounded-[14px] bg-[#F4EFE6] flex items-center justify-center overflow-hidden border border-[#EACBB3] flex-shrink-0">
+                      <img
+                        src="/luna_fox_transparent.webp"
+                        alt="루나"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-9 flex-shrink-0" />
+                  )}
+                  <TypingDots />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {state === 'shown' && (
+              <MessageBubble
+                text={text}
+                showProfile={showProfile}
+                showTime={isLastShown}
               />
-            </div>
-            <TypingDots />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {showMsg1 && (
-        <MessageBubble
-          text={greeting}
-          showProfile={true}
-          showTime={!showFollowup || phase === 'msg1' || phase === 'typing2'}
-        />
-      )}
-
-      {/* 메시지 2 — 또는 typing */}
-      <AnimatePresence mode="wait">
-        {showTyping2 && (
-          <motion.div
-            key="typing2"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            className="flex items-end gap-1.5 mb-1.5"
-          >
-            <div className="w-9 flex-shrink-0" />
-            <TypingDots />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {showMsg2 && (
-        <MessageBubble text={followup} showProfile={false} showTime={true} />
-      )}
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

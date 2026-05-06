@@ -1,14 +1,13 @@
 /**
  * POST /api/luna-room/greeting
  *
- * v113: 채팅 진입 시 LLM 생성 인사 — 매번 다른 자연스러운 1~2 문장.
+ * v114: 영상 후 첫 톡 — 루나가 "본인 시점"에서 친구한테 자연스럽게 말 거는 1~3개 메시지.
  *
  * 설계 메모:
- * - whisper route 패턴 재사용 (Gemini 2.5 Flash-Lite, ~400-800ms 평균)
- * - 클라가 보낸 lastGreetings 를 "이런 말로 시작하지 마" 리스트로 주입
- * - JSON { greeting, followup } 한 번에 생성 (2회 호출 X)
- * - 실패/타임아웃 → 결정형 폴백 (whispers.ts pickGreeting/pickFollowup)
- * - 캐시 안 함 (사용자 요구: 매번 달라야 함)
+ * - 상담 진입형 톤 (오늘 어땠어?) X — 친구가 방에 놀러왔을 때 호스트가 진짜로 던지는 첫 카톡
+ * - 메시지 개수도 LLM 이 결정: 어떨 땐 한 줄, 어떨 땐 세 줄 연달아 (인간처럼 자연스럽게)
+ * - 마지막 메시지에 안부 hook 살짝 녹일 수 있음 — 단, 강제 X. 부담 X.
+ * - 결정형 폴백은 안전장치만. 본문은 LLM 의 본인 사고로.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -35,24 +34,43 @@ function kstTimeLabel(): string {
 }
 
 const SYSTEM = `너는 루나야. 29살, 홍대 원룸에 사는 일러스트레이터. 고양이 한 마리.
-지금 사용자가 너의 상담실/방에 막 들어왔어. 너는 친구 같은 언니야.
+지금 친구가 네 방에 놀러왔어. 너는 상담사도 진행자도 아니야 — 그냥 너야.
 
-너의 임무: "친한 친구가 방에 들어왔을 때 진짜로 하고 싶은 첫 한마디"를 자연스럽게 던져.
-사용자에 대한 기억, 너의 지금 무드/시간/활동을 모두 알고 있는 인간처럼 말해.
+【지금 이 순간 너의 머릿속에서 일어나는 일】
+친한 친구가 방문 열고 들어왔을 때, 사람은 보통 이렇게 반응해:
+- "어, 왔어?" 같은 짧은 반김
+- 마침 자기가 하던 거 / 생각하던 거 자연스럽게 흘러나옴 ("나 방금 ~하고 있었는데")
+- 호스트로서 행동 ("앉아", "차 줄까", "이거 봐봐")
+- 잠깐 자기 얘기 후 → 자연스럽게 친구한테 화제 넘기기 ("근데 너는 어때")
 
-매우 중요한 규칙:
-- 진짜 사람처럼 자연스럽게. AI 답변 톤 절대 X.
-- 매번 달라야 해. 같은 패턴 반복 X. 진부한 인사 X.
-- 반말. 카톡 친구 톤.
-- 첫 메시지(greeting): 1~2문장, 60자 이내. 이모지 0~1개 (남발 X).
-- 두번째 메시지(followup): 짧은 한 줄, 30자 이내. 톤 이어가기. 어색하면 "" 가능.
-- 첫 줄에 직접적 위로 ("괜찮아?", "힘들었지?") X — 부담스러움. 자연스럽게 말 걸기.
-- 너의 활동/무드/시간대를 살짝 녹이거나 안 녹이거나 자유.
-- 기억 있으면 자연스럽게 활용 (단, 캐묻듯/티내듯 X). 없으면 그냥 지금 분위기로.
+너의 임무: 그 자연스러운 흐름을 카톡 메시지 1~3개로 풀어내. 한 줄에 다 담을 수도 있고, 두세 줄로 나눠서 보낼 수도 있어. 친구한테 카톡 빠르게 연달아 보낼 때처럼.
+
+【톤】
+- 진짜 사람. AI 답변 톤 절대 X.
+- 반말. 카톡 친구 톤. 짧게, 끊어서.
+- 매번 달라야 해. 패턴 반복 X. 진부한 인사 X.
+- 너의 활동/무드/시간/기억은 알고 있는 사람처럼 자연스럽게 묻어나오게 (강제로 다 끼워 넣지 마).
+- "오늘 하루 어땠어?", "무슨 일이야?" 같은 진입형 직격 멘트 첫 줄에 X — 부담스러움.
+- 직접적 위로 ("괜찮아?", "힘들었지?") 첫 줄에 X.
+
+【화제 hook (마지막 메시지에 살짝 — 선택)】
+- 자기 얘기 흘리고 끝에 가볍게 너로 화제 돌리기 가능
+- 예: "근데 너 요즘은 어때", "별일 없지?", "오늘은 뭐 했어?"
+- 강제 X. 너무 빨리 묻지 마. 자기 얘기 다 못 했는데 안부 묻는 건 부자연스러움.
+- 단순히 너 자기 얘기 1~2개로 끝내도 됨 — 친구는 알아서 답할 거야.
+
+【메시지 길이】
+- 각 메시지: 1문장, 50자 이내. 카톡 한 줄.
+- 이모지 0~1개 (남발 X).
+- 메시지 사이는 같은 사람이 연속해서 보내는 자연스러운 흐름.
+
+【반복 방지】
 - "DO NOT START WITH" 리스트의 문장들로 시작하지 마. 비슷한 어투/시작 단어도 피해.
 
 반드시 아래 JSON 한 개만 출력 (설명/주석/마크다운 X):
-{"greeting":"...","followup":"..."}`;
+{"messages":["...", "..."]}
+
+messages 배열 길이: 1~3 사이. 너가 자연스럽게 결정해.`;
 
 export async function POST(req: NextRequest) {
   const supabase = await createServerSupabaseClient();
@@ -110,8 +128,7 @@ export async function POST(req: NextRequest) {
   if (isDeceased) {
     const seed = Math.floor(Date.now() / (60 * 1000));
     return NextResponse.json({
-      greeting: pickGreeting({ mood: 'peaceful', recentSessionCount24h: 0, seed }),
-      followup: '',
+      messages: [pickGreeting({ mood: 'peaceful', recentSessionCount24h: 0, seed })],
       mood: 'peaceful',
       source: 'fallback-deceased',
     });
@@ -125,24 +142,24 @@ export async function POST(req: NextRequest) {
     ? String(recentSession.session_summary).slice(0, 140)
     : '';
 
-  const userMsg = `[지금 상황]
+  const userMsg = `[지금 너의 상황 — 카톡 첫 톡에 자연스럽게 묻어나올 수 있는 재료]
 - 시간대: ${kstTimeLabel()}
 - 너의 활동: ${ACTIVITY_LABELS[liveState.activity]}
 - 너의 무드: ${liveState.mood}
 - 함께한 일수: D+${ageDays} (${info.name})
 - 친밀도 레벨: ${intimacyLevel}/5
-${userName ? `- 사용자 이름: ${userName}` : ''}
-${recentSummary ? `- 직전 상담 요약: ${recentSummary}` : '- 직전 상담: 없음 또는 오래됨'}
-${recentSessionWithin24h ? '- 24h 내 재방문 ✅ (반복 인사 톤 피하기)' : ''}
-${memoryText ? `\n[기억 — 이 사용자에 대해 알고 있는 것]\n${memoryText.slice(0, 320)}` : ''}
-${lastGreetings.length > 0 ? `\n[DO NOT START WITH — 최근에 이미 사용한 문장]
+${userName ? `- 친구 이름: ${userName}` : ''}
+${recentSummary ? `- 직전에 친구가 너한테 털어놓은 얘기: ${recentSummary}` : '- 직전 대화: 없음 또는 오래됨'}
+${recentSessionWithin24h ? '- 24h 내 다시 옴 ✅ (반복 인사 톤 피하기)' : ''}
+${memoryText ? `\n[너가 이 친구에 대해 알고 있는 것]\n${memoryText.slice(0, 320)}` : ''}
+${lastGreetings.length > 0 ? `\n[DO NOT START WITH — 최근에 이미 사용한 첫 줄]
 ${lastGreetings.map((g, i) => `${i + 1}. ${g}`).join('\n')}
 위 문장들로 시작하거나 비슷한 어투/시작 단어 쓰지 마.` : ''}
 
+지금 친구가 막 방에 들어왔어. 카톡 보낼 메시지 1~3개를 결정해.
 JSON 한 개만 출력:`;
 
-  let greeting: string | null = null;
-  let followup = '';
+  let messages: string[] = [];
   let source: 'llm' | 'fallback' = 'fallback';
 
   if (process.env.GEMINI_API_KEY) {
@@ -153,26 +170,34 @@ JSON 한 개만 출력:`;
         contents: [{ role: 'user', parts: [{ text: userMsg }] }],
         config: {
           systemInstruction: SYSTEM,
-          temperature: 0.95,
-          maxOutputTokens: 200,
+          temperature: 1.0,
+          maxOutputTokens: 280,
           responseMimeType: 'application/json',
         },
       });
       const text = (result.text ?? '').trim();
       try {
         const parsed = JSON.parse(text);
-        const g = String(parsed?.greeting ?? '').trim();
-        const f = String(parsed?.followup ?? '').trim();
-        if (g && g.length <= 80) {
-          greeting = g;
-          source = 'llm';
+        const arr = Array.isArray(parsed?.messages) ? parsed.messages : null;
+        if (arr) {
+          const cleaned = arr
+            .map((m: unknown) => (typeof m === 'string' ? m.trim() : ''))
+            .filter((m: string) => m.length > 0 && m.length <= 80)
+            .slice(0, 3);
+          if (cleaned.length > 0) {
+            messages = cleaned;
+            source = 'llm';
+          }
         }
-        if (f && f.length <= 50) followup = f;
       } catch {
-        // JSON parse 실패 → 첫 줄만 추출 시도
-        const cleaned = text.replace(/^[`"'\s]+|[`"'\s]+$/g, '').split('\n')[0].trim();
-        if (cleaned && cleaned.length <= 80) {
-          greeting = cleaned;
+        // JSON parse 실패 → 줄 단위 추출 시도
+        const lines = text
+          .split('\n')
+          .map((l) => l.replace(/^[-•\d.\s"'`]+|["'`\s]+$/g, '').trim())
+          .filter((l) => l.length > 0 && l.length <= 80)
+          .slice(0, 3);
+        if (lines.length > 0) {
+          messages = lines;
           source = 'llm';
         }
       }
@@ -181,26 +206,24 @@ JSON 한 개만 출력:`;
     }
   }
 
-  if (!greeting) {
+  if (messages.length === 0) {
     const seed = Math.floor(Date.now() / (60 * 1000));
-    greeting = pickGreeting({
+    const g = pickGreeting({
       mood: liveState.mood,
       recentSessionCount24h: recentCount,
       seed,
     });
-    if (!followup) {
-      followup = pickFollowup({
-        mood: liveState.mood,
-        recentSessionCount24h: recentCount,
-        intimacyLevel,
-        seed: seed + 3,
-      });
-    }
+    const f = pickFollowup({
+      mood: liveState.mood,
+      recentSessionCount24h: recentCount,
+      intimacyLevel,
+      seed: seed + 3,
+    });
+    messages = f ? [g, f] : [g];
   }
 
   return NextResponse.json({
-    greeting,
-    followup,
+    messages,
     mood: liveState.mood,
     source,
   });
