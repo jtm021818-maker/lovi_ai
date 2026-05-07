@@ -1,14 +1,7 @@
 'use client';
 
-/**
- * v104: EmptySeatNote (M3 — 진행 비례 메시지)
- *
- * 루나가 외출 중일 때 캐릭터 자리 표시.
- * 외출 진행도(0~1)에 따라 mid-trip 메시지를 회전시켜 부재의 시간을 채움.
- */
-
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { fuzzyDurationLabel } from '@/lib/luna-shopping/shopping-engine';
 
 interface Props {
@@ -56,9 +49,9 @@ const MID_TRIP_LINES: Array<{ minProgress: number; maxProgress: number; lines: s
 ];
 
 function pickLineByProgress(progress: number): string {
-  const seg = MID_TRIP_LINES.find((s) => progress >= s.minProgress && progress < s.maxProgress)
-    ?? MID_TRIP_LINES[MID_TRIP_LINES.length - 1];
-  // 진행도와 minute 시드로 안정적 회전
+  const seg =
+    MID_TRIP_LINES.find((s) => progress >= s.minProgress && progress < s.maxProgress) ??
+    MID_TRIP_LINES[MID_TRIP_LINES.length - 1];
   const seed = Math.floor(progress * 100);
   return seg.lines[seed % seg.lines.length];
 }
@@ -72,13 +65,11 @@ export default function EmptySeatNote({
   const fuzzy = fuzzyDurationLabel(minutesRemaining);
   const [tick, setTick] = useState(0);
 
-  // 30초마다 mid-trip 메시지 갱신
   useEffect(() => {
     const t = setInterval(() => setTick((v) => v + 1), 30_000);
     return () => clearInterval(t);
   }, []);
 
-  // 진행도 계산
   let progress = 0.5;
   if (departedAt && returnsAt) {
     const depMs = new Date(departedAt).getTime();
@@ -88,143 +79,368 @@ export default function EmptySeatNote({
       progress = Math.max(0, Math.min(1, (Date.now() - depMs) / total));
     }
   }
-  const midTripLine = pickLineByProgress(progress + tick * 0.0); // tick 으로 리렌더 유도
+  void tick; // trigger re-render for progress recalc
+  const midTripLine = pickLineByProgress(progress);
+
+  // ── 테마 토큰 ──
+  const tk = isDark
+    ? {
+        paper: '#1e1433',
+        ink: '#f3e8ff',
+        inkMuted: 'rgba(243,232,255,0.55)',
+        tape: 'rgba(139,92,246,0.52)',
+        tapeStripe: 'rgba(109,40,217,0.32)',
+        shadow: 'rgba(0,0,0,0.5)',
+        bubbleBg: 'rgba(20,12,40,0.85)',
+        bubbleBorder: 'rgba(167,139,250,0.28)',
+        bubbleText: '#e9d5ff',
+        chipBg: 'rgba(255,255,255,0.06)',
+        chipBorder: 'rgba(255,255,255,0.09)',
+        chipText: '#e9d5ff',
+        aura: 'rgba(139,92,246,0.22)',
+        progStart: '#a78bfa',
+        progEnd: '#ec4899',
+        trackBg: 'rgba(255,255,255,0.09)',
+        deco: '#a78bfa',
+      }
+    : {
+        paper: '#fef9ee',
+        ink: '#5a3e2b',
+        inkMuted: '#9a7255',
+        tape: 'rgba(251,146,60,0.52)',
+        tapeStripe: 'rgba(234,88,12,0.28)',
+        shadow: 'rgba(120,80,40,0.15)',
+        bubbleBg: 'rgba(255,252,245,0.90)',
+        bubbleBorder: 'rgba(200,155,95,0.28)',
+        bubbleText: '#7c5738',
+        chipBg: 'rgba(255,255,255,0.78)',
+        chipBorder: 'rgba(0,0,0,0.07)',
+        chipText: '#7c5738',
+        aura: 'rgba(255,180,70,0.22)',
+        progStart: '#f59e0b',
+        progEnd: '#ec4899',
+        trackBg: 'rgba(0,0,0,0.08)',
+        deco: '#f59e0b',
+      };
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 6 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, ease: 'easeOut' }}
-      className="relative flex flex-col items-center justify-end"
+      transition={{ duration: 0.7, ease: 'easeOut' }}
+      className="relative flex flex-col items-center"
       style={{ width: 220, height: 220 * 1.6 }}
     >
-      {/* mid-trip 작은 떠다니는 텍스트 */}
-      <motion.div
-        key={midTripLine}
-        initial={{ opacity: 0, y: 4 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="absolute"
-        style={{ top: '12%', left: '50%', transform: 'translateX(-50%)', maxWidth: 200 }}
-      >
-        <div
-          className="px-2.5 py-1 rounded-2xl text-center"
+
+      {/* ── 1. 말풍선 (mid-trip 메시지) ── */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={midTripLine}
+          initial={{ opacity: 0, y: -6, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 6, scale: 0.96 }}
+          transition={{ duration: 0.45, ease: 'easeOut' }}
           style={{
-            background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.7)',
-            border: '1px solid rgba(212,175,55,0.25)',
-            backdropFilter: 'blur(4px)',
-            color: isDark ? '#fde68a' : '#7c5738',
-            fontSize: 10,
-            fontStyle: 'italic',
-            lineHeight: 1.45,
+            position: 'absolute',
+            top: '3%',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 10,
+            width: 196,
           }}
         >
-          “{midTripLine}”
-        </div>
-      </motion.div>
+          <div
+            style={{
+              background: tk.bubbleBg,
+              border: `1px solid ${tk.bubbleBorder}`,
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              borderRadius: 18,
+              padding: '10px 15px',
+              boxShadow: `0 4px 24px ${tk.shadow}, 0 1px 0 rgba(255,255,255,0.15) inset`,
+              textAlign: 'center',
+              position: 'relative',
+            }}
+          >
+            <p
+              style={{
+                color: tk.bubbleText,
+                fontSize: 11.5,
+                fontStyle: 'italic',
+                lineHeight: 1.55,
+                fontFamily: 'var(--font-handwrite-soft), "Nanum Pen Script", "Caveat", cursive',
+                letterSpacing: '0.01em',
+              }}
+            >
+              &ldquo;{midTripLine}&rdquo;
+            </p>
+            {/* 말풍선 꼬리 */}
+            <div
+              style={{
+                position: 'absolute',
+                bottom: -7,
+                left: '50%',
+                transform: 'translateX(-50%) rotate(45deg)',
+                width: 12,
+                height: 12,
+                background: tk.bubbleBg,
+                border: `1px solid ${tk.bubbleBorder}`,
+                borderTop: 'none',
+                borderLeft: 'none',
+              }}
+            />
+          </div>
+        </motion.div>
+      </AnimatePresence>
 
-      {/* 빈 자리 그림자 */}
-      <div
-        className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full"
+      {/* ── 2. 빈 자리 아우라 (루나가 있던 곳의 잔열) ── */}
+      <motion.div
+        animate={{ opacity: [0.28, 0.58, 0.28], scale: [0.88, 1.08, 0.88] }}
+        transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
         style={{
-          width: 110,
-          height: 14,
-          background: isDark
-            ? 'radial-gradient(ellipse, rgba(255,255,255,0.10) 0%, transparent 70%)'
-            : 'radial-gradient(ellipse, rgba(0,0,0,0.12) 0%, transparent 70%)',
+          position: 'absolute',
+          bottom: '34%',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 100,
+          height: 100,
+          borderRadius: '50%',
+          background: `radial-gradient(circle, ${tk.aura} 0%, transparent 72%)`,
+          filter: 'blur(14px)',
+          pointerEvents: 'none',
         }}
       />
 
-      {/* 의자 */}
-      <div
-        className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-end gap-1 select-none"
-        style={{ opacity: 0.55, fontSize: 36 }}
-      >
-        <span aria-hidden>🪑</span>
-      </div>
-
-      {/* 흔들리는 쪽지 */}
+      {/* ── 3. 손편지 쪽지 ── */}
       <motion.div
-        animate={{ rotate: [-2, 2, -2] }}
-        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute"
+        animate={{ rotate: [-1.8, 1.6, -1.8], y: [0, -4, 0] }}
+        transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
         style={{
+          position: 'absolute',
+          bottom: '27%',
           left: '50%',
-          bottom: '36%',
-          transform: 'translateX(-50%) rotate(-2deg)',
+          zIndex: 15,
         }}
       >
-        <div
-          className="px-3 py-2 rounded-md text-center"
-          style={{
-            background: '#fff8e7',
-            border: '1px solid rgba(212,175,55,0.45)',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            fontFamily: 'var(--font-handwrite-soft)',
-            color: '#5a3e2b',
-            fontSize: 11,
-            lineHeight: 1.5,
-            minWidth: 130,
-            maxWidth: 170,
-          }}
-        >
-          <div className="text-[10px] opacity-70 mb-0.5">루나의 쪽지</div>
-          <div className="font-semibold">
-            나 잠깐 나갔다 올게~
-            <br />
-            <span className="text-[#7c5738]/80">곧 와 ❤</span>
+        <div style={{ transform: 'translateX(-50%)', position: 'relative' }}>
+
+          {/* 와시 테이프 */}
+          <div
+            style={{
+              position: 'absolute',
+              top: -13,
+              left: '50%',
+              transform: 'translateX(-50%) rotate(-4deg)',
+              width: 60,
+              height: 22,
+              backgroundImage: `repeating-linear-gradient(
+                110deg,
+                ${tk.tape} 0px, ${tk.tape} 5px,
+                ${tk.tapeStripe} 5px, ${tk.tapeStripe} 10px
+              )`,
+              borderRadius: 4,
+              boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
+            }}
+          />
+
+          {/* 종이 카드 본체 */}
+          <div
+            style={{
+              width: 152,
+              padding: '15px 16px 18px',
+              background: tk.paper,
+              backgroundImage: isDark
+                ? 'radial-gradient(ellipse at 85% 10%, rgba(139,92,246,0.08) 0%, transparent 55%)'
+                : [
+                    'radial-gradient(ellipse at 88% 6%, rgba(255,195,120,0.15) 0%, transparent 48%)',
+                    'radial-gradient(ellipse at 6% 88%, rgba(175,130,90,0.09) 0%, transparent 42%)',
+                  ].join(', '),
+              borderRadius: 8,
+              boxShadow: [
+                `0 10px 36px ${tk.shadow}`,
+                `0 2px 6px rgba(0,0,0,${isDark ? 0.3 : 0.07})`,
+                `inset 0 1px 0 rgba(255,255,255,${isDark ? 0.06 : 0.75})`,
+              ].join(', '),
+              position: 'relative',
+              overflow: 'hidden',
+            }}
+          >
+            {/* 가로 줄 (노트 질감) */}
+            {[0, 1, 2, 3].map((i) => (
+              <div
+                key={i}
+                style={{
+                  position: 'absolute',
+                  left: 10,
+                  right: 10,
+                  top: 44 + i * 20,
+                  height: 1,
+                  background: isDark
+                    ? 'rgba(255,255,255,0.04)'
+                    : 'rgba(0,0,0,0.04)',
+                  borderRadius: 1,
+                }}
+              />
+            ))}
+
+            {/* "루나의 쪽지" 레이블 */}
+            <p
+              style={{
+                fontSize: 9.5,
+                color: tk.inkMuted,
+                letterSpacing: '0.12em',
+                marginBottom: 10,
+                fontFamily: 'var(--font-handwrite-soft), "Nanum Pen Script", cursive',
+              }}
+            >
+              루나의 쪽지
+            </p>
+
+            {/* 메인 텍스트 */}
+            <p
+              style={{
+                fontFamily: 'var(--font-handwrite-soft), "Nanum Pen Script", cursive',
+                fontSize: 14,
+                color: tk.ink,
+                lineHeight: 1.7,
+                marginBottom: 2,
+              }}
+            >
+              나 잠깐 나갔다 올게~
+            </p>
+            <p
+              style={{
+                fontFamily: 'var(--font-handwrite-soft), "Nanum Pen Script", cursive',
+                fontSize: 13,
+                color: tk.inkMuted,
+                lineHeight: 1.6,
+              }}
+            >
+              곧 와 ♥
+            </p>
+
+            {/* 하단 우측 장식 */}
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 10,
+                right: 12,
+                fontSize: 16,
+                opacity: 0.2,
+                transform: 'rotate(12deg)',
+                color: tk.deco,
+                userSelect: 'none',
+              }}
+            >
+              ✿
+            </div>
           </div>
         </div>
-        <div
-          className="absolute left-1/2 -translate-x-1/2 -top-1 w-2 h-2 rounded-full"
-          style={{ background: '#dc2626', boxShadow: '0 1px 2px rgba(0,0,0,0.3)' }}
-        />
       </motion.div>
 
-      {/* 진행 칩 + progress bar */}
+      {/* ── 4. 여정 타임라인 ── */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.5, duration: 0.4 }}
-        className="absolute flex flex-col items-center gap-1.5"
-        style={{ left: '50%', bottom: 0, transform: 'translateX(-50%)' }}
+        transition={{ delay: 0.65, duration: 0.5 }}
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 8,
+        }}
       >
+        {/* 상태 칩 */}
         <div
-          className="px-3 py-1 rounded-full flex items-center gap-1.5 text-[10px] font-bold"
           style={{
-            background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)',
-            color: isDark ? '#fde68a' : '#7c5738',
-            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            padding: '5px 14px',
+            borderRadius: 20,
+            background: tk.chipBg,
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            border: `1px solid ${tk.chipBorder}`,
+            boxShadow: `0 2px 14px rgba(0,0,0,${isDark ? 0.22 : 0.06})`,
           }}
         >
           <motion.span
-            animate={{ opacity: [0.5, 1, 0.5] }}
-            transition={{ duration: 1.6, repeat: Infinity }}
+            animate={{ opacity: [0.55, 1, 0.55], scale: [1, 1.18, 1] }}
+            transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+            style={{ fontSize: 13, display: 'flex', lineHeight: 1 }}
           >
             🛍️
           </motion.span>
-          <span>외출 중</span>
-          <span className="opacity-50">·</span>
-          <span>{fuzzy} 후 도착</span>
-        </div>
-        {/* 진행 바 */}
-        <div
-          className="rounded-full overflow-hidden"
-          style={{
-            width: 120,
-            height: 3,
-            background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)',
-          }}
-        >
-          <motion.div
-            animate={{ width: `${progress * 100}%` }}
-            transition={{ duration: 0.6, ease: 'easeOut' }}
-            className="h-full rounded-full"
+          <span
             style={{
-              background: isDark
-                ? 'linear-gradient(90deg, #fbbf24, #ec4899)'
-                : 'linear-gradient(90deg, #f59e0b, #ec4899)',
+              fontSize: 11,
+              fontWeight: 700,
+              color: tk.chipText,
+              letterSpacing: '0.02em',
             }}
-          />
+          >
+            외출 중
+          </span>
+          <span style={{ color: tk.chipText, opacity: 0.3, fontSize: 10, margin: '0 1px' }}>
+            •
+          </span>
+          <span style={{ fontSize: 10.5, color: tk.chipText, opacity: 0.8 }}>
+            {fuzzy} 후 도착
+          </span>
+        </div>
+
+        {/* 여정 경로 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, width: 148 }}>
+          <span style={{ fontSize: 11, opacity: 0.55, lineHeight: 1 }}>🏠</span>
+
+          {/* 트랙 */}
+          <div style={{ flex: 1, position: 'relative', height: 4 }}>
+            {/* 배경 트랙 */}
+            <div
+              style={{
+                width: '100%',
+                height: '100%',
+                borderRadius: 4,
+                background: tk.trackBg,
+              }}
+            />
+            {/* 채워진 트랙 */}
+            <motion.div
+              animate={{ width: `${progress * 100}%` }}
+              transition={{ duration: 1.2, ease: 'easeOut' }}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                height: '100%',
+                borderRadius: 4,
+                background: `linear-gradient(90deg, ${tk.progStart}, ${tk.progEnd})`,
+                boxShadow: `0 0 6px ${tk.progEnd}55`,
+              }}
+            />
+            {/* 루나 위치 마커 🌙 */}
+            <motion.div
+              animate={{ left: `${Math.max(0, Math.min(100, progress * 100))}%` }}
+              transition={{ duration: 1.2, ease: 'easeOut' }}
+              style={{
+                position: 'absolute',
+                top: '50%',
+                transform: 'translate(-50%, -50%)',
+                fontSize: 12,
+                lineHeight: 1,
+                filter: `drop-shadow(0 1px 3px ${tk.progEnd}88)`,
+              }}
+            >
+              🌙
+            </motion.div>
+          </div>
+
+          <span style={{ fontSize: 11, opacity: 0.32, lineHeight: 1 }}>🛍️</span>
         </div>
       </motion.div>
     </motion.div>
