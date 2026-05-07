@@ -664,6 +664,13 @@ export async function POST(req: NextRequest) {
               );
               break;
 
+            // 🆕 좌뇌 생각 미리보기 — 우뇌 시작 전 루나의 내면 생각 전송
+            case 'luna_thought_bubble':
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ type: 'luna_thought_bubble', data: event.data })}\n\n`)
+              );
+              break;
+
             // 🆕 v79: 루나 감정 기반 미세 연출 (shake/flash/particle/bubble)
             case 'fx':
               controller.enqueue(

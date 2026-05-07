@@ -50,6 +50,7 @@ import LunaThoughtHistory from './LunaThoughtHistory';
 import SituationTimeline from './SituationTimeline';
 // 🆕 v40: 루나 딥리서치 "진짜 고민 중" 로딩 UI
 import LunaThinkingDeep from './LunaThinkingDeep';
+import LunaThoughtBubble from './LunaThoughtBubble';
 // 🆕 v48: 캐스케이드 재시도 UI
 import LunaRetrying from './LunaRetrying';
 // 🆕 v41: 친밀도 레벨업 축하 팝업
@@ -169,7 +170,7 @@ const SCENARIO_LABELS: Record<RelationshipScenario, { icon: string; label: strin
 };
 
 export default function ChatContainer({ sessionId }: ChatContainerProps) {
-  const { messages, isLoading, nudges, stateResult, suggestions, panelData, axesProgress, phaseEvents, currentPhase, phaseProgress, sessionStatus, sessionSummary, sendMessage, pendingEventLock, lunaThinking, understandingLevel, thinkingDeep, retryStatus, intimacyLevelUp, dismissIntimacyLevelUp, intimacyDerived, intimacyDelta,
+  const { messages, isLoading, nudges, stateResult, suggestions, panelData, axesProgress, phaseEvents, currentPhase, phaseProgress, sessionStatus, sessionSummary, sendMessage, pendingEventLock, lunaThinking, understandingLevel, thinkingDeep, retryStatus, lunaThoughtBubble, intimacyLevelUp, dismissIntimacyLevelUp, intimacyDerived, intimacyDelta,
     // 🆕 v88: 루나 대화형 "같이 찾기"
     handleBrowseDecision, resolvedBrowsePrompts, browseTypingDot,
   } = useChat(sessionId);
@@ -1075,6 +1076,13 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
           ))}
 
           {/* 🆕 v25: 이벤트는 메시지 리스트 안에 인라인으로 렌더됨 — 별도 렌더 제거 */}
+
+          {/* 좌뇌 생각 말풍선 — 우뇌 응답 전 루나의 내면 생각 */}
+          <AnimatePresence mode="wait">
+            {lunaThoughtBubble && (
+              <LunaThoughtBubble key="thought-bubble" thought={lunaThoughtBubble} />
+            )}
+          </AnimatePresence>
 
           {/* 🆕 v40: 루나 딥리서치 — "진짜 고민 중" 로딩 UI (Gemini Grounding) */}
           {thinkingDeep && (

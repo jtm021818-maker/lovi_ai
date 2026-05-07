@@ -43,6 +43,8 @@ interface UseChatReturn {
   pendingEventLock: boolean;
   lunaThinking: string;
   understandingLevel: number;
+  /** 좌뇌 완료 후 우뇌 시작 전 루나의 내면 생각 — 첫 text 청크 도착 시 null로 자동 제거 */
+  lunaThoughtBubble: string | null;
   // 🆕 v40: 루나 딥리서치 (Gemini Grounding) "진짜 고민 중" 상태
   thinkingDeep: {
     active: boolean;
@@ -164,6 +166,7 @@ export function useChat(sessionId: string): UseChatReturn {
     } catch { /* silent */ }
   }, []);
   const [understandingLevel, setUnderstandingLevel] = useState(0);
+  const [lunaThoughtBubble, setLunaThoughtBubble] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   // 🆕 v20: 턴 내 이벤트 중복 방지 (state 대신 ref로 — React 배칭 이슈 방지)
   const firedEventTypesRef = useRef<Set<string>>(new Set());
@@ -405,9 +408,16 @@ export function useChat(sessionId: string): UseChatReturn {
                 break;
               }
 
+              case 'luna_thought_bubble': {
+                const tbData = event.data as { thought: string };
+                if (tbData.thought) setLunaThoughtBubble(tbData.thought);
+                break;
+              }
+
               case 'text': {
-                // 🆕 v48: 첫 텍스트 도착 시 재시도 UI 종료 (fade out)
+                // 첫 텍스트 도착 시 생각 말풍선 제거 + 재시도 UI 종료
                 if (!fullResponseBuffer) {
+                  setLunaThoughtBubble(null);
                   setRetryStatus((prev) => {
                     if (prev?.active) {
                       setTimeout(() => setRetryStatus(null), 400);
@@ -520,7 +530,7 @@ export function useChat(sessionId: string): UseChatReturn {
               }
 
               case 'done':
-                // 친밀도 최신 상태 갱신 (DB 저장 후 fetch)
+                setLunaThoughtBubble(null);
                 setTimeout(() => fetchIntimacy(), 800);
                 break;
 
@@ -911,6 +921,7 @@ export function useChat(sessionId: string): UseChatReturn {
     depthOverride, setDepthOverride,
     sessionStatus, sessionSummary, sendMessage, pendingEventLock,
     lunaThinking, understandingLevel,
+    lunaThoughtBubble,
     // 🆕 v40: 루나 딥리서치 상태
     thinkingDeep,
     // 🆕 v48: 캐스케이드 재시도 상태

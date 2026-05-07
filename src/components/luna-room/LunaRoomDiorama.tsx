@@ -318,8 +318,13 @@ export default function LunaRoomDiorama({
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1, ...ROOM_TOKENS.springSoft }}
         className="relative z-[60] flex flex-col items-start px-5 pt-12 pb-2 gap-1"
+        style={{
+          background: isDark
+            ? 'linear-gradient(to bottom, rgba(15,10,30,0.72) 0%, rgba(15,10,30,0.35) 75%, transparent 100%)'
+            : 'linear-gradient(to bottom, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.2) 75%, transparent 100%)',
+        }}
       >
-        <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto">
+        <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto w-full pr-2 [&::-webkit-scrollbar]:hidden">
           <DayBadge
             ageDays={ageDays}
             showCountdown={showCountdown}

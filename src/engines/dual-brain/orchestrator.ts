@@ -360,7 +360,7 @@ export function assembleWithTags(params: {
 // ============================================================
 
 export interface DualBrainStreamYield {
-  type: 'text' | 'meta' | 'analysis';
+  type: 'text' | 'meta' | 'analysis' | 'thought_bubble';
   data: any;
 }
 
@@ -549,6 +549,11 @@ export async function* executeDualBrain(
     }
   }
   const stakeHint = enrichedStakeHint;
+
+  // 🆕 좌뇌 생각 미리보기 — 우뇌 스트리밍 전 루나의 내면 생각을 클라이언트에 전송
+  if (brainResult.output?.tags.LUNA_THOUGHT) {
+    yield { type: 'thought_bubble', data: { thought: brainResult.output.tags.LUNA_THOUGHT } };
+  }
 
   // Step 3: 라우팅 결정 (좌뇌 판단 우선)
   let route: RouteDecision;

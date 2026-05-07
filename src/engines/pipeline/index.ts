@@ -365,6 +365,8 @@ export class CounselingPipeline {
     | { type: 'phase_change'; data: { phase: ConversationPhaseV2; progress: number; lunaThinking?: string; understandingLevel?: number } }
     // 🆕 v40: 루나가 "진짜 생각하는 중" UI 이벤트 (Gemini Grounding DeepResearch)
     | { type: 'luna_thinking_deep'; data: { status: 'started' | 'done'; keyword?: string; phrases?: string[]; durationMs?: number; hasInsight?: boolean } }
+    // 🆕 좌뇌 생각 미리보기 — 우뇌 시작 전 루나의 내면 생각
+    | { type: 'luna_thought_bubble'; data: { thought: string } }
     // 🆕 v79: 루나 감정 기반 미세 연출 (shake/flash/particle/bubble 효과)
     | { type: 'fx'; data: { id: string; target: 'screen' | 'bubble' | 'text' | 'avatar' | 'particle' | 'bg'; duration?: number; params?: Record<string, any>; messageId?: string } }
     // 🆕 v81: BRIDGE 몰입 모드 완료 — 프론트에서 modeStore.exit() 트리거
@@ -1932,6 +1934,8 @@ ${researchResult.insight}
               }
             } else if (chunk.type === 'analysis') {
               capturedLeftBrainAnalysis = chunk.data;
+            } else if (chunk.type === 'thought_bubble') {
+              yield { type: 'luna_thought_bubble', data: chunk.data };
             }
           }
         } catch (err: any) {
