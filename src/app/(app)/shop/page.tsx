@@ -19,6 +19,7 @@ export default function ShopPage() {
   const [tab, setTab] = useState<Tab>('gacha');
   const [gachaStates, setGachaStates] = useState<Record<BannerId, GachaState>>({} as any);
   const [pullResults, setPullResults] = useState<PullResult[] | null>(null);
+  const [animating, setAnimating] = useState(false);
   const [loading, setLoading] = useState(false);
   const setBalance = useCurrencyStore((s) => s.setBalance);
 
@@ -32,6 +33,9 @@ export default function ShopPage() {
   async function handlePull(bannerId: BannerId, count: 1 | 10) {
     if (loading) return;
     setLoading(true);
+    // 버튼 클릭 즉시 서스펜스 애니메이션 시작 (API 대기 없이)
+    setAnimating(true);
+    setPullResults(null);
     try {
       const res = await fetch('/api/gacha/pull', {
         method: 'POST',
@@ -40,13 +44,17 @@ export default function ShopPage() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
+        setAnimating(false);
         alert(err.error ?? '뽑기 실패');
         return;
       }
       const data = await res.json();
+      // 결과 도착 → 애니메이션 컴포넌트가 타이밍 맞춰 reveal 전환
       setPullResults(data.results);
       setBalance(data.newBalance);
       setGachaStates((prev) => ({ ...prev, [bannerId]: data.newGachaState }));
+    } catch {
+      setAnimating(false);
     } finally {
       setLoading(false);
     }
@@ -120,8 +128,11 @@ export default function ShopPage() {
         )}
       </div>
 
-      {pullResults && (
-        <GachaPullAnimation results={pullResults} onFinish={() => setPullResults(null)} />
+      {animating && (
+        <GachaPullAnimation
+          results={pullResults}
+          onFinish={() => { setAnimating(false); setPullResults(null); }}
+        />
       )}
     </div>
   );
