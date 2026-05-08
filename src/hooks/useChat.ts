@@ -167,6 +167,10 @@ export function useChat(sessionId: string): UseChatReturn {
   }, []);
   const [understandingLevel, setUnderstandingLevel] = useState(0);
   const [lunaThoughtBubble, setLunaThoughtBubble] = useState<string | null>(null);
+  /** 생각 말풍선이 화면에 표시된 시각 (최소 표시 시간 계산용) */
+  const thoughtBubbleShownAt = useRef<number | null>(null);
+  /** 생각 말풍선 지연 제거 타이머 */
+  const thoughtBubbleClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   // 🆕 v20: 턴 내 이벤트 중복 방지 (state 대신 ref로 — React 배칭 이슈 방지)
   const firedEventTypesRef = useRef<Set<string>>(new Set());
@@ -410,14 +414,37 @@ export function useChat(sessionId: string): UseChatReturn {
 
               case 'luna_thought_bubble': {
                 const tbData = event.data as { thought: string };
-                if (tbData.thought) setLunaThoughtBubble(tbData.thought);
+                if (tbData.thought) {
+                  // 기존 지연 타이머 취소 (이전 말풍선 잔재 방지)
+                  if (thoughtBubbleClearTimer.current) {
+                    clearTimeout(thoughtBubbleClearTimer.current);
+                    thoughtBubbleClearTimer.current = null;
+                  }
+                  setLunaThoughtBubble(tbData.thought);
+                  thoughtBubbleShownAt.current = Date.now();
+                }
                 break;
               }
 
               case 'text': {
                 // 첫 텍스트 도착 시 생각 말풍선 제거 + 재시도 UI 종료
                 if (!fullResponseBuffer) {
-                  setLunaThoughtBubble(null);
+                  // 최소 3초 표시 보장 — ACE v5가 빠르게 첫 토큰을 내도 말풍선이 너무 일찍 사라지지 않게
+                  const MIN_THOUGHT_BUBBLE_MS = 3000;
+                  const elapsed = thoughtBubbleShownAt.current
+                    ? Date.now() - thoughtBubbleShownAt.current
+                    : MIN_THOUGHT_BUBBLE_MS;
+                  const remaining = MIN_THOUGHT_BUBBLE_MS - elapsed;
+                  if (remaining > 50) {
+                    thoughtBubbleClearTimer.current = setTimeout(() => {
+                      setLunaThoughtBubble(null);
+                      thoughtBubbleShownAt.current = null;
+                      thoughtBubbleClearTimer.current = null;
+                    }, remaining);
+                  } else {
+                    setLunaThoughtBubble(null);
+                    thoughtBubbleShownAt.current = null;
+                  }
                   setRetryStatus((prev) => {
                     if (prev?.active) {
                       setTimeout(() => setRetryStatus(null), 400);
@@ -530,7 +557,13 @@ export function useChat(sessionId: string): UseChatReturn {
               }
 
               case 'done':
+                // 응답 완료 시 지연 타이머 취소 후 즉시 제거
+                if (thoughtBubbleClearTimer.current) {
+                  clearTimeout(thoughtBubbleClearTimer.current);
+                  thoughtBubbleClearTimer.current = null;
+                }
                 setLunaThoughtBubble(null);
+                thoughtBubbleShownAt.current = null;
                 setTimeout(() => fetchIntimacy(), 800);
                 break;
 
@@ -776,6 +809,14 @@ export function useChat(sessionId: string): UseChatReturn {
         );
       }
     } finally {
+      // 생각 말풍선 지연 타이머 정리 (에러/abort 시 잔류 방지)
+      if (thoughtBubbleClearTimer.current) {
+        clearTimeout(thoughtBubbleClearTimer.current);
+        thoughtBubbleClearTimer.current = null;
+      }
+      setLunaThoughtBubble(null);
+      thoughtBubbleShownAt.current = null;
+
       // 빈 AI 메시지 방어
       setMessages((prev) =>
         prev.map((m) =>
