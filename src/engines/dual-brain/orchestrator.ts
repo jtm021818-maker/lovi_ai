@@ -550,9 +550,11 @@ export async function* executeDualBrain(
   }
   const stakeHint = enrichedStakeHint;
 
-  // 🆕 좌뇌 생각 미리보기 — 우뇌 스트리밍 전 루나의 내면 생각을 클라이언트에 전송
-  if (brainResult.output?.tags.LUNA_THOUGHT) {
-    yield { type: 'thought_bubble', data: { thought: brainResult.output.tags.LUNA_THOUGHT } };
+  // 좌뇌 생각 미리보기 — LUNA_THOUGHT 없으면 draft 첫 문장으로 폴백
+  const lunaThoughtText = brainResult.output?.tags.LUNA_THOUGHT
+    || brainResult.output?.draft_utterances?.split('|||')[0]?.trim();
+  if (lunaThoughtText) {
+    yield { type: 'thought_bubble', data: { thought: lunaThoughtText } };
   }
 
   // Step 3: 라우팅 결정 (좌뇌 판단 우선)

@@ -124,22 +124,38 @@ export default function MessageBubble({ message, isTyping, onSpeak, isSpeaking, 
             <div className="flex-1 h-[1px] max-w-[60px]" style={{ background: 'linear-gradient(90deg, rgba(192,38,211,0.4), transparent)' }} />
           </div>
         )}
-        {!isStickerOnly && <div
+        {!isStickerOnly && <>
+          {/* 낙서체 wobble 필터 — 손으로 그린 말풍선 테두리 */}
+          <svg style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }} aria-hidden>
+            <defs>
+              <filter id="msg-sketch-wobble" x="-4%" y="-4%" width="108%" height="108%">
+                <feTurbulence type="turbulence" baseFrequency="0.032" numOctaves="3" seed={7} result="noise" />
+                <feDisplacementMap in="SourceGraphic" in2="noise" scale="0.75" xChannelSelector="R" yChannelSelector="G" />
+              </filter>
+            </defs>
+          </svg>
+          <div
           // 🆕 v79: 루나 메시지 버블에 data-attr — CinematicTransition 이 마지막 버블 위치 감지
           data-luna-bubble={!isUser ? 'true' : undefined}
           className={`px-4 py-2.5 shadow-sm select-none ${bubbleFxClass} ${
             isUser
               ? isMirrorCorrection
                 // 🆕 v82.10: 정정 메시지 — 보라 그라디언트 + fuchsia border + glow
-                ? 'text-[#3b0764] rounded-[20px] rounded-tr-[4px] border-2'
-                : 'bg-[#EAE1D0] text-[#4E342E] rounded-[20px] rounded-tr-[4px] border border-[#D5C2A5]'
-              : 'bg-[#F4EFE6] text-[#4E342E] rounded-[20px] rounded-tl-[4px] border border-[#D5C2A5]'
+                ? 'text-[#3b0764] border-2'
+                : 'bg-[#EAE1D0] text-[#4E342E] border border-[#D5C2A5]'
+              : 'bg-[#F4EFE6] text-[#4E342E] border border-[#D5C2A5]'
           }`}
-          style={isMirrorCorrection ? {
-            background: 'linear-gradient(135deg, #fae8ff 0%, #f5d0fe 100%)',
-            borderColor: 'rgba(192,38,211,0.55)',
-            boxShadow: '0 2px 12px rgba(192,38,211,0.2), inset 0 1px 0 rgba(255,255,255,0.5)',
-          } : undefined}
+          style={{
+            borderRadius: isUser
+              ? '18px 4px 14px 17px / 16px 4px 13px 18px'
+              : '4px 19px 17px 14px / 4px 16px 18px 13px',
+            filter: 'url(#msg-sketch-wobble)',
+            ...(isMirrorCorrection ? {
+              background: 'linear-gradient(135deg, #fae8ff 0%, #f5d0fe 100%)',
+              borderColor: 'rgba(192,38,211,0.55)',
+              boxShadow: '0 2px 12px rgba(192,38,211,0.2), inset 0 1px 0 rgba(255,255,255,0.5)',
+            } : {}),
+          }}
         >
           {isTyping && !message.content ? (
             <div className="flex space-x-1.5 py-1 items-center h-5">
@@ -157,7 +173,8 @@ export default function MessageBubble({ message, isTyping, onSpeak, isSpeaking, 
               {renderFormattedText(textContent)}
             </p>
           )}
-        </div>}
+        </div>
+        </>}
 
         {/* 🆕 v22: 루나 스티커 — 버블 아래 카톡 스타일 */}
         {stickerId && isValidSticker(stickerId) && (

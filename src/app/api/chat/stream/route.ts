@@ -136,21 +136,29 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 레이트 리밋 통과 후 INSERT (DB 오염 방지) + 나머지 3개 SELECT 완료 대기
-  const [sessionResult, insertResult, msgsResult, strategyResult] = await Promise.all([
-    sessionDbPromise,
-    supabase.from('messages').insert({
-      session_id: sessionId,
-      user_id: user.id,
-      sender_type: 'user',
-      content: message,
-      is_from_suggestion: suggestionMeta?.source === 'suggestion',
-      suggestion_category: suggestionMeta?.category || null,
-      suggestion_strategy_hint: suggestionMeta?.strategyHint || null,
-    }),
-    msgsDbPromise,
-    strategyDbPromise,
-  ]);
+  // SSE 스트리밍 — rate limit 통과 즉시 응답 시작 (TTFB 최적화)
+  // DB await를 스트림 내부로 이동: TTFB ≈ auth+rateLimit (~200ms) vs 기존 5110ms
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      // 즉시 heartbeat — 클라이언트 연결 즉각 인식
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'thinking_start' })}\n\n`));
+
+      // DB 완료 대기 (이미 병렬 실행 중인 쿼리들)
+      const [sessionResult, insertResult, msgsResult, strategyDbResult] = await Promise.all([
+        sessionDbPromise,
+        supabase.from('messages').insert({
+          session_id: sessionId,
+          user_id: user.id,
+          sender_type: 'user',
+          content: message,
+          is_from_suggestion: suggestionMeta?.source === 'suggestion',
+          suggestion_category: suggestionMeta?.category || null,
+          suggestion_strategy_hint: suggestionMeta?.strategyHint || null,
+        }),
+        msgsDbPromise,
+        strategyDbPromise,
+      ]);
 
   const { data: sessionData, error: sessionError } = sessionResult;
   if (sessionError) {
@@ -169,7 +177,7 @@ export async function POST(req: NextRequest) {
   }
   console.log(`[Chat] 📋 recentMsgs: ${recentMsgs?.length ?? 'null'}개 | sessionId: ${sessionId}`);
 
-  const { data: recentStrategyLogs } = strategyResult;
+  const { data: recentStrategyLogs } = strategyDbResult;
 
   const diagnosticAxes = sessionData?.diagnostic_axes ?? {};
   let currentPhaseV2 = sessionData?.current_phase_v2 ?? undefined;
@@ -455,13 +463,9 @@ export async function POST(req: NextRequest) {
   }
   // ===== 타로냥 전처리 끝 =====
 
-  // SSE 스트리밍
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
       let fullText = '';
-      const tDbDone = Date.now(); // 🆕 v31: DB 완료 시간
-      console.log(`[Perf] ⏱️ auth=${tAuth - t0}ms, db=${tDbDone - tAuth}ms, total_pre_pipeline=${tDbDone - t0}ms`);
+      const tDbDone = Date.now();
+      console.log(`[Perf] ⏱️ auth=${tAuth - t0}ms, stream-db=${tDbDone - t0}ms`);
       try {
         const pipeline = new CounselingPipeline();
         let stateResult: any = null;
