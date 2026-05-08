@@ -106,25 +106,38 @@ export async function POST(req: NextRequest) {
 
   // 🆕 v90: 레이트 리밋 RPC + 3개 READ 쿼리 병렬 실행 (기존: RPC→DB 순차 → ~50-150ms 절감)
   //   INSERT는 레이트 리밋 확인 후에만 (DB 오염 방지 — 초과 시 메시지 미삽입)
-  const rateLimitPromise = checkRateLimitFromDb(supabase, user.id, tier);
-  const sessionDbPromise = supabase
+  // 🆕 측정용: 각 쿼리 개별 latency 로깅 (병목 식별)
+  const tDbStart = Date.now();
+  const timed = async <T,>(name: string, p: PromiseLike<T>): Promise<T> => {
+    const t0 = Date.now();
+    try {
+      const r = await p;
+      console.log(`[DB-Timing] ${name}: ${Date.now() - t0}ms`);
+      return r;
+    } catch (e) {
+      console.log(`[DB-Timing] ${name}: ${Date.now() - t0}ms (err)`);
+      throw e;
+    }
+  };
+  const rateLimitPromise = timed('rateLimit', checkRateLimitFromDb(supabase, user.id, tier));
+  const sessionDbPromise = timed('session', supabase
     .from('counseling_sessions')
     .select('diagnostic_axes, current_phase_v2, completed_events, emotion_baseline, locked_scenario, last_event_turn, confirmed_emotion_score, emotion_history, last_prompt_style, emotion_accumulator, turn_count, phase_start_turn, session_metadata, luna_emotion_state, session_story, situation_read_history, luna_thought_history')
     .eq('id', sessionId)
-    .single();
-  const msgsDbPromise = supabase
+    .single());
+  const msgsDbPromise = timed('messages', supabase
     .from('messages')
     .select('sender_type, content')
     .eq('session_id', sessionId)
     .in('sender_type', ['user', 'ai'])
     .order('created_at', { ascending: false })
-    .limit(20);
-  const strategyDbPromise = supabase
+    .limit(20));
+  const strategyDbPromise = timed('strategy', supabase
     .from('strategy_logs')
     .select('strategy_type, response_type')
     .eq('session_id', sessionId)
     .order('created_at', { ascending: false })
-    .limit(5);
+    .limit(5));
 
   // 레이트 리밋 결과 대기 (3개 SELECT는 이미 실행 중)
   const rateLimit = await rateLimitPromise;
@@ -145,9 +158,10 @@ export async function POST(req: NextRequest) {
       controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'thinking_start' })}\n\n`));
 
       // DB 완료 대기 (이미 병렬 실행 중인 쿼리들)
+      const tAllStart = Date.now();
       const [sessionResult, insertResult, msgsResult, strategyDbResult] = await Promise.all([
         sessionDbPromise,
-        supabase.from('messages').insert({
+        timed('insert', supabase.from('messages').insert({
           session_id: sessionId,
           user_id: user.id,
           sender_type: 'user',
@@ -155,10 +169,11 @@ export async function POST(req: NextRequest) {
           is_from_suggestion: suggestionMeta?.source === 'suggestion',
           suggestion_category: suggestionMeta?.category || null,
           suggestion_strategy_hint: suggestionMeta?.strategyHint || null,
-        }),
+        })),
         msgsDbPromise,
         strategyDbPromise,
       ]);
+      console.log(`[DB-Timing] === Promise.all total: ${Date.now() - tAllStart}ms (since route start: ${Date.now() - tDbStart}ms) ===`);
 
   const { data: sessionData, error: sessionError } = sessionResult;
   if (sessionError) {
