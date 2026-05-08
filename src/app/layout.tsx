@@ -7,6 +7,7 @@ import {
   Gowun_Dodum,
   Gowun_Batang,
   Noto_Sans_KR,
+  Black_Han_Sans,
 } from 'next/font/google';
 import './globals.css';
 import FxRoot from '@/components/fx/FxRoot';
@@ -68,6 +69,14 @@ const gowunBatang = Gowun_Batang({
   display: 'swap',
 });
 
+/** K-캐주얼 굵은 타이틀 — 뽑기/이벤트 배너 (OFL, 상업 100% 가능) */
+const blackHanSans = Black_Han_Sans({
+  variable: '--font-black-han-sans',
+  subsets: ['latin'],
+  weight: ['400'],
+  display: 'swap',
+});
+
 export const metadata: Metadata = {
   title: '루나 연애상담 - AI 심리코치',
   description: '연애 고민, 편하게 얘기해도 괜찮아요. AI 관계 상담 서비스',
@@ -93,7 +102,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko" className={`${geist.variable} ${gaegu.variable} ${notoSansKr.variable} ${nanumBrushScript.variable} ${nanumPenScript.variable} ${gowunDodum.variable} ${gowunBatang.variable} h-full`}>
+    <html lang="ko" className={`${geist.variable} ${gaegu.variable} ${notoSansKr.variable} ${nanumBrushScript.variable} ${nanumPenScript.variable} ${gowunDodum.variable} ${gowunBatang.variable} ${blackHanSans.variable} h-full`}>
       <body className="h-full bg-[#0B0A1D] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-mystic-700/60 via-mystic-900 to-[#05040B] font-[family-name:var(--font-geist)] antialiased text-white overflow-hidden">
         {/* 🆕 v79: 전역 FX 레이어 (ScreenShake/Particle 등) */}
         <FxRoot />

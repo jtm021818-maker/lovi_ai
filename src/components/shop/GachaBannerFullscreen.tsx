@@ -90,14 +90,8 @@ export default function GachaBannerFullscreen({
         <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/45 via-black/15 to-transparent pointer-events-none z-10" />
 
         <style dangerouslySetInnerHTML={{ __html: `
-          @font-face {
-            font-family: 'CookieRun-Black';
-            src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2001@1.1/CookieRun-Black.woff') format('woff');
-            font-weight: 900;
-            font-style: normal;
-          }
           .kcasual-title-group {
-            font-family: 'CookieRun-Black', sans-serif;
+            font-family: var(--font-black-han-sans), 'Noto Sans KR', sans-serif;
             position: absolute;
             top: 50px;
             left: 0;
@@ -109,69 +103,50 @@ export default function GachaBannerFullscreen({
             pointer-events: none;
             filter: drop-shadow(0px 8px 4px rgba(0,0,0,0.35));
           }
-          .kcasual-text {
+          
+          .k-stroke {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            color: #5a2846;
+            -webkit-text-fill-color: #5a2846;
+          }
+          .k-fill {
             position: relative;
             z-index: 2;
             -webkit-background-clip: text;
             background-clip: text;
             color: transparent;
-            font-weight: 900;
-            white-space: nowrap;
-            display: inline-block;
-          }
-          .kcasual-text::after {
-            content: attr(data-text);
-            position: absolute;
-            left: 0;
-            top: 0;
-            z-index: -1;
-            color: #5a2846;
-            -webkit-text-fill-color: #5a2846;
           }
           
-          .k-top {
-            font-size: 26px;
-            background-image: linear-gradient(180deg, #ffffff 0%, #e0d4f5 100%);
-            letter-spacing: -1px;
-            margin-bottom: -2px;
-          }
-          .k-top::after {
-            -webkit-text-stroke: 9px #613654;
-          }
+          .k-stroke-sm { font-size: 26px; letter-spacing: -1px; -webkit-text-stroke: 9px #613654; }
+          .k-fill-top  { font-size: 26px; letter-spacing: -1px; background-image: linear-gradient(180deg, #ffffff 0%, #e0d4f5 100%); }
           
-          .k-mid {
-            font-size: 54px;
-            background-image: linear-gradient(180deg, #fffce0 0%, #ffe47a 25%, #ffa6c9 65%, #ff6b9d 100%);
-            letter-spacing: -2px;
-            line-height: 1.1;
-          }
-          .k-mid::after {
-            -webkit-text-stroke: 16px #5a2846;
-          }
+          .k-stroke-lg { font-size: 54px; letter-spacing: -2px; line-height: 1.1; -webkit-text-stroke: 16px #5a2846; }
+          .k-fill-mid  { font-size: 54px; letter-spacing: -2px; line-height: 1.1; background-image: linear-gradient(180deg, #fffce0 0%, #ffe47a 25%, #ffa6c9 65%, #ff6b9d 100%); }
           
-          .k-bot {
-            font-size: 34px;
-            background-image: linear-gradient(180deg, #ffffff 0%, #d8cbf0 100%);
-            letter-spacing: -1px;
-            margin-top: -6px;
-          }
-          .k-bot::after {
-            -webkit-text-stroke: 11px #5a2846;
-          }
+          .k-stroke-md { font-size: 34px; letter-spacing: -1px; -webkit-text-stroke: 11px #5a2846; }
+          .k-fill-bot  { font-size: 34px; letter-spacing: -1px; background-image: linear-gradient(180deg, #ffffff 0%, #d8cbf0 100%); }
         `}} />
 
         {/* ─── Hero Title (K-Casual Style) ─── */}
         {banner.id === 'pickup_weekly' && (
           <div className="kcasual-title-group">
             <div className="text-[24px] mb-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] leading-none text-white opacity-95">👑</div>
-            <div className="kcasual-text k-top" data-text="~ 이달의 픽업 ~">
-              ~ 이달의 픽업 ~
+            
+            <div className="relative inline-block whitespace-nowrap mb-[-2px]">
+              <div className="k-stroke k-stroke-sm">~ 이달의 픽업 ~</div>
+              <div className="k-fill k-fill-top">~ 이달의 픽업 ~</div>
             </div>
-            <div className="kcasual-text k-mid" data-text="여왕 엘레나">
-              여왕 엘레나
+
+            <div className="relative inline-block whitespace-nowrap mb-[-4px]">
+              <div className="k-stroke k-stroke-lg">여왕 엘레나</div>
+              <div className="k-fill k-fill-mid">여왕 엘레나</div>
             </div>
-            <div className="kcasual-text k-bot" data-text="픽업 뽑기">
-              픽업 뽑기
+
+            <div className="relative inline-block whitespace-nowrap mt-[-2px]">
+              <div className="k-stroke k-stroke-md">픽업 뽑기</div>
+              <div className="k-fill k-fill-bot">픽업 뽑기</div>
             </div>
           </div>
         )}
