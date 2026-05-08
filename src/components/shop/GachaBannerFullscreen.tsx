@@ -89,6 +89,93 @@ export default function GachaBannerFullscreen({
         {/* 상단 글로우 */}
         <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/45 via-black/15 to-transparent pointer-events-none z-10" />
 
+        <style dangerouslySetInnerHTML={{ __html: `
+          @font-face {
+            font-family: 'CookieRun-Black';
+            src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2001@1.1/CookieRun-Black.woff') format('woff');
+            font-weight: 900;
+            font-style: normal;
+          }
+          .kcasual-title-group {
+            font-family: 'CookieRun-Black', sans-serif;
+            position: absolute;
+            top: 50px;
+            left: 0;
+            right: 0;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: none;
+            filter: drop-shadow(0px 8px 4px rgba(0,0,0,0.35));
+          }
+          .kcasual-text {
+            position: relative;
+            z-index: 2;
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            font-weight: 900;
+            white-space: nowrap;
+            display: inline-block;
+          }
+          .kcasual-text::after {
+            content: attr(data-text);
+            position: absolute;
+            left: 0;
+            top: 0;
+            z-index: -1;
+            color: #5a2846;
+            -webkit-text-fill-color: #5a2846;
+          }
+          
+          .k-top {
+            font-size: 26px;
+            background-image: linear-gradient(180deg, #ffffff 0%, #e0d4f5 100%);
+            letter-spacing: -1px;
+            margin-bottom: -2px;
+          }
+          .k-top::after {
+            -webkit-text-stroke: 9px #613654;
+          }
+          
+          .k-mid {
+            font-size: 54px;
+            background-image: linear-gradient(180deg, #fffce0 0%, #ffe47a 25%, #ffa6c9 65%, #ff6b9d 100%);
+            letter-spacing: -2px;
+            line-height: 1.1;
+          }
+          .k-mid::after {
+            -webkit-text-stroke: 16px #5a2846;
+          }
+          
+          .k-bot {
+            font-size: 34px;
+            background-image: linear-gradient(180deg, #ffffff 0%, #d8cbf0 100%);
+            letter-spacing: -1px;
+            margin-top: -6px;
+          }
+          .k-bot::after {
+            -webkit-text-stroke: 11px #5a2846;
+          }
+        `}} />
+
+        {/* ─── Hero Title (K-Casual Style) ─── */}
+        {banner.id === 'pickup_weekly' && (
+          <div className="kcasual-title-group">
+            <div className="text-[24px] mb-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] leading-none text-white opacity-95">👑</div>
+            <div className="kcasual-text k-top" data-text="~ 이달의 픽업 ~">
+              ~ 이달의 픽업 ~
+            </div>
+            <div className="kcasual-text k-mid" data-text="여왕 엘레나">
+              여왕 엘레나
+            </div>
+            <div className="kcasual-text k-bot" data-text="픽업 뽑기">
+              픽업 뽑기
+            </div>
+          </div>
+        )}
+
         {/* ─── 하단 패널 (네비바 위) ─── */}
         <div
           className="absolute inset-x-0 bottom-0 z-20"
@@ -428,7 +515,7 @@ function SummonButton({
       onClick={onClick}
       disabled={disabled}
       whileTap={{ scale: 0.96 }}
-      className="flex-1 py-3 rounded-full font-black transition-all disabled:opacity-40 relative overflow-hidden"
+      className="flex-1 py-3 rounded-full font-black transition-all disabled:opacity-40 relative"
       style={
         isSingle
           ? {
@@ -451,7 +538,7 @@ function SummonButton({
     >
       {/* 광택 */}
       <div
-        className="absolute top-0 inset-x-0 h-1/2 pointer-events-none rounded-t-full"
+        className="absolute top-0 inset-x-0 h-1/2 pointer-events-none rounded-full overflow-hidden"
         style={{
           background: 'linear-gradient(to bottom, rgba(255,255,255,0.32), transparent)',
         }}
