@@ -23,7 +23,7 @@ export default function RevealProgressChip({ unlocked, total = 21 }: Props) {
     <motion.div
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
-      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold backdrop-blur"
+      className="inline-flex items-center whitespace-nowrap gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold backdrop-blur"
       style={{ background: tone.bg, border: `1px solid ${tone.border}`, color: tone.dot }}
       aria-label={`정령 비밀 ${unlocked}/${total} 풀림`}
     >

@@ -324,7 +324,7 @@ export default function LunaRoomDiorama({
             : 'linear-gradient(to bottom, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.2) 75%, transparent 100%)',
         }}
       >
-        <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto w-full pr-2 [&::-webkit-scrollbar]:hidden">
+        <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto w-full pr-2 py-1.5 [&::-webkit-scrollbar]:hidden">
           <DayBadge
             ageDays={ageDays}
             showCountdown={showCountdown}

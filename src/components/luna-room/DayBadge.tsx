@@ -17,7 +17,7 @@ export default function DayBadge({ ageDays, showCountdown, isDark, textColor, ac
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={ROOM_TOKENS.springSoft}
-      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full"
+      className="inline-flex items-center whitespace-nowrap gap-1.5 px-3 py-1 rounded-full"
       style={{
         background: isDark ? ROOM_TOKENS.cardBgDark : ROOM_TOKENS.cardBg,
         boxShadow: isDark ? ROOM_TOKENS.cardShadowDark : ROOM_TOKENS.cardShadow,

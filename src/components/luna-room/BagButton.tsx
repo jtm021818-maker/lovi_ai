@@ -45,7 +45,7 @@ export default function BagButton({ isDark = false, accentColor = '#a78bfa' }: P
     <>
       <button
         onClick={() => setOpen(true)}
-        className="relative px-2.5 py-0.5 rounded-full flex items-center gap-1.5 text-[10px] font-bold transition-transform active:scale-95"
+        className="relative whitespace-nowrap px-2.5 py-0.5 rounded-full flex items-center gap-1.5 text-[10px] font-bold transition-transform active:scale-95"
         style={{
           background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.7)',
           border: `1px solid ${accentColor}55`,
