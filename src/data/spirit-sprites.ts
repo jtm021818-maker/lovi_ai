@@ -67,7 +67,8 @@ export const SPIRIT_CHAR_IMGS: Partial<Record<SpiritId, string>> = {
   butterfly_meta: '/char_img/변화나비 메타.png',
   peace_dove:     '/char_img/평화비둘기.png',
   book_keeper:    '/char_img/열쇠지기 클리.png',
-  // UR (2) — 미보유 (queen_elena, star_dust)
+  // UR (2)
+  queen_elena: '/char_img/여왕 엘레나.png',
   // L (1) — 미보유 (guardian_eddy)
 };
 

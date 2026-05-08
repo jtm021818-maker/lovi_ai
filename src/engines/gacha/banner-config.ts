@@ -28,7 +28,9 @@ export const BANNERS: BannerConfig[] = [
   {
     id: 'standard',
     name: '상시 배너',
-    description: '정령 전체 풀 — 언제든 뽑을 수 있어',
+    description: '전체 정령 풀 — 언제든 소환할 수 있어',
+    bannerImageUrl: '/ui/상시정령소환.png',
+    accentColor: '#DB2777',
     rates: BASE_RATES,
     costSingle: COST_SINGLE,
     costTen: COST_TEN,
@@ -39,7 +41,9 @@ export const BANNERS: BannerConfig[] = [
   {
     id: 'pickup_weekly',
     name: '이주의 픽업',
-    description: '특정 UR 1마리 + SR 2마리 확률 3배',
+    description: '여왕 엘레나 UR 픽업 — SR 2종 확률 3배 동시 적용',
+    accentColor: '#7C3AED',
+    bannerBadge: 'PICKUP',
     pickupSpiritId: 'queen_elena',
     pickupSrIds: ['butterfly_meta', 'peace_dove'],
     pickupMultiplier: 3,
@@ -48,13 +52,14 @@ export const BANNERS: BannerConfig[] = [
     costTen: COST_TEN,
     softPityStart: SOFT_PITY_START,
     hardPity: HARD_PITY,
-    // TODO: validUntil 은 실제 배포 시 주마다 갱신
     validUntil: null,
   },
   {
     id: 'newbie',
     name: '초보자 배너',
-    description: '신규 30일 한정 — 10연차 30% 할인 + R 확정',
+    description: '신규 30일 한정 — 10연차 30% 할인 + R 등급 확정',
+    accentColor: '#059669',
+    bannerBadge: 'NEW',
     rates: BASE_RATES,
     costSingle: COST_SINGLE,
     costTen: { heartStone: Math.floor(COST_TEN.heartStone * 0.7), starlight: Math.floor((COST_TEN.starlight ?? 0) * 0.7) },
