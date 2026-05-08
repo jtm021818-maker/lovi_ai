@@ -25,7 +25,7 @@ import { parsePhaseSignal } from '@/engines/human-like/phase-signal';
 import { resetCascadeLog, getCascadeLog } from '@/lib/ai/provider-registry';
 import { LogCollector } from '@/lib/utils/logger';
 // 🧠 이중뇌 (Gemini 판단 → Claude 발화) — 상담 모드 전용
-import { executeDualBrain, DUAL_BRAIN_CONFIG } from '@/engines/dual-brain';
+import { executeDualBrain, runLeftBrainStandalone, DUAL_BRAIN_CONFIG } from '@/engines/dual-brain';
 // 🆕 v90 Perf: 장기 기억 번들 hoist 용 (좌뇌와 병렬 로드)
 import { loadMemoryBundleSafe } from '@/engines/dual-brain/orchestrator';
 
@@ -392,6 +392,22 @@ export class CounselingPipeline {
     const wmPromise = (willUseDualBrain && ragContext?.supabase && ragContext?.sessionId)
       ? loadScratchpad(ragContext.supabase, ragContext.sessionId, ragContext.userId).catch((e: any) => {
           console.warn('[Pipeline:v89] WM hoist load 실패 (무시):', e?.message);
+          return null;
+        })
+      : Promise.resolve(null);
+
+    // 🆕 fast-path: 좌뇌 LLM 호출 즉시 시작 (DB/메모리 안 기다림)
+    //   chatHistory/context-assembler 없이 현재 메시지만으로 분석 → ~3.7초
+    //   DB+메모리 로딩(~6초)과 완전 병렬. 도착하자마자 thought_bubble + 우뇌에 prefetch 전달.
+    const tFastBrainStart = Date.now();
+    const fastLeftBrainPromise = willUseDualBrain
+      ? runLeftBrainStandalone({
+          userInput: userMessage,
+          sessionId: ragContext?.sessionId ?? ragContext?.userId ?? 'unknown',
+          turnIdx: turnCount,
+          userId: ragContext?.userId,
+        }, logCollector).catch((e: any) => {
+          console.warn('[FastPath] 좌뇌 standalone 실패 (무시):', e?.message);
           return null;
         })
       : Promise.resolve(null);
@@ -1867,6 +1883,24 @@ ${researchResult.insight}
           }
         }
 
+        // 🆕 fast-path: 좌뇌 prefetched 결과 await (이미 거의 완료 상태일 것)
+        //   여기 도달까지 ~6초 흘렀고 좌뇌 LLM 은 ~3.7초 → await 즉시 resolve
+        const prefetchedBrain = await fastLeftBrainPromise;
+        const fastBrainElapsed = Date.now() - tFastBrainStart;
+        console.log(`[FastPath] ⚡ 좌뇌 prefetched 완료: ${fastBrainElapsed}ms (succeeded=${!!prefetchedBrain?.output})`);
+
+        // 🆕 fast-path: thought_bubble 즉시 발화 (executeDualBrain 안 기다림)
+        let earlyThoughtYielded = false;
+        if (prefetchedBrain?.output) {
+          const lt = prefetchedBrain.output.tags?.LUNA_THOUGHT
+            || prefetchedBrain.output.draft_utterances?.split('|||')[0]?.trim();
+          if (lt) {
+            yield { type: 'luna_thought_bubble', data: { thought: lt } };
+            earlyThoughtYielded = true;
+            console.log('[FastPath] 💭 thought_bubble 조기 발화:', lt.slice(0, 30));
+          }
+        }
+
         try {
           for await (const chunk of executeDualBrain({
             userInput: userMessage,
@@ -1887,6 +1921,8 @@ ${researchResult.insight}
             preloadedMemoryBundlePromise: memoryBundlePromise,
             // 🆕 v104: 활성 정령 카드 가이드 (Lv3+ 방 배치)
             activeSpiritsHint,
+            // 🆕 fast-path: 미리 받아둔 좌뇌 결과 → callGeminiBrain 스킵 (3.7초 절약)
+            prefetchedBrainResult: prefetchedBrain ?? undefined,
           }, logCollector)) {
             if (chunk.type === 'text') {
               // 🆕 v79: 항상 버퍼링 (SILENCE 검출 + KBE 레거시 경로용)
@@ -1935,7 +1971,10 @@ ${researchResult.insight}
             } else if (chunk.type === 'analysis') {
               capturedLeftBrainAnalysis = chunk.data;
             } else if (chunk.type === 'thought_bubble') {
-              yield { type: 'luna_thought_bubble', data: chunk.data };
+              // 🆕 fast-path: prefetched 로 이미 yield 했으면 중복 방지
+              if (!earlyThoughtYielded) {
+                yield { type: 'luna_thought_bubble', data: chunk.data };
+              }
             }
           }
         } catch (err: any) {

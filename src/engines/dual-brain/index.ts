@@ -13,6 +13,7 @@
 
 export {
   executeDualBrain,
+  runLeftBrainStandalone,
   streamClaudeVoice,
   assembleWithTags,
   type DualBrainStreamYield,

@@ -68,6 +68,8 @@ async function callGeminiBrain(params: {
   supabase?: any;       // SupabaseClient
   /** 🆕 v71: 좌뇌도 최근 대화 히스토리 받음 */
   chatHistory?: Array<{ role: 'user' | 'ai'; content: string }>;
+  /** 🆕 fast-path: context-assembler 스킵 + chatHistory 무시 → 즉시 시작 */
+  fastMode?: boolean;
 }, logCollector?: LogCollector): Promise<{
   output: BrainOutput | null;
   latencyMs: number;
@@ -81,28 +83,32 @@ async function callGeminiBrain(params: {
   // ────────────────────────────────
   if (LEFT_BRAIN_CONFIG.enabled) {
     // 🆕 v70: context-assembler 로 풍부한 컨텍스트 조립 (실패 허용)
+    // 🆕 fast-path: fastMode 면 context-assembler 스킵 (4초 절약)
     let richContext: Partial<import('@/engines/left-brain/types').LeftBrainInput> = {};
-    try {
-      const { assembleLeftBrainContext } = await import('@/engines/left-brain/context-assembler');
-      richContext = await assembleLeftBrainContext({
-        userId: params.userId ?? params.sessionId,
-        sessionId: params.sessionId,
-        userMessage: params.userInput,
-        turnIdx: params.turnIdx,
-        currentPhase: params.currentPhase ?? (extractPhase(params.contextBlock) as any),
-        phaseStartTurn: params.phaseStartTurn ?? 0,
-        intimacyLevel: extractIntimacy(params.contextBlock),
-        workingMemory: params.workingMemory,
-        supabase: params.supabase,
-      });
-    } catch (e: any) {
-      console.warn('[DualBrain] context-assembler 실패 (fallback to legacy):', e?.message);
+    if (!params.fastMode) {
+      try {
+        const { assembleLeftBrainContext } = await import('@/engines/left-brain/context-assembler');
+        richContext = await assembleLeftBrainContext({
+          userId: params.userId ?? params.sessionId,
+          sessionId: params.sessionId,
+          userMessage: params.userInput,
+          turnIdx: params.turnIdx,
+          currentPhase: params.currentPhase ?? (extractPhase(params.contextBlock) as any),
+          phaseStartTurn: params.phaseStartTurn ?? 0,
+          intimacyLevel: extractIntimacy(params.contextBlock),
+          workingMemory: params.workingMemory,
+          supabase: params.supabase,
+        });
+      } catch (e: any) {
+        console.warn('[DualBrain] context-assembler 실패 (fallback to legacy):', e?.message);
+      }
     }
 
     // 🆕 v71: 좌뇌가 받는 userUtterance 에 최근 대화 히스토리 prepend → 맥락 유지
     //   기존: 단일 메시지만 → 매 턴 첫 만남처럼 분석
     //   v78.1: 50턴 하드캡 — 5 Phase 세션 전체 커버. pipeline 토큰 트리밍이 방어선.
-    const recentHistory = (params.chatHistory ?? []).slice(-50);
+    // 🆕 fast-path: fastMode 면 chatHistory 무시 — 즉시 시작
+    const recentHistory = params.fastMode ? [] : (params.chatHistory ?? []).slice(-50);
     const historyBlock = recentHistory.length > 0
       ? recentHistory.map((m) => `[${m.role === 'user' ? '유저' : '루나'}] ${m.content}`).join('\n')
       : '';
@@ -467,11 +473,45 @@ export interface DualBrainInput {
     longTermImpression?: string | null;
     intimacyState?: any;
   } | undefined>;
+  /** 🆕 fast-path: 미리 실행된 좌뇌 결과 — 있으면 callGeminiBrain 스킵 */
+  prefetchedBrainResult?: {
+    output: BrainOutput | null;
+    latencyMs: number;
+    error?: string;
+    leftBrainAnalysis?: LeftBrainAnalysis;
+  };
   // ─────────────────────────────
   userInput: string;
   contextBlock: string;
   sessionId: string;
   turnIdx: number;
+}
+
+/**
+ * 🆕 fast-path: 좌뇌만 즉시 실행 (DB/메모리 안 기다림)
+ *   chatHistory/context-assembler 없이 현재 메시지만으로 분석.
+ *   pipeline 에서 state+RAG+WM 와 병렬로 hoist → thought_bubble 조기 발화.
+ */
+export async function runLeftBrainStandalone(params: {
+  userInput: string;
+  sessionId: string;
+  turnIdx: number;
+  userId?: string;
+}, logCollector?: LogCollector): Promise<{
+  output: BrainOutput | null;
+  latencyMs: number;
+  error?: string;
+  leftBrainAnalysis?: LeftBrainAnalysis;
+}> {
+  return await callGeminiBrain({
+    userInput: params.userInput,
+    contextBlock: '',          // 빈 블록 — fastMode 가 무시하지만 타입 만족용
+    sessionId: params.sessionId,
+    turnIdx: params.turnIdx,
+    userId: params.userId,
+    chatHistory: [],
+    fastMode: true,
+  }, logCollector);
 }
 
 /**
@@ -492,20 +532,26 @@ export async function* executeDualBrain(
   const stakeHintBase = getStakeHint(stakes.type);
 
   // Step 2: Gemini Brain 호출 (좌뇌 활성 시 풍부한 7D 분석)
-  const brainResult = await callGeminiBrain({
-    userInput: input.userInput,
-    contextBlock: input.contextBlock,
-    sessionId: input.sessionId,
-    turnIdx: input.turnIdx,
-    // 🆕 v70: 풍부한 컨텍스트 pass-through
-    userId: input.userId,
-    currentPhase: input.currentPhase,
-    phaseStartTurn: input.phaseStartTurn,
-    workingMemory: input.workingMemory,
-    supabase: input.supabase,
-    // 🆕 v71: 좌뇌도 대화 맥락 받음
-    chatHistory: input.chatHistory,
-  }, logCollector);
+  // 🆕 fast-path: prefetched 가 있으면 재실행 스킵 (좌뇌 LLM 한번만 호출)
+  const brainResult = input.prefetchedBrainResult
+    ? input.prefetchedBrainResult
+    : await callGeminiBrain({
+        userInput: input.userInput,
+        contextBlock: input.contextBlock,
+        sessionId: input.sessionId,
+        turnIdx: input.turnIdx,
+        // 🆕 v70: 풍부한 컨텍스트 pass-through
+        userId: input.userId,
+        currentPhase: input.currentPhase,
+        phaseStartTurn: input.phaseStartTurn,
+        workingMemory: input.workingMemory,
+        supabase: input.supabase,
+        // 🆕 v71: 좌뇌도 대화 맥락 받음
+        chatHistory: input.chatHistory,
+      }, logCollector);
+  if (input.prefetchedBrainResult) {
+    console.log('[FastPath] ⚡ prefetched brainResult 사용 — callGeminiBrain 스킵');
+  }
 
   // 🆕 v63: brainResult 즉시 디버그 — output null 케이스 추적
   console.log('[DualBrain:brainResult]', {
