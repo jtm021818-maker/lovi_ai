@@ -152,6 +152,11 @@ export function cleanResponseText(rawText: string): CleanedResponse {
   let text = rawText;
   const removedSegments: string[] = [];
 
+  // 🆕 v115: [EDIT before="..." after="..."] 처리 — UI 애니메이션 미구현 단계에선 after 만 유지.
+  // 후속 PR 에서 ChatContainer 가 이 태그를 직접 파싱해서 자기수정 애니메이션 렌더 예정.
+  text = text.replace(/\[EDIT\s+before="([^"]*)"\s+after="([^"]*)"\]/gi, (_m, _before, after) => after);
+  text = text.replace(/\[PAUSE\s+ms=(\d+)\]/gi, '');
+
   for (const pattern of META_PATTERNS) {
     const matches = text.match(pattern);
     if (matches) {

@@ -202,6 +202,12 @@ export interface AceV5Input {
 
   /** 🆕 v104: 활성 정령 시그니처 카드 가이드 (방 Lv3+ 정령) — buildAceV5UserMessage 에 주입 */
   activeSpiritsHint?: string | null;
+
+  /** 🆕 v115: 시공간 컨텍스트 (시간/요일/날씨/세션 간격). LLM이 활용 여부 자율 결정 */
+  temporalContext?: import('../temporal/temporal-context').TemporalContext | null;
+
+  /** 🆕 v115: 애칭 사용 이력 스냅샷. LLM이 새 애칭 만들지/기존 사용/안 부르기 자유 */
+  nicknameSnapshot?: import('../relationship/nickname-state').NicknameSnapshot | null;
 }
 
 // ============================================================
@@ -220,6 +226,9 @@ export interface AceV5Output {
 
   /** 🆕 v57: 우뇌가 다음 턴 좌뇌에 남기는 힌트 */
   left_brain_hints_for_next_turn?: string[];
+
+  /** 🆕 v115: LLM이 본문에 제안한 새 애칭 (DB 저장 대상) */
+  proposed_nicknames?: Array<{ name: string; reason?: string }>;
 
   /** 메타 (로깅용) */
   meta: {

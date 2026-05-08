@@ -15,6 +15,14 @@ import {
   type LunaSelfState,
   type RecallHit,
 } from './types';
+// 🆕 v115 인간화 컨텍스트 — 시공간/애칭 (LLM이 활용 여부 자율 결정)
+import type { TemporalContext } from '../temporal/temporal-context';
+import { formatTemporalBlock } from '../temporal/temporal-context';
+import {
+  loadNicknameSnapshot,
+  formatNicknameBlock,
+  type NicknameSnapshot,
+} from '../relationship/nickname-state';
 
 export interface AssembleParams {
   supabase: SupabaseClient;
@@ -24,6 +32,10 @@ export interface AssembleParams {
   systemPrompt: string;
   recentTurns: Array<{ role: 'user' | 'assistant'; content: string }>;
   budget?: Partial<MemoryBudget>;
+  /** 🆕 v115: 시공간 컨텍스트 (없으면 블록 생략) */
+  temporal?: TemporalContext;
+  /** 🆕 v115: 애칭 스냅샷을 미리 로드해 넘기는 경우. 없으면 내부에서 supabase 조회 */
+  nicknameSnapshot?: NicknameSnapshot;
 }
 
 export interface AssembleResult {
@@ -44,23 +56,32 @@ export async function assembleContext(params: AssembleParams): Promise<AssembleR
     supabase, userId, sessionId, userMessage,
     systemPrompt, recentTurns,
     budget: budgetOverride,
+    temporal,
+    nicknameSnapshot: providedNicknameSnap,
   } = params;
 
   const budget = { ...DEFAULT_BUDGET, ...budgetOverride };
 
-  // 병렬 로드: L1 recall, L2 persona, L3 self, L0 압축 턴
-  const [episodes, personaBlock, selfBlock, compressedBlock] = await Promise.all([
+  // 병렬 로드: L1 recall, L2 persona, L3 self, L0 압축 턴 (+ 🆕 v115 애칭 스냅샷)
+  const [episodes, personaBlock, selfBlock, compressedBlock, nicknameSnap] = await Promise.all([
     recall({ supabase, userId, userMessage, topK: 4 }),
     loadPersonaBlock(supabase, userId, budget.L2_persona),
     loadSelfStateBlock(supabase, userId, budget.L3_self),
     loadCompressedBlock(supabase, sessionId, budget.L0_compressed),
+    providedNicknameSnap ? Promise.resolve(providedNicknameSnap) : loadNicknameSnapshot(supabase, userId),
   ]);
 
   const episodesBlock = formatEpisodes(episodes, budget.L1_episodes);
   const recentBlock = formatRecent(recentTurns, budget.L0_recent);
 
+  // 🆕 v115 인간화 블록 (LLM은 무시할 자유 있음)
+  const temporalBlock = temporal ? formatTemporalBlock(temporal) : '';
+  const nicknameBlock = nicknameSnap ? formatNicknameBlock(nicknameSnap) : '';
+
   const liveBlock = [
-    episodesBlock && `[떠오른 기억들]\n${episodesBlock}`,
+    temporalBlock && `[지금 이 순간]\n${temporalBlock}\n※ 이 정보는 참고용. 매 턴 언급할 필요 없고, 분위기로만 흡수해도 됨.`,
+    nicknameBlock && `${nicknameBlock}\n※ 새 애칭 만들지/기존 사용/안 부르기 모두 자유. 강요 X.`,
+    episodesBlock && `[떠오른 기억들]\n${episodesBlock}\n※ 회상은 선택. 흐름에 안 맞으면 무시. 자기 말로 풀어 — 사실 나열 X.`,
     compressedBlock && `[이번 세션 앞부분 흐름]\n${compressedBlock}`,
     `[방금 대화]\n${recentBlock}`,
     `[유저]\n${userMessage}`,

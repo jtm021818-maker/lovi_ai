@@ -369,6 +369,9 @@ export function useChat(sessionId: string): UseChatReturn {
           suggestionMeta: meta || { source: 'typed' },
           ...(depthOverride && { depthOverride }),
           ...(activeMode && { activeMode }),
+          // 🆕 v115: 시공간 동기화 — 유저 기기 시간/timezone (날씨는 서버 fetch)
+          clientNowISO: new Date().toISOString(),
+          clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
         signal: abortRef.current.signal,
       });

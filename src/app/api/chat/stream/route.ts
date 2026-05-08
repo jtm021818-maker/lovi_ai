@@ -92,10 +92,19 @@ export async function POST(req: NextRequest) {
       .select('is_premium, onboarding_situation, persona_mode, memory_profile, nickname')
       .eq('id', user.id)
       .single(),
-    req.json() as Promise<{ sessionId: string; message: string; suggestionMeta?: SuggestionMeta; activeMode?: string | null }>,
+    req.json() as Promise<{
+      sessionId: string;
+      message: string;
+      suggestionMeta?: SuggestionMeta;
+      activeMode?: string | null;
+      // 🆕 v115: 시공간 동기화 신호 (클라이언트가 보낼 수 있음 — 없으면 서버가 fallback)
+      clientNowISO?: string;
+      clientTimezone?: string;
+      clientWeather?: { condition: string; description?: string; tempC?: number; feelsLikeC?: number };
+    }>,
   ]);
   const profile = profileResult.data;
-  const { sessionId, message, suggestionMeta, activeMode } = body;
+  const { sessionId, message, suggestionMeta, activeMode, clientNowISO, clientTimezone, clientWeather } = body;
 
   const tier = (process.env.NODE_ENV === 'development' || profile?.is_premium) ? 'premium' as const : 'free' as const;
 
@@ -122,7 +131,7 @@ export async function POST(req: NextRequest) {
   const rateLimitPromise = timed('rateLimit', checkRateLimitFromDb(supabase, user.id, tier));
   const sessionDbPromise = timed('session', supabase
     .from('counseling_sessions')
-    .select('diagnostic_axes, current_phase_v2, completed_events, emotion_baseline, locked_scenario, last_event_turn, confirmed_emotion_score, emotion_history, last_prompt_style, emotion_accumulator, turn_count, phase_start_turn, session_metadata, luna_emotion_state, session_story, situation_read_history, luna_thought_history')
+    .select('diagnostic_axes, current_phase_v2, completed_events, emotion_baseline, locked_scenario, last_event_turn, confirmed_emotion_score, emotion_history, last_prompt_style, emotion_accumulator, turn_count, phase_start_turn, session_metadata, luna_emotion_state, session_story, situation_read_history, luna_thought_history, last_message_at')
     .eq('id', sessionId)
     .single());
   const msgsDbPromise = timed('messages', supabase
@@ -504,7 +513,28 @@ export async function POST(req: NextRequest) {
           (profile?.onboarding_situation
             ? `\n[사용자 성별: ${profile.onboarding_situation === 'male' ? '남성' : profile.onboarding_situation === 'female' ? '여성' : '선택하지 않음'}] (참고만 하되 호칭이나 말투에 반영하지 마. 루나는 성별 관계없이 동일한 말투를 사용해.)`
             : '\n[사용자 성별: 선택하지 않음]') + previousSessionContext,
-          { supabase, userId: user.id, sessionId, activeMode: activeMode ?? null }, // 🆕 v70: sessionId 전달 + v81: activeMode
+          {
+            supabase,
+            userId: user.id,
+            sessionId,
+            activeMode: activeMode ?? null,
+            // 🆕 v115: 시공간 컨텍스트 — LLM이 활용 여부 자율 결정
+            temporalContext: (() => {
+              try {
+                // 동적 import 회피 — 모듈 최상단에서 정적 import 더 깔끔하지만, 진입점 컴파일 타임 비용 최소화
+                const { buildTemporalContext } = require('@/engines/temporal/temporal-context');
+                return buildTemporalContext({
+                  clientNowISO,
+                  timezone: clientTimezone,
+                  weather: clientWeather,
+                  lastSessionEndedAt: (sessionData as any)?.last_message_at ?? null,
+                });
+              } catch (err) {
+                console.warn('[v115] temporal build fail (silent)', (err as Error)?.message);
+                return null;
+              }
+            })(),
+          },
           persona,
           turnCount,
           suggestionMeta,

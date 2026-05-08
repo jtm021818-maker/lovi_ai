@@ -276,6 +276,8 @@ function parseBurstV89(rawBurst: string, isFirstBurst: boolean): {
     .trim();
 
   // bufferSnippet: 메타 태그 보존, DELAY/TYPING/STICKER/SILENCE/FX 만 제거
+  // 🆕 v115: [EDIT before="X" after="Y"] 는 burstText 엔 보존 (UI 자기수정 애니메이션용),
+  //          bufferSnippet (저장용) 에는 after 만 남김.
   const bufferSnippet = burstOriginalForBuffer
     .replace(/\[DELAY(?::[^\]]*)?\]/gi, '')
     .replace(/\[DELAY[^\]\n]*/gi, '')
@@ -284,7 +286,9 @@ function parseBurstV89(rawBurst: string, isFirstBurst: boolean): {
     .replace(/\[SILENCE\]/gi, '')
     .replace(/\[FX:[a-z_]+\.[a-z_]+\][\s\S]*?\[\/FX\]/gi, (_m) => _m.replace(/\[\/?FX[^\]]*\]/gi, ''))
     .replace(/\[FX:[a-z_]+\.[a-z_]+\]/gi, '')
-    .replace(/\[\/FX\]/gi, '');
+    .replace(/\[\/FX\]/gi, '')
+    .replace(/\[EDIT\s+before="([^"]*)"\s+after="([^"]*)"\]/gi, (_m, _b, after) => after)
+    .replace(/\[PAUSE\s+ms=\d+\]/gi, '');
 
   return { delayMs, fxIds, burstText, sticker, bufferSnippet };
 }
@@ -299,7 +303,14 @@ export class CounselingPipeline {
     userMessage: string,
     chatHistory: { role: 'user' | 'ai'; content: string }[],
     context: string = '',
-    ragContext?: { supabase: any; userId: string; sessionId?: string; activeMode?: string | null },
+    ragContext?: {
+      supabase: any;
+      userId: string;
+      sessionId?: string;
+      activeMode?: string | null;
+      /** 🆕 v115: 시공간 컨텍스트 (route.ts 가 빌드해서 넘김) */
+      temporalContext?: import('@/engines/temporal/temporal-context').TemporalContext | null;
+    },
     /** 페르소나 모드 (상담사/친구/전문가 패널) */
     persona: PersonaMode = 'counselor',
     /** 현재 대화 턴 수 */
@@ -1874,12 +1885,22 @@ ${researchResult.insight}
         const dualBrainStart = Date.now();
 
         // 🆕 v104: 활성 정령 카드 가이드 빌드 (방 Lv3+ 정령) — fire-and-forget on fail
+        // 🆕 v115: 애칭 스냅샷도 같이 병렬 로드 (LLM이 활용 여부 자율 결정)
         let activeSpiritsHint: string | null = null;
+        let v115NicknameSnapshot: import('@/engines/relationship/nickname-state').NicknameSnapshot | null = null;
         if (ragContext?.userId) {
           try {
-            activeSpiritsHint = await buildActiveSpiritsHint(ragContext.userId, newPhaseV2);
+            const [hintRes, nickRes] = await Promise.allSettled([
+              buildActiveSpiritsHint(ragContext.userId, newPhaseV2),
+              import('@/engines/relationship/nickname-state').then((m) =>
+                m.loadNicknameSnapshot(ragContext.supabase, ragContext.userId)
+              ),
+            ]);
+            if (hintRes.status === 'fulfilled') activeSpiritsHint = hintRes.value;
+            else console.warn('[Pipeline] 🧚 activeSpiritsHint build fail (silent)', (hintRes.reason as Error)?.message);
+            if (nickRes.status === 'fulfilled') v115NicknameSnapshot = nickRes.value;
           } catch (err) {
-            console.warn('[Pipeline] 🧚 activeSpiritsHint build fail (silent)', (err as Error).message);
+            console.warn('[Pipeline] v104+v115 parallel load fail (silent)', (err as Error).message);
           }
         }
 
@@ -1921,6 +1942,9 @@ ${researchResult.insight}
             preloadedMemoryBundlePromise: memoryBundlePromise,
             // 🆕 v104: 활성 정령 카드 가이드 (Lv3+ 방 배치)
             activeSpiritsHint,
+            // 🆕 v115: 시공간 컨텍스트 (route.ts 가 ragContext.temporalContext 로 넘김) + 애칭 이력
+            temporalContext: ragContext?.temporalContext ?? null,
+            nicknameSnapshot: v115NicknameSnapshot,
             // 🆕 fast-path: 미리 받아둔 좌뇌 결과 → callGeminiBrain 스킵 (3.7초 절약)
             prefetchedBrainResult: prefetchedBrain ?? undefined,
           }, logCollector)) {

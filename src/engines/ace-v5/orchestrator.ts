@@ -16,6 +16,8 @@ import { LogCollector } from '@/lib/utils/logger';
 
 import { logEnginePrompt } from '@/lib/utils/engine-prompt-logger';
 import { ACE_V5_SYSTEM_PROMPT, buildAceV5UserMessage } from './ace-system-prompt';
+// 🆕 v115: 인간화 태그 파싱 ([NICKNAME_PROPOSE] 추출)
+import { parseNicknameTags, type ExtractedNickname } from '@/engines/relationship/nickname-tag-parser';
 import { buildHandoff, formatHandoffForPrompt, mergeMemoryIntoHandoff } from './handoff-builder';
 import {
   detectReanalysisRequest,
@@ -175,6 +177,9 @@ export async function* executeAceV5(
     chatHistory: input.chatHistory,
     // 🆕 v104: 활성 정령 가이드 (선택)
     activeSpiritsHint: input.activeSpiritsHint ?? null,
+    // 🆕 v115: 시공간 + 애칭 컨텍스트 (LLM이 자율 판단)
+    temporalContext: input.temporalContext ?? null,
+    nicknameSnapshot: input.nicknameSnapshot ?? null,
   };
 
   let buffer = '';
@@ -334,6 +339,11 @@ export async function* executeAceV5(
   finalText = hintExtraction.cleanText;
   const leftBrainHints = hintExtraction.hints;
 
+  // 🆕 v115: NICKNAME_PROPOSE 태그 추출 — 본문에서 제거 후 meta로 emit
+  const nicknameParse = parseNicknameTags(finalText);
+  finalText = nicknameParse.cleanedText;
+  const proposedNicknames: ExtractedNickname[] = nicknameParse.proposed;
+
   // ────────────────────────────────────────
   // 6단계: 태그 첨부
   //   - 정상 스트리밍: 본문은 이미 송출됨 → 태그 suffix 만 별도 yield (본문에 이미 들어있는 태그는 dedupe)
@@ -374,6 +384,9 @@ export async function* executeAceV5(
     reanalysisRequested,
     reanalysisReason,
     left_brain_hints_for_next_turn: leftBrainHints.length > 0 ? leftBrainHints : undefined,
+    proposed_nicknames: proposedNicknames.length > 0
+      ? proposedNicknames.map((n) => ({ name: n.name, reason: n.reason }))
+      : undefined,
     meta: {
       latencyMs: Date.now() - overallStart,
       tokensIn: totalTokensIn,
@@ -429,6 +442,10 @@ interface SingleCallParams {
   chatHistory?: Array<{ role: 'user' | 'ai'; content: string }>;
   /** 🆕 v104: 활성 정령 가이드 (방 Lv3+ 정령 시그니처 카드 발동 안내) */
   activeSpiritsHint?: string | null;
+  /** 🆕 v115: 시공간 컨텍스트 */
+  temporalContext?: import('../temporal/temporal-context').TemporalContext | null;
+  /** 🆕 v115: 애칭 사용 이력 */
+  nicknameSnapshot?: import('../relationship/nickname-state').NicknameSnapshot | null;
 }
 
 interface SingleCallResult {
@@ -468,6 +485,9 @@ async function* streamVoiceOnceGen(
     selfExpression: params.selfExpression ?? null,
     chatHistory: params.chatHistory,
     activeSpiritsHint: params.activeSpiritsHint ?? null,
+    // 🆕 v115: 시공간 + 애칭 컨텍스트 (LLM이 자율 판단)
+    temporalContext: params.temporalContext ?? null,
+    nicknameSnapshot: params.nicknameSnapshot ?? null,
   });
 
   const provider = params.model === 'claude' ? 'anthropic' : 'gemini';

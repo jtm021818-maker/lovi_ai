@@ -464,6 +464,10 @@ export interface DualBrainInput {
   completedEvents?: string[];
   /** 🆕 v104: 활성 정령 카드 가이드 — pipeline 에서 buildActiveSpiritsHint 로 빌드 후 주입 */
   activeSpiritsHint?: string | null;
+  /** 🆕 v115: 시공간 컨텍스트 (route → pipeline → dual-brain 으로 전달) */
+  temporalContext?: import('@/engines/temporal/temporal-context').TemporalContext | null;
+  /** 🆕 v115: 애칭 사용 이력 스냅샷 (route → pipeline → dual-brain 으로 전달) */
+  nicknameSnapshot?: import('@/engines/relationship/nickname-state').NicknameSnapshot | null;
   /** 🆕 v90 Perf: 파이프라인이 미리 로드한 장기 기억 번들 (Promise).
    *  좌뇌와 병렬 로드되어 좌→우 갭(~1.5~2초) 제거. */
   preloadedMemoryBundlePromise?: Promise<{
@@ -668,11 +672,24 @@ export async function* executeDualBrain(
           chatHistory: input.chatHistory,   // 🆕 v78: 치매 방지 — 우뇌가 맥락 직접 봄
           completedEvents: input.completedEvents,  // 🆕 v86: 중복 이벤트 멘트 방지
           activeSpiritsHint: input.activeSpiritsHint ?? null,  // 🆕 v104: 활성 정령 카드 가이드
+          temporalContext: input.temporalContext ?? null,       // 🆕 v115: 시공간 컨텍스트
+          nicknameSnapshot: input.nicknameSnapshot ?? null,     // 🆕 v115: 애칭 이력
         }, logCollector)) {
           if (chunk.type === 'text') {
             aceChunkCount++;
             fullResponseText += chunk.data;
             yield { type: 'text', data: chunk.data };
+          } else if (chunk.type === 'meta' && chunk.data?.proposed_nicknames?.length && input.supabase && input.userId) {
+            // 🆕 v115: 새 애칭 비동기 저장 (응답 지연 X)
+            const proposed = chunk.data.proposed_nicknames as Array<{ name: string; reason?: string }>;
+            void import('@/engines/relationship/nickname-state').then((m) =>
+              m.proposeNickname(input.supabase, {
+                userId: input.userId!,
+                sessionId: input.sessionId,
+                nickname: proposed[0].name,
+                originContext: proposed[0].reason,
+              }).catch((e) => console.warn('[v115] nickname persist fail (silent)', e?.message)),
+            );
           }
         }
         voiceLatencyMs = Date.now() - voiceStart;
@@ -758,12 +775,24 @@ export async function* executeDualBrain(
           chatHistory: input.chatHistory,   // 🆕 v78: 치매 방지 — 우뇌가 맥락 직접 봄
           completedEvents: input.completedEvents,  // 🆕 v86: 중복 이벤트 멘트 방지
           activeSpiritsHint: input.activeSpiritsHint ?? null,  // 🆕 v104: 활성 정령 카드 가이드
+          temporalContext: input.temporalContext ?? null,       // 🆕 v115: 시공간 컨텍스트
+          nicknameSnapshot: input.nicknameSnapshot ?? null,     // 🆕 v115: 애칭 이력
         }, logCollector)) {
           if (chunk.type === 'text') {
             fullResponseText += chunk.data;
             yield { type: 'text', data: chunk.data };
+          } else if (chunk.type === 'meta' && chunk.data?.proposed_nicknames?.length && input.supabase && input.userId) {
+            // 🆕 v115: 새 애칭 비동기 저장
+            const proposed = chunk.data.proposed_nicknames as Array<{ name: string; reason?: string }>;
+            void import('@/engines/relationship/nickname-state').then((m) =>
+              m.proposeNickname(input.supabase, {
+                userId: input.userId!,
+                sessionId: input.sessionId,
+                nickname: proposed[0].name,
+                originContext: proposed[0].reason,
+              }).catch((e) => console.warn('[v115] nickname persist fail (silent)', e?.message)),
+            );
           }
-          // meta는 ACE v5 내부에서 이미 로깅됨
         }
         voiceLatencyMs = Date.now() - voiceStart;
 

@@ -6,6 +6,8 @@ import type { PersonaMode } from '@/types/persona.types';
 import LunaSticker, { isValidSticker } from './LunaSticker';
 import PremiumBadge from '@/components/common/PremiumBadge';
 import { useBubbleFx } from '@/lib/fx/use-bubble-fx';
+// 🆕 v115: 자기수정 애니메이션
+import MessageWithEdit, { parseEditSegments } from './MessageWithEdit';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -22,14 +24,33 @@ interface MessageBubbleProps {
 }
 
 /** **bold** 마크다운을 <strong>으로 변환 */
-function renderFormattedText(text: string) {
-  // **text** → <strong>text</strong>
+function renderBoldOnly(text: string, keyPrefix: string) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={i} className="font-bold">{part.slice(2, -2)}</strong>;
+      return <strong key={`${keyPrefix}-b-${i}`} className="font-bold">{part.slice(2, -2)}</strong>;
     }
-    return <span key={i}>{part}</span>;
+    return <span key={`${keyPrefix}-t-${i}`}>{part}</span>;
+  });
+}
+
+/** v115: [EDIT before="..." after="..."] 패턴 감지하여 MessageWithEdit 컴포넌트로 렌더 */
+function renderFormattedText(text: string) {
+  const segments = parseEditSegments(text);
+  if (segments.length === 1 && segments[0].type === 'text') {
+    return renderBoldOnly(segments[0].text ?? '', 'plain');
+  }
+  return segments.map((seg, i) => {
+    if (seg.type === 'edit') {
+      return (
+        <MessageWithEdit
+          key={`edit-${i}`}
+          before={seg.before ?? ''}
+          after={seg.after ?? ''}
+        />
+      );
+    }
+    return <span key={`seg-${i}`}>{renderBoldOnly(seg.text ?? '', `seg${i}`)}</span>;
   });
 }
 
