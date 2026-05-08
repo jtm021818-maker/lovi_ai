@@ -92,7 +92,7 @@ export default function GachaBannerCard({
               }}
             >
               <span className="text-4xl mb-1">
-                {banner.id === 'pickup_weekly' ? '⭐' : banner.id === 'newbie' ? '🎁' : '✨'}
+                {banner.id === 'pickup_weekly' ? '⭐' : '✨'}
               </span>
               <div className="text-[22px] font-black text-white drop-shadow text-center px-6">
                 {banner.name}

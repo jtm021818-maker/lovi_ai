@@ -4,7 +4,7 @@
 
 import type { SpiritId, SpiritRarity } from './spirit.types';
 
-export type BannerId = 'standard' | 'pickup_weekly' | 'newbie';
+export type BannerId = 'standard' | 'pickup_weekly';
 
 export type BannerBadge = 'PICKUP' | 'LIMITED' | 'NEW' | 'SALE';
 
