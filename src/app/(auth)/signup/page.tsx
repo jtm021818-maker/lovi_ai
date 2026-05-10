@@ -1,10 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
+
+function isInAppBrowser(): boolean {
+  if (typeof window === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  return /KAKAOTALK|NAVER|Instagram|FB_IAB|FBAN|Line|DaumApps|SamsungBrowser/i.test(ua);
+}
 
 export default function SignUpPage() {
   const [email, setEmail] = useState('');
@@ -13,7 +19,12 @@ export default function SignUpPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const [inApp, setInApp] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    setInApp(isInAppBrowser());
+  }, []);
 
   const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -52,12 +63,18 @@ export default function SignUpPage() {
   };
 
   const handleGoogleSignUp = async () => {
+    if (isInAppBrowser()) {
+      const url = window.location.href;
+      const intentUrl = `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end`;
+      window.location.href = intentUrl;
+      return;
+    }
     setLoading(true);
     const supabase = createClient();
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/callback`,
+        redirectTo: `${window.location.origin}/callback?next=/onboarding`,
       },
     });
   };
@@ -146,6 +163,33 @@ export default function SignUpPage() {
               <h1 className="text-2xl font-bold text-white tracking-tight">새로운 여정</h1>
               <p className="text-sm text-mystic-glow mt-2 opacity-80">마음이와 함께 우주를 탐험할 준비가 되셨나요?</p>
             </div>
+
+            {/* 인앱 브라우저 경고 배너 */}
+            <AnimatePresence>
+              {inApp && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="mb-4 p-4 rounded-2xl bg-amber-950/60 border border-amber-500/40 text-center"
+                >
+                  <p className="text-amber-300 text-[13px] font-bold mb-1">⚠️ 인앱 브라우저 감지</p>
+                  <p className="text-amber-200/80 text-[12px] leading-relaxed mb-3">
+                    카카오톡/인스타그램에서는 Google 가입이 제한됩니다.
+                  </p>
+                  <button
+                    onClick={() => {
+                      const url = window.location.href;
+                      const intentUrl = `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end`;
+                      window.location.href = intentUrl;
+                    }}
+                    className="px-4 py-2 rounded-full bg-amber-500 text-white text-[13px] font-bold"
+                  >
+                    Chrome에서 열기 🚀
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Google 회원가입 버튼 */}
             <motion.button

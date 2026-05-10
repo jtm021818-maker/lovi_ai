@@ -4,14 +4,14 @@ import { createServerClient } from '@supabase/ssr';
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
+  // 이메일 인증 직접 링크 방식 (token_hash + type)
+  const tokenHash = searchParams.get('token_hash');
+  const type = searchParams.get('type');
   const next = searchParams.get('next') ?? '/';
 
-  if (code) {
-    /**
-     * ⚠️ 중요: redirect response를 먼저 생성하고, 쿠키를 해당 response에 직접 심어야 함.
-     * NextResponse.redirect()는 새 Response 객체이므로 cookies().set()으로 심은 세션 쿠키가
-     * redirect에 포함되지 않는 문제가 있음. 이 패턴이 Supabase SSR 정석.
-     */
+  const hasAuth = code || (tokenHash && type);
+
+  if (hasAuth) {
     const redirectUrl = new URL(next, request.url);
     const response = NextResponse.redirect(redirectUrl);
 
@@ -24,7 +24,6 @@ export async function GET(request: NextRequest) {
             return request.cookies.getAll();
           },
           setAll(cookiesToSet) {
-            // redirect response에 직접 세션 쿠키를 심음
             cookiesToSet.forEach(({ name, value, options }) => {
               response.cookies.set(name, value, options);
             });
@@ -33,9 +32,24 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    let authError = null;
 
-    if (!error) {
+    if (code) {
+      // PKCE code flow (OAuth 로그인 또는 PKCE 이메일 인증)
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) console.error('[Callback] exchangeCodeForSession 에러:', error.message, error.status);
+      authError = error;
+    } else if (tokenHash && type) {
+      // token_hash flow (이메일 인증 직접 링크)
+      const { error } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: type as any,
+      });
+      if (error) console.error('[Callback] verifyOtp 에러:', error.message, error.status);
+      authError = error;
+    }
+
+    if (!authError) {
       // 세션 성공 후, 유저 프로필이 없으면 자동 생성 (트리거 실패 대비 폴백)
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -59,11 +73,9 @@ export async function GET(request: NextRequest) {
           }
         }
       } catch (profileError) {
-        // 프로필 생성 실패해도 로그인 자체는 차단하지 않음
         console.error('프로필 자동 생성 실패:', profileError);
       }
 
-      // 세션 쿠키가 심어진 redirect response 반환
       return response;
     }
   }
