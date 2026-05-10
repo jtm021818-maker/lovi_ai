@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
   const [profileResult, body] = await Promise.all([
     supabase
       .from('user_profiles')
-      .select('is_premium, onboarding_situation, persona_mode, memory_profile, nickname')
+      .select('is_premium, onboarding_situation, persona_mode, memory_profile, nickname, region_code')
       .eq('id', user.id)
       .single(),
     req.json() as Promise<{
@@ -490,6 +490,28 @@ export async function POST(req: NextRequest) {
       let fullText = '';
       const tDbDone = Date.now();
       console.log(`[Perf] ⏱️ auth=${tAuth - t0}ms, stream-db=${tDbDone - t0}ms`);
+
+      // 🆕 v115.1: 시공간 컨텍스트 빌드 (날씨는 cache → 클라이언트 호출 X)
+      let v115_1TemporalContext: import('@/engines/temporal/temporal-context').TemporalContext | null = null;
+      try {
+        const { buildTemporalContext } = await import('@/engines/temporal/temporal-context');
+        const { getWeatherWithCold } = await import('@/engines/temporal/weather-cache');
+        const { DEFAULT_REGION_CODE } = await import('@/engines/temporal/region-mapping');
+
+        const regionCode = (profile as any)?.region_code ?? DEFAULT_REGION_CODE;
+        // cache hit이면 즉시, cold면 한 번 fetch (~1.5초)
+        const weather = await getWeatherWithCold(supabase, regionCode);
+
+        v115_1TemporalContext = buildTemporalContext({
+          clientNowISO,
+          timezone: clientTimezone,
+          weather: weather ?? clientWeather, // cache 우선, 없으면 클라이언트가 보낸 것
+          lastSessionEndedAt: (sessionData as any)?.last_message_at ?? null,
+        });
+      } catch (err) {
+        console.warn('[v115.1] temporal build fail (silent)', (err as Error)?.message);
+      }
+
       try {
         const pipeline = new CounselingPipeline();
         let stateResult: any = null;
@@ -518,22 +540,8 @@ export async function POST(req: NextRequest) {
             userId: user.id,
             sessionId,
             activeMode: activeMode ?? null,
-            // 🆕 v115: 시공간 컨텍스트 — LLM이 활용 여부 자율 결정
-            temporalContext: (() => {
-              try {
-                // 동적 import 회피 — 모듈 최상단에서 정적 import 더 깔끔하지만, 진입점 컴파일 타임 비용 최소화
-                const { buildTemporalContext } = require('@/engines/temporal/temporal-context');
-                return buildTemporalContext({
-                  clientNowISO,
-                  timezone: clientTimezone,
-                  weather: clientWeather,
-                  lastSessionEndedAt: (sessionData as any)?.last_message_at ?? null,
-                });
-              } catch (err) {
-                console.warn('[v115] temporal build fail (silent)', (err as Error)?.message);
-                return null;
-              }
-            })(),
+            // 🆕 v115.1: 시공간 컨텍스트 (날씨는 weather_cache, 위에서 미리 빌드됨)
+            temporalContext: v115_1TemporalContext,
           },
           persona,
           turnCount,

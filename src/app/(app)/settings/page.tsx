@@ -17,6 +17,9 @@ import LunaSprite from '@/components/common/LunaSprite';
 // 🆕 v85.5: 필드 편집 bottom-sheet (인라인 편집 UI 깨짐 해결)
 import EditNicknameSheet from '@/components/settings/EditNicknameSheet';
 import EditGenderSheet from '@/components/settings/EditGenderSheet';
+// 🆕 v115.1: 거주 지역 편집 (시공간 동기화용)
+import EditRegionSheet from '@/components/settings/EditRegionSheet';
+import { getRegionByCode } from '@/engines/temporal/region-mapping';
 
 // ============================================================
 // Types & Constants
@@ -28,6 +31,8 @@ interface UserProfile {
   persona_mode: PersonaMode;
   is_premium: boolean;
   created_at: string;
+  // 🆕 v115.1: 거주 지역 (날씨 캐시 join 키)
+  region_code?: string | null;
 }
 
 const SITUATION_OPTIONS = [
@@ -94,6 +99,8 @@ export default function SettingsPage() {
   // 🆕 v41.1: 페르소나별 친밀도 상태 (루나 + 타로냥 독립)
   const [loading, setLoading] = useState(true);
   const [editingNick, setEditingNick] = useState(false);
+  // 🆕 v115.1: 거주 지역 편집
+  const [editingRegion, setEditingRegion] = useState(false);
   const [nickInput, setNickInput] = useState('');
   const [editingGender, setEditingGender] = useState(false);
   const [genderInput, setGenderInput] = useState('other');
@@ -171,7 +178,7 @@ export default function SettingsPage() {
     setTimeout(() => setToast(null), 2000);
   }, []);
 
-  const updateProfile = useCallback(async (updates: Partial<{ nickname: string; onboarding_situation: string }>) => {
+  const updateProfile = useCallback(async (updates: Partial<{ nickname: string; onboarding_situation: string; region_code: string }>) => {
     setSaving(true);
     await fetch('/api/user/profile', {
       method: 'PATCH',
@@ -381,6 +388,23 @@ export default function SettingsPage() {
             <div className="settings-profile-pill no-action">
               {profile?.created_at ? new Date(profile.created_at).toLocaleDateString('ko-KR') : '-'}
             </div>
+          </div>
+        </div>
+
+        {/* 🆕 v115.1: 거주 지역 — 시공간 동기화용. 루나가 같은 시간/날씨로 대화 */}
+        <div className="settings-profile-row" style={{ marginTop: 8 }}>
+          <div className="settings-profile-col" style={{ flex: 1 }}>
+            <p className="settings-profile-label">지역 🌤️</p>
+            <button
+              onClick={() => setEditingRegion(true)}
+              className="settings-profile-pill"
+              title="루나가 같은 시간·날씨로 대화하도록"
+            >
+              {profile?.region_code
+                ? getRegionByCode(profile.region_code).name
+                : '서울특별시'}
+              <span>›</span>
+            </button>
           </div>
         </div>
 
@@ -614,6 +638,16 @@ export default function SettingsPage() {
         onSave={async (gender) => {
           setGenderInput(gender);
           await updateProfile({ onboarding_situation: gender });
+        }}
+      />
+      {/* 🆕 v115.1: 거주 지역 편집 (시공간 동기화) */}
+      <EditRegionSheet
+        open={editingRegion}
+        current={profile?.region_code}
+        saving={saving}
+        onClose={() => setEditingRegion(false)}
+        onSave={async (regionCode) => {
+          await updateProfile({ region_code: regionCode });
         }}
       />
     </div>

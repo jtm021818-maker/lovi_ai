@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+// 🆕 v115.1: 거주 지역 화이트리스트 검증
+import { KOREAN_REGIONS } from '@/engines/temporal/region-mapping';
 
-/** PATCH: 프로필 업데이트 (닉네임, 상담 상황) */
+const VALID_REGION_CODES = new Set(KOREAN_REGIONS.map((r) => r.code));
+
+/** PATCH: 프로필 업데이트 (닉네임, 상담 상황, 지역) */
 export async function PATCH(req: NextRequest) {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -18,6 +22,10 @@ export async function PATCH(req: NextRequest) {
     if (valid.includes(body.onboarding_situation)) {
       updates.onboarding_situation = body.onboarding_situation;
     }
+  }
+  // 🆕 v115.1: 거주 지역 (17개 광역시도 화이트리스트 검증)
+  if (typeof body.region_code === 'string' && VALID_REGION_CODES.has(body.region_code)) {
+    updates.region_code = body.region_code;
   }
 
   const { error } = await supabase
@@ -37,7 +45,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from('user_profiles')
-    .select('nickname, onboarding_situation, persona_mode, is_premium, created_at')
+    .select('nickname, onboarding_situation, persona_mode, is_premium, created_at, region_code')
     .eq('id', user.id)
     .single();
 

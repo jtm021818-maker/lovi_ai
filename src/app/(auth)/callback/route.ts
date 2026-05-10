@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createServerClient } from '@supabase/ssr';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -7,7 +7,32 @@ export async function GET(request: NextRequest) {
   const next = searchParams.get('next') ?? '/';
 
   if (code) {
-    const supabase = await createServerSupabaseClient();
+    /**
+     * ⚠️ 중요: redirect response를 먼저 생성하고, 쿠키를 해당 response에 직접 심어야 함.
+     * NextResponse.redirect()는 새 Response 객체이므로 cookies().set()으로 심은 세션 쿠키가
+     * redirect에 포함되지 않는 문제가 있음. 이 패턴이 Supabase SSR 정석.
+     */
+    const redirectUrl = new URL(next, request.url);
+    const response = NextResponse.redirect(redirectUrl);
+
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            // redirect response에 직접 세션 쿠키를 심음
+            cookiesToSet.forEach(({ name, value, options }) => {
+              response.cookies.set(name, value, options);
+            });
+          },
+        },
+      }
+    );
+
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error) {
@@ -38,7 +63,8 @@ export async function GET(request: NextRequest) {
         console.error('프로필 자동 생성 실패:', profileError);
       }
 
-      return NextResponse.redirect(new URL(next, request.url));
+      // 세션 쿠키가 심어진 redirect response 반환
+      return response;
     }
   }
 
