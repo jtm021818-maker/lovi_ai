@@ -129,10 +129,22 @@ export const SPIRIT_COOLDOWN: Record<SpiritId, SpiritCooldownPolicy> = {
 };
 
 // ────────────────────────────────────────────────────────────
-// 4) 세션당 발동 상한
+// 4) 세션당 발동 상한 (v104.2: 보유 정령 수에 따라 동적)
 // ────────────────────────────────────────────────────────────
 /** 세션당 정령 카드 최대 발동 수 (모든 정령 합산) */
 export const SESSION_CAP = 2;
+
+/**
+ * v104.2: 동적 세션 캡 — 활성 정령 수에 따라 빈도 상향.
+ *   - 1~5마리: 2회 (기존)
+ *   - 6~9마리: 3회
+ *   - 10마리+: 4회
+ */
+export function getDynamicSessionCap(activeSpiritCount: number): number {
+  if (activeSpiritCount >= 10) return 4;
+  if (activeSpiritCount >= 6) return 3;
+  return 2;
+}
 
 // ────────────────────────────────────────────────────────────
 // 5) Type A (정적 합성, LLM 호출 0)

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import SakuraPetals from '@/components/common/SakuraPetals';
 
 type SessionPreview = {
   id: string;
@@ -334,6 +335,9 @@ export default function ChatListPage() {
       <div className="fixed inset-0 -z-10">
         <img src="/ui_list_bg.webp" className="w-full h-full object-cover" alt="" />
       </div>
+
+      {/* 🌸 벚꽃잎 흩날림 — pointer-events:none, 카드 위/FAB 아래 레이어 */}
+      <SakuraPetals zIndex={15} density={0.85} />
 
       {/* 네이티브 헤더 UI */}
       <div className="relative w-full shrink-0 px-[5%] pt-12 pb-4 z-10">

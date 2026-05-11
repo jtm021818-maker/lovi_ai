@@ -34,8 +34,11 @@ export async function getActiveSpirits(userId: string): Promise<ActiveSpirit[]> 
     .eq('user_id', userId)
     .in('spirit_id', placedIds);
 
+  // 🆕 v104.2: bond_lv >= 1 로 완화 (Lv1 갓 뽑은 정령도 이벤트 발동 가능)
+  // 기존 v83: Lv3+ 필터로 인해 가챠 직후 90% 유저가 이벤트 미발동
+  // 정령별 발동 가중치/쿨다운으로 희소성 유지
   return (spiritRows ?? [])
-    .filter((r) => r.bond_lv >= 3)
+    .filter((r) => r.bond_lv >= 1)
     .map((r) => ({ spiritId: r.spirit_id as SpiritId, bondLv: r.bond_lv }));
 }
 

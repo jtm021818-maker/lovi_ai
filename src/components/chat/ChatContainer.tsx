@@ -114,6 +114,9 @@ import Metamorphosis from './events/spirits/Metamorphosis';
 import MemoryKey from './events/spirits/MemoryKey';
 import CrownReclaim from './events/spirits/CrownReclaim';
 import WishGrant from './events/spirits/WishGrant';
+// 🆕 v104.2: 모든 정령 이벤트 공통 컷인 wrapper
+import { SpiritEventWithCutIn } from './events/spirits/SpiritEventWithCutIn';
+import type { SpiritId } from '@/types/spirit.types';
 import type { BoltCardData as SpiritBoltCardData } from '@/engines/spirits/spirit-event-types';
 import type { XRayResult } from '@/app/api/xray/analyze/route';
 import { RelationshipScenario } from '@/types/engine.types';
@@ -183,6 +186,11 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
   })();
   const { toggle: toggleSpeak, isSpeaking, speak, isSupported: ttsSupported, settings: voiceSettings, updateSettings: updateVoiceSettings } = useLunaVoice();
   const scrollRef = useRef<HTMLDivElement>(null);
+  // 🆕 스크롤: 마지막 AI 메시지 상단으로 이동하기 위한 ref
+  const lastAiMsgRef = useRef<HTMLDivElement>(null);
+  const prevAiScrollCountRef = useRef(0);
+  // 말풍선이 있을 때 AI 응답 스크롤을 말풍선 사라진 후로 미루는 플래그
+  const scrollToAiTopPendingRef = useRef(false);
   const [activePersona, setActivePersona] = useState<PersonaMode>('luna');
   const prevMsgCountRef = useRef(0);
   const [isPersonaOpen, setIsPersonaOpen] = useState(false);
@@ -284,10 +292,36 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
   // 페르소나 모드는 설정에서 선택한 값을 그대로 사용 (강제 변경 없음)
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+    const aiMsgs = messages.filter(m => m.senderType === 'ai' && m.content);
+    const newAiCount = aiMsgs.length;
+
+    if (newAiCount > prevAiScrollCountRef.current) {
+      prevAiScrollCountRef.current = newAiCount;
+      if (!lunaThoughtBubble) {
+        // 말풍선 없음 → 즉시 응답 상단으로
+        requestAnimationFrame(() => {
+          lastAiMsgRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      } else {
+        // 말풍선이 아직 있음 → 사라진 후에 스크롤하도록 플래그 세팅
+        scrollToAiTopPendingRef.current = true;
+      }
+    } else if (messages.length > 0 && messages[messages.length - 1].senderType === 'user') {
+      // 유저 메시지 전송 직후 → 하단으로 (thinking indicator / 말풍선 표시)
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
     }
-  }, [messages, panelData, suggestions]);
+    // 스트리밍 업데이트 / panelData / suggestions → 스크롤 위치 유지
+  }, [messages, panelData, suggestions, lunaThoughtBubble]);
+
+  // 말풍선이 사라지는 순간 → 대기 중이던 응답 상단 스크롤 실행
+  useEffect(() => {
+    if (!lunaThoughtBubble && scrollToAiTopPendingRef.current) {
+      scrollToAiTopPendingRef.current = false;
+      requestAnimationFrame(() => {
+        lastAiMsgRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  }, [lunaThoughtBubble]);
 
   const quickReplies  = nudges.find((n: NudgeAction) => n.type === 'quick_reply');
   const calmingTimer  = nudges.find((n: NudgeAction) => n.type === 'calming_timer');
@@ -680,26 +714,26 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
             onSelect={(text, meta) => handleSuggestionSelect(text, meta)}
           />
         );
-      // 🆕 v104: Spirit Random Events (20개 정령 카드)
-      case 'SPIRIT_RAGE_LETTER': return <RageLetter key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
-      case 'SPIRIT_THINK_FRAME': return <ThinkFrame key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
-      case 'SPIRIT_CRY_TOGETHER': return <CryTogether key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
-      case 'SPIRIT_FIRST_BREATH': return <FirstBreath key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
-      case 'SPIRIT_RHYTHM_CHECK': return <RhythmCheck key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
-      case 'SPIRIT_OLIVE_BRANCH': return <OliveBranch key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
-      case 'SPIRIT_CLOUD_REFRAME': return <CloudReframe key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
-      case 'SPIRIT_LETTER_BRIDGE': return <LetterBridge key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
-      case 'SPIRIT_WINDOW_OPEN': return <WindowOpen key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
-      case 'SPIRIT_NIGHT_CONFESSION': return <NightConfession key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
-      case 'SPIRIT_REVERSE_ROLE': return <ReverseRole key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
-      case 'SPIRIT_BUTTERFLY_DIARY': return <ButterflyDiary key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
-      case 'SPIRIT_ROOTED_HUG': return <RootedHug key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
-      case 'SPIRIT_FALLEN_PETALS': return <FallenPetals key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
-      case 'SPIRIT_FREEZE_FRAME': return <FreezeFrame key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
-      case 'SPIRIT_METAMORPHOSIS': return <Metamorphosis key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
-      case 'SPIRIT_MEMORY_KEY': return <MemoryKey key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
-      case 'SPIRIT_CROWN_RECLAIM': return <CrownReclaim key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
-      case 'SPIRIT_WISH_GRANT': return <WishGrant key={`event-${idx}`} event={event} onChoose={handleSuggestionSelect} disabled={isLoading} />;
+      // 🆕 v104.2: Spirit Random Events — 모든 케이스를 SpiritEventWithCutIn으로 자동 wrap
+      case 'SPIRIT_RAGE_LETTER': return <SpiritEventWithCutIn key={`event-${idx}`} spiritId={'fire_goblin' as SpiritId}><RageLetter event={event} onChoose={handleSuggestionSelect} disabled={isLoading} /></SpiritEventWithCutIn>;
+      case 'SPIRIT_THINK_FRAME': return <SpiritEventWithCutIn key={`event-${idx}`} spiritId={'book_worm' as SpiritId}><ThinkFrame event={event} onChoose={handleSuggestionSelect} disabled={isLoading} /></SpiritEventWithCutIn>;
+      case 'SPIRIT_CRY_TOGETHER': return <SpiritEventWithCutIn key={`event-${idx}`} spiritId={'tear_drop' as SpiritId}><CryTogether event={event} onChoose={handleSuggestionSelect} disabled={isLoading} /></SpiritEventWithCutIn>;
+      case 'SPIRIT_FIRST_BREATH': return <SpiritEventWithCutIn key={`event-${idx}`} spiritId={'seed_spirit' as SpiritId}><FirstBreath event={event} onChoose={handleSuggestionSelect} disabled={isLoading} /></SpiritEventWithCutIn>;
+      case 'SPIRIT_RHYTHM_CHECK': return <SpiritEventWithCutIn key={`event-${idx}`} spiritId={'drum_imp' as SpiritId}><RhythmCheck event={event} onChoose={handleSuggestionSelect} disabled={isLoading} /></SpiritEventWithCutIn>;
+      case 'SPIRIT_OLIVE_BRANCH': return <SpiritEventWithCutIn key={`event-${idx}`} spiritId={'peace_dove' as SpiritId}><OliveBranch event={event} onChoose={handleSuggestionSelect} disabled={isLoading} /></SpiritEventWithCutIn>;
+      case 'SPIRIT_CLOUD_REFRAME': return <SpiritEventWithCutIn key={`event-${idx}`} spiritId={'cloud_bunny' as SpiritId}><CloudReframe event={event} onChoose={handleSuggestionSelect} disabled={isLoading} /></SpiritEventWithCutIn>;
+      case 'SPIRIT_LETTER_BRIDGE': return <SpiritEventWithCutIn key={`event-${idx}`} spiritId={'letter_fairy' as SpiritId}><LetterBridge event={event} onChoose={handleSuggestionSelect} disabled={isLoading} /></SpiritEventWithCutIn>;
+      case 'SPIRIT_WINDOW_OPEN': return <SpiritEventWithCutIn key={`event-${idx}`} spiritId={'wind_sprite' as SpiritId}><WindowOpen event={event} onChoose={handleSuggestionSelect} disabled={isLoading} /></SpiritEventWithCutIn>;
+      case 'SPIRIT_NIGHT_CONFESSION': return <SpiritEventWithCutIn key={`event-${idx}`} spiritId={'moon_rabbit' as SpiritId}><NightConfession event={event} onChoose={handleSuggestionSelect} disabled={isLoading} /></SpiritEventWithCutIn>;
+      case 'SPIRIT_REVERSE_ROLE': return <SpiritEventWithCutIn key={`event-${idx}`} spiritId={'clown_harley' as SpiritId}><ReverseRole event={event} onChoose={handleSuggestionSelect} disabled={isLoading} /></SpiritEventWithCutIn>;
+      case 'SPIRIT_BUTTERFLY_DIARY': return <SpiritEventWithCutIn key={`event-${idx}`} spiritId={'rose_fairy' as SpiritId}><ButterflyDiary event={event} onChoose={handleSuggestionSelect} disabled={isLoading} /></SpiritEventWithCutIn>;
+      case 'SPIRIT_ROOTED_HUG': return <SpiritEventWithCutIn key={`event-${idx}`} spiritId={'forest_mom' as SpiritId}><RootedHug event={event} onChoose={handleSuggestionSelect} disabled={isLoading} /></SpiritEventWithCutIn>;
+      case 'SPIRIT_FALLEN_PETALS': return <SpiritEventWithCutIn key={`event-${idx}`} spiritId={'cherry_leaf' as SpiritId}><FallenPetals event={event} onChoose={handleSuggestionSelect} disabled={isLoading} /></SpiritEventWithCutIn>;
+      case 'SPIRIT_FREEZE_FRAME': return <SpiritEventWithCutIn key={`event-${idx}`} spiritId={'ice_prince' as SpiritId}><FreezeFrame event={event} onChoose={handleSuggestionSelect} disabled={isLoading} /></SpiritEventWithCutIn>;
+      case 'SPIRIT_METAMORPHOSIS': return <SpiritEventWithCutIn key={`event-${idx}`} spiritId={'butterfly_meta' as SpiritId}><Metamorphosis event={event} onChoose={handleSuggestionSelect} disabled={isLoading} /></SpiritEventWithCutIn>;
+      case 'SPIRIT_MEMORY_KEY': return <SpiritEventWithCutIn key={`event-${idx}`} spiritId={'book_keeper' as SpiritId}><MemoryKey event={event} onChoose={handleSuggestionSelect} disabled={isLoading} /></SpiritEventWithCutIn>;
+      case 'SPIRIT_CROWN_RECLAIM': return <SpiritEventWithCutIn key={`event-${idx}`} spiritId={'queen_elena' as SpiritId} subtitle="너의 왕관, 다시 씌워주마"><CrownReclaim event={event} onChoose={handleSuggestionSelect} disabled={isLoading} /></SpiritEventWithCutIn>;
+      case 'SPIRIT_WISH_GRANT': return <SpiritEventWithCutIn key={`event-${idx}`} spiritId={'star_dust' as SpiritId} subtitle="너의 소원, 들어줄게"><WishGrant event={event} onChoose={handleSuggestionSelect} disabled={isLoading} /></SpiritEventWithCutIn>;
       // ⚡ BoltCard — 0.8초 핏치 입장 후 inner picked card 재귀 렌더
       case 'SPIRIT_BOLT_CARD': {
         const boltData = event.data as unknown as SpiritBoltCardData;
@@ -1041,18 +1075,19 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
                     );
                   }
 
+                  const isLastAiMsg = msg.senderType === 'ai' && msg.id === lastAiMsgId;
                   return (
-                    <MessageBubble
-                      key={msg.id}
-                      message={msg}
-                      isTyping={isLoading && msg.senderType === 'ai' && !msg.content}
-                      onSpeak={ttsSupported && voiceSettings.enabled ? toggleSpeak : undefined}
-                      isSpeaking={isSpeaking}
-                      isPremium={isPremium}
-                      persona={activePersona}
-                      // 🆕 v79: 마지막 AI 메시지 식별 → bubble FX 매칭
-                      isLastAi={msg.senderType === 'ai' && msg.id === lastAiMsgId}
-                    />
+                    <div key={msg.id} ref={isLastAiMsg ? lastAiMsgRef : undefined}>
+                      <MessageBubble
+                        message={msg}
+                        isTyping={isLoading && msg.senderType === 'ai' && !msg.content}
+                        onSpeak={ttsSupported && voiceSettings.enabled ? toggleSpeak : undefined}
+                        isSpeaking={isSpeaking}
+                        isPremium={isPremium}
+                        persona={activePersona}
+                        isLastAi={isLastAiMsg}
+                      />
+                    </div>
                   );
                 });
               })()}

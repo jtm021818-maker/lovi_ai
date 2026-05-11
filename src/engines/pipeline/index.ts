@@ -2710,6 +2710,19 @@ ${researchResult.insight}
       // 🆕 v104: Spirit Random Events 오케스트레이터 — LLM 본문 [SPIRIT_*] 태그 + 휴리스틱 폴백
       if (ragContext?.userId && ragContext?.sessionId && fullText.length > 0) {
         try {
+          // v104.2: emotionScore 연속 음수 턴 수 계산 (wind_sprite/queen_elena 폴백용)
+          const consecutiveLowMoodTurns = (() => {
+            const hist = (stateResult as { emotionHistory?: number[] }).emotionHistory ?? [];
+            let count = 0;
+            for (let i = hist.length - 1; i >= 0; i--) {
+              if (typeof hist[i] === 'number' && hist[i] < 0) count++;
+              else break;
+            }
+            // 현재 턴 emotionScore 도 포함
+            if (stateResult.emotionScore < 0) count++;
+            return count;
+          })();
+
           const spiritResult = await runSpiritOrchestrator({
             userId: ragContext.userId,
             sessionId: ragContext.sessionId,
@@ -2722,6 +2735,7 @@ ${researchResult.insight}
             cognitiveDistortions: (stateResult.cognitiveDistortions ?? []).map((d) => String(d)),
             intent: stateResult.intent?.primaryIntent,
             recentTurns: messages.filter((m) => m.role === 'user').slice(-5).map((m) => m.content),
+            consecutiveLowMoodTurns,
           });
           if (spiritResult.phaseEvent) {
             yield { type: 'phase_event', data: spiritResult.phaseEvent };

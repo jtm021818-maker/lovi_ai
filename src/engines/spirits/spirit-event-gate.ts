@@ -22,6 +22,7 @@ import {
   SESSION_CAP,
   SPIRIT_BLOCKED_AT_HIGH_RISK,
   isPhaseAllowed,
+  getDynamicSessionCap,
 } from './spirit-event-config';
 import {
   fetchLastFiresBulk,
@@ -44,16 +45,19 @@ export async function selectSpiritEvent(
     return { ok: false, rejectReason: 'risk_block' };
   }
 
-  // 1) 세션 상한
-  if (ctx.firedThisSession.length >= SESSION_CAP) {
-    return { ok: false, rejectReason: 'session_cap' };
-  }
-
-  // 2) 활성 정령 풀
+  // 2) 활성 정령 풀 (v104.2: 세션 캡 계산 위해 먼저 조회)
   const active = ctx.preloadedActiveSpirits ?? (await getActiveSpirits(ctx.userId));
   if (active.length === 0) {
     return { ok: false, rejectReason: 'no_active_spirit' };
   }
+
+  // 1) 세션 상한 (v104.2: 보유 정령 수에 따라 동적 — 6마리+ 3회, 10마리+ 4회)
+  const sessionCap = getDynamicSessionCap(active.length);
+  if (ctx.firedThisSession.length >= sessionCap) {
+    return { ok: false, rejectReason: 'session_cap' };
+  }
+  // SESSION_CAP import 사용 — 다른 곳에서 참조 시 호환
+  void SESSION_CAP;
 
   // 2-1) MEDIUM_HIGH 시 일부 정령 차단
   const riskFiltered = active.filter((s) => {
@@ -258,7 +262,50 @@ function heuristicFallback(
     return { spiritId: 'cherry_leaf', eventType: 'SPIRIT_FALLEN_PETALS' };
   }
 
-  // 12순위 — 일일 1회 surprise (lightning_bird) — 가장 약한 폴백
+  // 🆕 v104.2: 12~17 순위 폴백 확장 — 트리거 다양화
+
+  // 12순위 — 설렘 일기 (rose_fairy, HOOK + 긍정 감정)
+  const rf = has('rose_fairy');
+  if (rf && ctx.phase === 'HOOK' && ctx.emotionScore >= 3) {
+    return { spiritId: 'rose_fairy', eventType: 'SPIRIT_BUTTERFLY_DIARY' };
+  }
+
+  // 13순위 — 영화 메타 (cloud_bunny, LOW risk + 카타스트로피 인지왜곡)
+  const cb = has('cloud_bunny');
+  if (cb && ctx.riskLevel === 'LOW' && ctx.cognitiveDistortions.some((d) =>
+    /catastrophiz|all_or_nothing|black_white|overgeneraliz/i.test(d))) {
+    return { spiritId: 'cloud_bunny', eventType: 'SPIRIT_CLOUD_REFRAME' };
+  }
+
+  // 14순위 — 역할극 (clown_harley, 잠수/읽씹 시나리오)
+  const ch = has('clown_harley');
+  if (ch && (ctx.scenario === 'READ_AND_IGNORED' || ctx.scenario === 'GHOSTING')) {
+    return { spiritId: 'clown_harley', eventType: 'SPIRIT_REVERSE_ROLE' };
+  }
+
+  // 15순위 — 보내지 않을 편지 (letter_fairy, 짝사랑 + MIRROR)
+  const lf = has('letter_fairy');
+  if (lf && ctx.phase === 'MIRROR' &&
+    (ctx.scenario === 'UNREQUITED_LOVE' || ctx.scenario === 'LONG_DISTANCE')) {
+    return { spiritId: 'letter_fairy', eventType: 'SPIRIT_LETTER_BRIDGE' };
+  }
+
+  // 16순위 — 박자 체크 (drum_imp, 관계 페이스 / 읽씹)
+  const di = has('drum_imp');
+  if (di && (ctx.scenario === 'RELATIONSHIP_PACE' || ctx.scenario === 'READ_AND_IGNORED')) {
+    return { spiritId: 'drum_imp', eventType: 'SPIRIT_RHYTHM_CHECK' };
+  }
+
+  // 17순위 — 새벽 고백 (moon_rabbit, 0~5시 + HOOK 아니어도 OK)
+  const mr = has('moon_rabbit');
+  if (mr) {
+    const h = ctx.now.getHours();
+    if (h >= 0 && h <= 5) {
+      return { spiritId: 'moon_rabbit', eventType: 'SPIRIT_NIGHT_CONFESSION' };
+    }
+  }
+
+  // 18순위 — 일일 1회 surprise (lightning_bird) — 가장 약한 폴백
   const l = has('lightning_bird');
   if (l) {
     // 50% 확률 발동 (BoltCard 자체가 이미 일일 1회 쿨타임 가드)
