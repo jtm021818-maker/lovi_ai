@@ -20,6 +20,7 @@ import EditGenderSheet from '@/components/settings/EditGenderSheet';
 // 🆕 v115.1: 거주 지역 편집 (시공간 동기화용)
 import EditRegionSheet from '@/components/settings/EditRegionSheet';
 import { getRegionByCode } from '@/engines/temporal/region-mapping';
+import type { WeatherSnapshot } from '@/engines/temporal/temporal-context';
 
 // ============================================================
 // Types & Constants
@@ -88,6 +89,44 @@ function Toggle({ value, onChange, disabled }: { value: boolean; onChange: (v: b
 }
 
 // ============================================================
+// Weather helpers
+// ============================================================
+
+const WEATHER_EMOJI_MAP: [string, string][] = [
+  ['맑음', '☀️'], ['구름 없음', '☀️'],
+  ['흐림', '☁️'], ['구름', '🌥️'],
+  ['비', '🌧️'], ['소나기', '🌦️'],
+  ['눈', '❄️'],
+  ['번개', '⛈️'],
+  ['안개', '🌫️'], ['박무', '🌫️'],
+  ['미세먼지', '😷'], ['연무', '🌫️'],
+];
+
+const WEATHER_KEY_MAP: [string, string][] = [
+  ['맑음', 'sunny'], ['구름 없음', 'sunny'],
+  ['흐림', 'cloudy'], ['구름', 'cloudy'],
+  ['비', 'rainy'], ['소나기', 'rainy'],
+  ['눈', 'snowy'],
+  ['번개', 'thunder'],
+  ['안개', 'foggy'], ['박무', 'foggy'], ['연무', 'foggy'],
+  ['미세먼지', 'foggy'],
+];
+
+function getWeatherEmoji(condition: string): string {
+  for (const [key, emoji] of WEATHER_EMOJI_MAP) {
+    if (condition.includes(key)) return emoji;
+  }
+  return '🌤️';
+}
+
+function getWeatherKey(condition: string): string {
+  for (const [key, val] of WEATHER_KEY_MAP) {
+    if (condition.includes(key)) return val;
+  }
+  return 'default';
+}
+
+// ============================================================
 // Page
 // ============================================================
 
@@ -109,6 +148,9 @@ export default function SettingsPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [showPersonaDetail, setShowPersonaDetail] = useState<string | null>(null);
   const [fxEnabled, setFxEnabled] = useState(true);
+  // 🌤️ 날씨 위젯
+  const [weatherData, setWeatherData] = useState<WeatherSnapshot | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
 
   useEffect(() => {
     setFxEnabled(isFxEnabled());
@@ -177,6 +219,30 @@ export default function SettingsPage() {
     setToast(msg);
     setTimeout(() => setToast(null), 2000);
   }, []);
+
+  // 🌤️ 날씨 fetch
+  const fetchWeatherData = useCallback(async (regionCode?: string | null) => {
+    setWeatherLoading(true);
+    try {
+      const code = encodeURIComponent(regionCode || 'KR-11');
+      const res = await fetch(`/api/weather?region_code=${code}`);
+      if (!res.ok) { setWeatherData(null); return; }
+      const json = await res.json();
+      setWeatherData(json.weather ?? null);
+    } catch {
+      setWeatherData(null);
+    } finally {
+      setWeatherLoading(false);
+    }
+  }, []);
+
+  // profile이 로드되거나 region_code가 변경되면 날씨 재조회
+  const profileLoaded = profile !== null;
+  useEffect(() => {
+    if (!profileLoaded) return;
+    fetchWeatherData(profile?.region_code);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileLoaded, profile?.region_code]);
 
   const updateProfile = useCallback(async (updates: Partial<{ nickname: string; onboarding_situation: string; region_code: string }>) => {
     setSaving(true);
@@ -391,22 +457,96 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* 🆕 v115.1: 거주 지역 — 시공간 동기화용. 루나가 같은 시간/날씨로 대화 */}
-        <div className="settings-profile-row" style={{ marginTop: 8 }}>
-          <div className="settings-profile-col" style={{ flex: 1 }}>
-            <p className="settings-profile-label">지역 🌤️</p>
-            <button
-              onClick={() => setEditingRegion(true)}
-              className="settings-profile-pill"
-              title="루나가 같은 시간·날씨로 대화하도록"
+        {/* 🌤️ v115.2: 거주 지역 + 실시간 날씨 카드 */}
+        {(() => {
+          const regionName = profile?.region_code
+            ? getRegionByCode(profile.region_code).name
+            : '서울특별시';
+          const wKey = weatherData ? getWeatherKey(weatherData.condition) : 'default';
+          const wEmoji = weatherData ? getWeatherEmoji(weatherData.condition) : '🌤️';
+
+          return (
+            <motion.div
+              className={`settings-weather-card${weatherData ? ` weather-bg-${wKey}` : ''}`}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, type: 'spring' }}
             >
-              {profile?.region_code
-                ? getRegionByCode(profile.region_code).name
-                : '서울특별시'}
-              <span>›</span>
-            </button>
-          </div>
-        </div>
+              {/* 헤더: 지역명 + 편집 버튼 */}
+              <div className="settings-weather-header">
+                <span className="settings-weather-location">
+                  📍 {regionName}
+                </span>
+                <button
+                  onClick={() => setEditingRegion(true)}
+                  className="settings-weather-edit-btn"
+                >
+                  변경 <span>›</span>
+                </button>
+              </div>
+
+              {/* 날씨 본문 */}
+              {weatherLoading ? (
+                <div className="settings-weather-skeleton">
+                  <div className="settings-weather-skel-circle" />
+                  <div className="settings-weather-skel-text">
+                    <div className="settings-weather-skel-line l1" />
+                    <div className="settings-weather-skel-line l2" />
+                    <div className="settings-weather-skel-line l3" />
+                  </div>
+                </div>
+              ) : weatherData ? (
+                <div className="settings-weather-body">
+                  {/* 날씨 아이콘 */}
+                  <div className={`settings-weather-icon-wrap ws-${wKey}`}>
+                    <span className="settings-weather-emoji">{wEmoji}</span>
+                  </div>
+                  {/* 날씨 텍스트 */}
+                  <div className="settings-weather-details">
+                    <div className="settings-weather-temp">
+                      {weatherData.tempC !== undefined ? `${weatherData.tempC}°` : '--°'}
+                    </div>
+                    <div className="settings-weather-condition">
+                      {weatherData.condition}
+                    </div>
+                    {weatherData.description && (
+                      <div className="settings-weather-desc">
+                        {weatherData.description}
+                      </div>
+                    )}
+                    {weatherData.feelsLikeC !== undefined && (
+                      <div className="settings-weather-feels">
+                        🌡️ 체감 {weatherData.feelsLikeC}°C
+                      </div>
+                    )}
+                  </div>
+                  {/* 새로고침 */}
+                  <button
+                    className="settings-weather-refresh-btn"
+                    onClick={() => fetchWeatherData(profile?.region_code)}
+                    title="날씨 새로고침"
+                  >
+                    ↻
+                  </button>
+                </div>
+              ) : (
+                <div className="settings-weather-empty">
+                  <span className="settings-weather-empty-icon">🌤️</span>
+                  <span className="settings-weather-empty-text">
+                    날씨 정보를 불러오지 못했어요
+                    <br />
+                    <button
+                      style={{ background: 'none', border: 'none', color: '#b39ddb', fontSize: 12, cursor: 'pointer', textDecoration: 'underline', marginTop: 4 }}
+                      onClick={() => fetchWeatherData(profile?.region_code)}
+                    >
+                      다시 시도하기
+                    </button>
+                  </span>
+                </div>
+              )}
+            </motion.div>
+          );
+        })()}
 
         {/* ④ 상담 모드 — 이미지 + 설명 */}
         <div className="settings-section">

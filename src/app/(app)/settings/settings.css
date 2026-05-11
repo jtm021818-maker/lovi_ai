@@ -486,6 +486,289 @@
   color: white;
 }
 
+/* 🌤️ 날씨 카드 ============================================================ */
+
+.settings-weather-card {
+  position: relative;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1.5px solid rgba(206, 147, 216, 0.22);
+  box-shadow: 0 4px 20px rgba(206, 147, 216, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  z-index: 1;
+  background: linear-gradient(145deg, rgba(255, 248, 255, 0.92) 0%, rgba(252, 228, 236, 0.88) 100%);
+  backdrop-filter: blur(12px);
+}
+
+/* 날씨별 배경 오버레이 */
+.settings-weather-card.weather-bg-sunny::after {
+  content: '';
+  position: absolute;
+  top: -40px; right: -40px;
+  width: 140px; height: 140px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 224, 100, 0.22) 0%, transparent 70%);
+  pointer-events: none;
+}
+.settings-weather-card.weather-bg-rainy::after {
+  content: '';
+  position: absolute;
+  top: -40px; right: -40px;
+  width: 140px; height: 140px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(120, 170, 240, 0.18) 0%, transparent 70%);
+  pointer-events: none;
+}
+.settings-weather-card.weather-bg-snowy::after {
+  content: '';
+  position: absolute;
+  top: -40px; right: -40px;
+  width: 140px; height: 140px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(190, 235, 255, 0.22) 0%, transparent 70%);
+  pointer-events: none;
+}
+.settings-weather-card.weather-bg-cloudy::after {
+  content: '';
+  position: absolute;
+  top: -40px; right: -40px;
+  width: 140px; height: 140px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(210, 210, 230, 0.18) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.settings-weather-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 16px 11px;
+  border-bottom: 1px solid rgba(206, 147, 216, 0.12);
+  position: relative;
+  z-index: 1;
+}
+
+.settings-weather-location {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #4a3560;
+}
+
+.settings-weather-edit-btn {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #9c27b0;
+  background: rgba(156, 39, 176, 0.07);
+  border: 1px solid rgba(156, 39, 176, 0.14);
+  border-radius: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background 0.2s;
+  line-height: 1.4;
+}
+.settings-weather-edit-btn:hover { background: rgba(156, 39, 176, 0.13); }
+.settings-weather-edit-btn span { color: #b39ddb; font-size: 14px; }
+
+.settings-weather-body {
+  display: flex;
+  align-items: center;
+  padding: 18px 20px 20px;
+  gap: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+/* 날씨 아이콘 원형 래퍼 */
+.settings-weather-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.settings-weather-icon-wrap.ws-sunny  { background: radial-gradient(circle, rgba(255, 235, 130, 0.35) 0%, rgba(255, 215, 80, 0.12) 70%); }
+.settings-weather-icon-wrap.ws-cloudy { background: radial-gradient(circle, rgba(210, 215, 230, 0.3) 0%, rgba(190, 195, 215, 0.1) 70%); }
+.settings-weather-icon-wrap.ws-rainy  { background: radial-gradient(circle, rgba(130, 170, 240, 0.3) 0%, rgba(100, 145, 225, 0.1) 70%); }
+.settings-weather-icon-wrap.ws-snowy  { background: radial-gradient(circle, rgba(200, 240, 255, 0.35) 0%, rgba(170, 225, 255, 0.12) 70%); }
+.settings-weather-icon-wrap.ws-thunder { background: radial-gradient(circle, rgba(245, 235, 130, 0.32) 0%, rgba(220, 200, 80, 0.1) 70%); }
+.settings-weather-icon-wrap.ws-foggy  { background: radial-gradient(circle, rgba(210, 210, 220, 0.28) 0%, transparent 70%); }
+.settings-weather-icon-wrap.ws-default { background: radial-gradient(circle, rgba(206, 147, 216, 0.22) 0%, transparent 70%); }
+
+.settings-weather-emoji {
+  font-size: 46px;
+  line-height: 1;
+  display: block;
+}
+
+/* 날씨별 이모지 애니메이션 */
+.ws-sunny  .settings-weather-emoji { animation: sw-sun-spin 18s linear infinite; filter: drop-shadow(0 0 10px rgba(255, 210, 60, 0.45)); }
+.ws-cloudy .settings-weather-emoji { animation: sw-float 5s ease-in-out infinite; }
+.ws-rainy  .settings-weather-emoji { animation: sw-rain-bounce 1.8s ease-in-out infinite; filter: drop-shadow(0 2px 6px rgba(80, 130, 220, 0.3)); }
+.ws-snowy  .settings-weather-emoji { animation: sw-snowflake 8s linear infinite; filter: drop-shadow(0 0 8px rgba(160, 220, 255, 0.4)); }
+.ws-thunder .settings-weather-emoji { animation: sw-flash 2.2s ease-in-out infinite; filter: drop-shadow(0 0 8px rgba(255, 240, 80, 0.5)); }
+.ws-foggy  .settings-weather-emoji { animation: sw-fog-pulse 3s ease-in-out infinite; }
+.ws-default .settings-weather-emoji { animation: sw-float 5s ease-in-out infinite; }
+
+@keyframes sw-sun-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes sw-float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-7px); }
+}
+@keyframes sw-rain-bounce {
+  0%, 100% { transform: translateY(0px); }
+  40%       { transform: translateY(-5px); }
+  70%       { transform: translateY(2px); }
+}
+@keyframes sw-snowflake {
+  from { transform: rotate(0deg) scale(1); }
+  50%  { transform: rotate(-180deg) scale(1.05); }
+  to   { transform: rotate(-360deg) scale(1); }
+}
+@keyframes sw-flash {
+  0%, 88%, 100% { opacity: 1; transform: scale(1); }
+  92%            { opacity: 0.25; transform: scale(0.95); }
+  96%            { opacity: 1; transform: scale(1.05); }
+}
+@keyframes sw-fog-pulse {
+  0%, 100% { opacity: 0.7; transform: scale(1); }
+  50%       { opacity: 1; transform: scale(1.04); }
+}
+
+/* 날씨 상세 정보 */
+.settings-weather-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.settings-weather-temp {
+  font-size: 40px;
+  font-weight: 900;
+  color: #2e1a40;
+  line-height: 1;
+  letter-spacing: -2px;
+}
+
+.settings-weather-condition {
+  font-size: 15px;
+  font-weight: 700;
+  color: #5c3d7a;
+  margin-top: 5px;
+}
+
+.settings-weather-desc {
+  font-size: 12px;
+  color: #9e8aad;
+  font-weight: 500;
+  margin-top: 1px;
+  line-height: 1.4;
+}
+
+.settings-weather-feels {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #b39ddb;
+  font-weight: 500;
+  margin-top: 5px;
+}
+
+.settings-weather-refresh-btn {
+  position: absolute;
+  bottom: 14px;
+  right: 16px;
+  font-size: 11px;
+  color: #c4aad8;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 8px;
+  transition: color 0.2s;
+  z-index: 2;
+}
+.settings-weather-refresh-btn:hover { color: #9c27b0; }
+
+/* 로딩 스켈레톤 */
+.settings-weather-skeleton {
+  display: flex;
+  align-items: center;
+  padding: 18px 20px 20px;
+  gap: 20px;
+}
+
+.settings-weather-skel-circle {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: linear-gradient(90deg,
+    rgba(206, 147, 216, 0.12) 25%,
+    rgba(206, 147, 216, 0.24) 50%,
+    rgba(206, 147, 216, 0.12) 75%);
+  background-size: 200% 100%;
+  animation: sw-shimmer 1.6s infinite;
+}
+
+.settings-weather-skel-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-weather-skel-line {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg,
+    rgba(206, 147, 216, 0.12) 25%,
+    rgba(206, 147, 216, 0.24) 50%,
+    rgba(206, 147, 216, 0.12) 75%);
+  background-size: 200% 100%;
+  animation: sw-shimmer 1.6s infinite;
+}
+.settings-weather-skel-line.l1 { width: 55%; height: 36px; border-radius: 8px; }
+.settings-weather-skel-line.l2 { width: 42%; }
+.settings-weather-skel-line.l3 { width: 32%; animation-delay: 0.2s; }
+
+@keyframes sw-shimmer {
+  0%   { background-position:  200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* 데이터 없음 */
+.settings-weather-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 22px 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.settings-weather-empty-icon { font-size: 32px; opacity: 0.5; }
+.settings-weather-empty-text {
+  font-size: 12px;
+  color: #c4aad8;
+  font-weight: 500;
+  text-align: center;
+  line-height: 1.5;
+}
+
 /* 토스트 */
 .settings-toast {
   position: fixed;

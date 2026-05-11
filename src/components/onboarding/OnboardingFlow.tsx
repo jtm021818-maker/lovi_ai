@@ -13,10 +13,11 @@
  *   - 라이트 테마 전체
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import LunaSprite from '@/components/common/LunaSprite';
+import { KOREAN_REGIONS, DEFAULT_REGION_CODE } from '@/engines/temporal/region-mapping';
 
 /* ─── 성별 선택 데이터 ─────────────────────────────────── */
 const GENDERS = [
@@ -45,6 +46,27 @@ const GENDERS = [
     bg: '#FBF0FF',
   },
 ] as const;
+
+/* ─── 지역 이모지 매핑 (EditRegionSheet 와 동일) ──────── */
+const REGION_EMOJI: Record<string, string> = {
+  'KR-11': '🌆', // 서울
+  'KR-26': '🌊', // 부산
+  'KR-27': '🍎', // 대구
+  'KR-28': '✈️', // 인천
+  'KR-29': '🌻', // 광주
+  'KR-30': '🌳', // 대전
+  'KR-31': '🛳️', // 울산
+  'KR-50': '🏛️', // 세종
+  'KR-41': '🏙️', // 경기
+  'KR-42': '⛰️', // 강원
+  'KR-43': '🌾', // 충북
+  'KR-44': '🌷', // 충남
+  'KR-45': '🍚', // 전북
+  'KR-46': '🌿', // 전남
+  'KR-47': '🍂', // 경북
+  'KR-48': '⚓', // 경남
+  'KR-49': '🌴', // 제주
+};
 
 /* ─── 꽃잎 파티클 데이터 (마운트 1회) ─────────────────── */
 function usePetals(count: number) {
@@ -76,7 +98,28 @@ export default function OnboardingFlow() {
   const [inputFocused, setInputFocused] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
+  // step 1, 2 에서 누적 수집 → step 2 종료 시 한 번에 submit
+  const [gender, setGender] = useState<string | null>(null);
+  const [regionCode, setRegionCode] = useState<string>(DEFAULT_REGION_CODE);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
+
+  /**
+   * setting 스프라이트(16MB)는 최초 로드에 오래 걸림.
+   * avatar 스프라이트는 모듈 레벨에서 이미 프리로드 → 즉시 표시.
+   * 백그라운드에서 setting을 로드하고 완료 시 preset 교체.
+   */
+  const [spritePreset, setSpritePreset] = useState<'avatar' | 'setting'>('avatar');
+  useEffect(() => {
+    const img = new Image();
+    if (img.complete && img.naturalWidth > 0) {
+      setSpritePreset('setting');
+      return;
+    }
+    img.onload = () => setSpritePreset('setting');
+    img.src = '/splite/luna_sprite_setting_1.webp';
+    return () => { img.onload = null; };
+  }, []);
 
   const petals = usePetals(16);
 
@@ -89,13 +132,26 @@ export default function OnboardingFlow() {
     }, 380);
   };
 
-  const handleSituationSelect = async (situationId: string) => {
+  /** step 1: 성별 선택 → state 저장 + step 2 로 진행 (아직 submit X) */
+  const handleSituationSelect = (situationId: string) => {
+    setGender(situationId);
+    setStep(2);
+  };
+
+  /** step 2: 지역 확정 → 모든 정보 한 번에 submit + /chat */
+  const handleFinalSubmit = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     setIsExiting(true);
     try {
       const res = await fetch('/api/onboarding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nickname: nickname || '익명', situation: situationId }),
+        body: JSON.stringify({
+          nickname: nickname || '익명',
+          situation: gender,
+          region_code: regionCode,
+        }),
       });
       if (!res.ok) console.error('온보딩 API 에러:', res.status);
       router.push('/chat');
@@ -167,11 +223,11 @@ export default function OnboardingFlow() {
               transition={{ delay: 0.15, duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
               className="relative mb-5"
             >
-              {/* 카드 배경 = 로딩 중 placeholder (settings-mascot-card 구조 동일) */}
+              {/* 카드 — avatar(즉시)→setting(로드 완료 후) 교체 */}
               <div className="onb-mascot-card">
                 <div aria-hidden className="onb-mascot-bg" />
                 <LunaSprite
-                  preset="setting"
+                  preset={spritePreset}
                   size={220}
                   circle={false}
                   speed="normal"
@@ -402,7 +458,178 @@ export default function OnboardingFlow() {
               className="mt-7 text-center text-[11px] tracking-[0.14em]"
               style={{ fontFamily: 'var(--font-handwrite-soft)', color: '#C4A0CE' }}
             >
+              🌸 &nbsp;마지막 한 가지만 더&nbsp; 🌸
+            </p>
+          </motion.section>
+        )}
+
+        {/* ══════════════════════════ STEP 2 — 거주 지역 ══════════════════════════ */}
+        {step === 2 && (
+          <motion.section
+            key="region"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+            className={`relative w-full max-w-[360px] ${isExiting ? 'onb-exit' : ''}`}
+          >
+            {/* 작은 루나 (step 1 과 동일) */}
+            <div className="flex justify-center mb-4">
+              <div className="relative">
+                <div className="onb-mascot-card" style={{ padding: 10 }}>
+                  <div aria-hidden className="onb-mascot-bg" />
+                  <LunaSprite
+                    preset="setting"
+                    size={84}
+                    circle={false}
+                    speed="normal"
+                    className="onb-mascot-sprite"
+                  />
+                </div>
+                <motion.span
+                  animate={{ y: [0, -3, 0] }}
+                  transition={{ repeat: Infinity, duration: 2.4 }}
+                  aria-hidden
+                  className="absolute -top-2 -right-2 text-base select-none pointer-events-none"
+                >
+                  🗺️
+                </motion.span>
+              </div>
+            </div>
+
+            <motion.h2
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.12, duration: 0.5 }}
+              className="text-[22px] font-bold text-center leading-snug"
+              style={{ fontFamily: 'var(--font-handwrite-soft)', color: '#3D2B4E' }}
+            >
+              있잖아~ 너 어디 살아? 🌸
+            </motion.h2>
+
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.26, duration: 0.45 }}
+              className="mt-2 mb-4 px-2"
+            >
+              {/* 언니 톤 — 카톡 친구처럼 자연스럽게 */}
+              <p
+                className="text-center text-[13.5px] leading-relaxed"
+                style={{ fontFamily: 'var(--font-korean)', color: '#7A5C8A' }}
+              >
+                같은 비, 같은 햇살 받으면서<br />
+                이야기 나누고 싶거든 ☔️
+              </p>
+              {/* 괄호 속 살짝 흘리는 한마디 — 약관 아니라 옆에서 말 거는 느낌 */}
+              <p
+                className="text-center text-[11.5px] mt-2"
+                style={{ fontFamily: 'var(--font-handwrite-soft)', color: '#B38BC6' }}
+              >
+                (동네까지 자세히는 안 물어볼게~ ㅎㅎ)
+              </p>
+            </motion.div>
+
+            {/* 17개 광역시도 — 3-col 그리드 */}
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.34, duration: 0.5 }}
+              className="grid grid-cols-3 gap-2"
+            >
+              {KOREAN_REGIONS.map((region) => {
+                const active = regionCode === region.code;
+                const emoji = REGION_EMOJI[region.code] ?? '📍';
+                return (
+                  <motion.button
+                    key={region.code}
+                    whileTap={{ scale: 0.94 }}
+                    onClick={() => setRegionCode(region.code)}
+                    className="relative flex flex-col items-center justify-center py-2.5 px-1 rounded-2xl transition-all"
+                    style={{
+                      background: active
+                        ? 'linear-gradient(135deg, #FFE0EC 0%, #FBB1D0 100%)'
+                        : 'rgba(255,255,255,0.92)',
+                      border: active
+                        ? '2px solid #E8629A'
+                        : '2px solid rgba(232, 196, 222, 0.55)',
+                      boxShadow: active
+                        ? '0 6px 18px rgba(232,98,154,0.28), inset 0 1px 0 rgba(255,255,255,0.7)'
+                        : '0 1px 3px rgba(210,140,180,0.08)',
+                    }}
+                  >
+                    <div
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-[17px] mb-1"
+                      style={{
+                        background: active
+                          ? 'rgba(255,255,255,0.7)'
+                          : 'rgba(248,200,225,0.25)',
+                      }}
+                    >
+                      {emoji}
+                    </div>
+                    <div
+                      className="text-[11.5px] font-bold leading-none"
+                      style={{
+                        fontFamily: 'var(--font-korean)',
+                        color: active ? '#7A1F4F' : '#5B3F6E',
+                      }}
+                    >
+                      {region.shortName}
+                    </div>
+                    {active && (
+                      <span
+                        aria-hidden
+                        className="absolute top-1 right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-black text-white"
+                        style={{ background: '#E8629A' }}
+                      >
+                        ✓
+                      </span>
+                    )}
+                  </motion.button>
+                );
+              })}
+            </motion.div>
+
+            {/* 확정 버튼 */}
+            <motion.button
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5, duration: 0.5 }}
+              whileHover={{ scale: 1.015, y: -1 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={handleFinalSubmit}
+              disabled={isSubmitting}
+              className="onb-shimmer w-full mt-5 py-[15px] rounded-2xl font-bold text-white text-[15px] tracking-wide disabled:opacity-55 transition-transform"
+              style={{
+                fontFamily: 'var(--font-korean)',
+                background:
+                  'linear-gradient(120deg, #E8629A 0%, #EE82B5 55%, #E8A07A 100%)',
+                boxShadow:
+                  '0 10px 28px rgba(232,98,154,0.32), 0 1px 0 rgba(255,255,255,0.4) inset',
+              }}
+            >
+              {isSubmitting
+                ? '짐 챙기는 중~ 🎒'
+                : `${KOREAN_REGIONS.find((r) => r.code === regionCode)?.shortName ?? '여기'}로 갈게! 🌸`}
+            </motion.button>
+
+            <p
+              className="mt-4 text-center text-[11px] tracking-[0.14em]"
+              style={{ fontFamily: 'var(--font-handwrite-soft)', color: '#C4A0CE' }}
+            >
               🌸 &nbsp;루나가 함께할게요&nbsp; 🌸
+            </p>
+
+            {/* 페이지 맨 아래 작은 기능 설명 — 몰입 안 깨는 톤 */}
+            <p
+              className="mt-5 text-center text-[10.5px] leading-relaxed px-4"
+              style={{
+                fontFamily: 'var(--font-korean)',
+                color: '#C9B5D4',
+              }}
+            >
+              * 선택한 지역의 날씨 정보를 불러올 때 사용돼요. 정확한 위치는 저장하지 않아요.
             </p>
           </motion.section>
         )}
