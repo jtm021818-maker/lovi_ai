@@ -190,15 +190,34 @@ JSON 한 개만 출력:`;
           }
         }
       } catch {
-        // JSON parse 실패 → 줄 단위 추출 시도
-        const lines = text
-          .split('\n')
-          .map((l) => l.replace(/^[-•\d.\s"'`]+|["'`\s]+$/g, '').trim())
-          .filter((l) => l.length > 0 && l.length <= 80)
-          .slice(0, 3);
-        if (lines.length > 0) {
-          messages = lines;
-          source = 'llm';
+        // JSON parse 실패 → markdown 펜스 제거 후 재시도
+        const stripped = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+        try {
+          const parsed2 = JSON.parse(stripped);
+          const arr = Array.isArray(parsed2?.messages) ? parsed2.messages : null;
+          if (arr) {
+            const cleaned = arr
+              .map((m: unknown) => (typeof m === 'string' ? m.trim() : ''))
+              .filter((m: string) => m.length > 0 && m.length <= 80)
+              .slice(0, 3);
+            if (cleaned.length > 0) {
+              messages = cleaned;
+              source = 'llm';
+            }
+          }
+        } catch {
+          // JSON 형태면 줄 단위 추출 시도하지 않음 → 정적 폴백 사용
+          if (!stripped.trimStart().startsWith('{')) {
+            const lines = stripped
+              .split('\n')
+              .map((l) => l.replace(/^[-•\d.\s"'`]+|["'`\s]+$/g, '').trim())
+              .filter((l) => l.length > 0 && l.length <= 80)
+              .slice(0, 3);
+            if (lines.length > 0) {
+              messages = lines;
+              source = 'llm';
+            }
+          }
         }
       }
     } catch (err) {

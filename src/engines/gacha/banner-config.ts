@@ -29,6 +29,7 @@ export const BANNERS: BannerConfig[] = [
     id: 'pickup_weekly',
     name: '이달의 픽업',
     description: '여왕 엘레나 UR 픽업 — SR 2종 확률 3배 동시 적용',
+    bannerVideoUrl: '/quen_elena.mp4',
     accentColor: '#7C3AED',
     bannerBadge: 'PICKUP',
     pickupSpiritId: 'queen_elena',

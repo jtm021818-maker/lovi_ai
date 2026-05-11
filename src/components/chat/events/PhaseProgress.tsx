@@ -334,242 +334,215 @@ function BranchedTrack({
 
   return (
     <div className="w-full sticky top-[60px] z-10">
-      {/* 상단 그라디언트 라인 (3색 — 분기 암시) */}
-      <div className="h-[1px] bg-gradient-to-r from-rose-200/60 via-pink-300/40 via-50% to-amber-200/60" />
+      {/* 상단 그라디언트 라인 */}
+      <div className="h-[1px] bg-gradient-to-r from-rose-200/60 via-pink-300/40 to-amber-200/60" />
 
-      <div className="relative bg-gradient-to-br from-rose-50/85 via-white/90 to-amber-50/85 border-b border-pink-100/40 shadow-[0_4px_20px_rgba(236,72,153,0.06)] backdrop-blur-xl px-3 py-3 overflow-hidden">
+      <div className="relative bg-gradient-to-br from-rose-50/90 via-white/95 to-amber-50/90 border-b border-pink-100/40 shadow-[0_4px_16px_rgba(236,72,153,0.06)] backdrop-blur-xl overflow-hidden">
 
-        {/* 떠다니는 작은 입자 (분위기) */}
-        {[
-          { x: '88%', y: '20%', delay: 0 },
-          { x: '70%', y: '60%', delay: 1.2 },
-          { x: '95%', y: '50%', delay: 2.4 },
-        ].map((p, i) => (
-          <motion.span
-            key={i}
-            className="absolute text-pink-300/40 select-none pointer-events-none text-[8px]"
-            style={{ left: p.x, top: p.y }}
-            animate={{ opacity: [0.2, 0.7, 0.2], scale: [1, 1.4, 1] }}
-            transition={{ duration: 2.4, repeat: Infinity, delay: p.delay }}
-          >
-            ✦
-          </motion.span>
-        ))}
+        {/* 메인 분기 영역 (가로 grid: HOOK | 분기 영역) */}
+        <div className="flex items-stretch px-3 pt-3 pb-1.5 gap-2 min-h-[58px]">
 
-        {/* 분기 SVG */}
-        <div className="relative" style={{ height: 72 }}>
-          <svg
-            viewBox="0 0 400 80"
-            preserveAspectRatio="none"
-            className="absolute inset-0 w-full h-full"
-          >
-            <defs>
-              {/* 위쪽 상담 그라디언트 (핑크 → 바이올렛) */}
-              <linearGradient id="counselGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#f9a8d4" stopOpacity="0.55" />
-                <stop offset="100%" stopColor="#c084fc" stopOpacity="0.55" />
-              </linearGradient>
-              {/* 아래쪽 일상 그라디언트 (핑크 → 앰버) */}
-              <linearGradient id="casualGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#f9a8d4" stopOpacity="0.55" />
-                <stop offset="100%" stopColor="#fbbf24" stopOpacity="0.55" />
-              </linearGradient>
-              {/* 분기점 글로우 */}
-              <radialGradient id="branchGlow">
-                <stop offset="0%" stopColor="#fde68a" stopOpacity="0.6" />
-                <stop offset="100%" stopColor="#fde68a" stopOpacity="0" />
-              </radialGradient>
-            </defs>
-
-            {/* 위쪽 path (상담) — HOOK 원에서 위로 갈라지는 부드러운 곡선 */}
-            <motion.path
-              d="M 60 40 Q 95 40 115 22 L 380 22"
-              stroke="url(#counselGrad)"
-              strokeWidth="2.5"
-              fill="none"
-              strokeLinecap="round"
-              strokeDasharray="5,4"
-              initial={{ pathLength: 0, opacity: 0 }}
-              animate={{ pathLength: 1, opacity: 1 }}
-              transition={{ duration: 1.2, ease: 'easeOut', delay: 0.3 }}
-            />
-            {/* 위쪽 path 끝 화살촉 */}
-            <motion.polyline
-              points="372,17 380,22 372,27"
-              stroke="#c084fc"
-              strokeOpacity="0.55"
-              strokeWidth="2"
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1.4 }}
-            />
-
-            {/* 아래쪽 path (일상) — HOOK 원에서 아래로 갈라지는 곡선 */}
-            <motion.path
-              d="M 60 40 Q 95 40 115 58 L 380 58"
-              stroke="url(#casualGrad)"
-              strokeWidth="2.5"
-              fill="none"
-              strokeLinecap="round"
-              strokeDasharray="5,4"
-              initial={{ pathLength: 0, opacity: 0 }}
-              animate={{ pathLength: 1, opacity: 1 }}
-              transition={{ duration: 1.2, ease: 'easeOut', delay: 0.5 }}
-            />
-            <motion.polyline
-              points="372,53 380,58 372,63"
-              stroke="#fbbf24"
-              strokeOpacity="0.55"
-              strokeWidth="2"
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1.6 }}
-            />
-
-            {/* 분기점 글로우 (펄스) */}
-            <motion.circle
-              cx="100"
-              cy="40"
-              fill="url(#branchGlow)"
-              animate={{ r: [12, 18, 12], opacity: [0.4, 0.8, 0.4] }}
-              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-            />
-            {/* 분기점 코어 */}
-            <motion.circle
-              cx="100"
-              cy="40"
-              r="4"
-              fill="#fbbf24"
-              animate={{ scale: [1, 1.3, 1] }}
-              transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
-            />
-
-            {/* 분기점에서 위/아래로 작은 별 입자 */}
-            {[
-              { dx: 14, dy: -18, delay: 0.4 },
-              { dx: 24, dy: 0, delay: 1.0 },
-              { dx: 14, dy: 18, delay: 1.6 },
-            ].map((p, i) => (
-              <motion.circle
-                key={i}
-                cx="100"
-                cy="40"
-                r="1.6"
-                fill="#fbbf24"
-                initial={{ opacity: 0 }}
-                animate={{
-                  cx: [100, 100 + p.dx],
-                  cy: [40, 40 + p.dy],
-                  opacity: [0, 1, 0],
-                }}
-                transition={{ duration: 1.6, delay: p.delay, repeat: Infinity }}
-              />
-            ))}
-          </svg>
-
-          {/* HOOK 큰 원 (좌측 고정) */}
-          <motion.div
-            initial={{ scale: 0, rotate: -45 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ type: 'spring', stiffness: 180, damping: 14 }}
-            className="absolute"
-            style={{ left: '2%', top: '50%', transform: 'translateY(-50%)' }}
-          >
-            <div className="relative">
+          {/* ─── 좌측: HOOK 원 + 라벨 ─── */}
+          <div className="flex-shrink-0 flex flex-col items-center justify-center" style={{ width: 56 }}>
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: 'spring', stiffness: 200, damping: 14 }}
+              className="relative"
+            >
               {/* 글로우 링 */}
               <motion.div
-                className="absolute inset-[-4px] rounded-full"
-                style={{
-                  background: 'radial-gradient(circle, rgba(244,114,182,0.4), transparent 70%)',
-                }}
-                animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0.9, 0.5] }}
+                className="absolute inset-[-3px] rounded-full"
+                style={{ background: 'radial-gradient(circle, rgba(244,114,182,0.35), transparent 70%)' }}
+                animate={{ scale: [1, 1.15, 1], opacity: [0.5, 0.9, 0.5] }}
                 transition={{ duration: 2, repeat: Infinity }}
               />
-              {/* HOOK 아이콘 */}
-              <div className="relative w-12 h-12 rounded-full bg-white shadow-[0_4px_16px_rgba(236,72,153,0.3)] flex items-center justify-center p-2 ring-2 ring-pink-400/50">
+              <div className="relative w-9 h-9 rounded-full bg-white shadow-[0_2px_10px_rgba(236,72,153,0.3)] flex items-center justify-center p-1 ring-2 ring-pink-400/50">
                 {persona === 'tarot' ? (
                   <CatEarIcon active={true} past={false} />
                 ) : (
                   <FoxEarIcon active={true} past={false} />
                 )}
               </div>
-            </div>
-          </motion.div>
+            </motion.div>
+            <p className="mt-1 text-[9px] font-bold text-pink-600 whitespace-nowrap">
+              이야기 듣기
+            </p>
+          </div>
 
-          {/* 위쪽 라벨 — 상담 흐름 */}
-          <motion.div
-            initial={{ x: 10, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            transition={{ delay: 0.9 }}
-            className="absolute right-2 top-[2px] flex items-center gap-1.5"
-          >
-            <span className="text-[12px]">💕</span>
-            <motion.span
-              animate={{ opacity: [0.65, 1, 0.65] }}
-              transition={{ duration: 2.4, repeat: Infinity }}
-              className="text-[10px] font-extrabold tracking-tight bg-gradient-to-r from-pink-500 to-violet-500 bg-clip-text text-transparent whitespace-nowrap"
+          {/* ─── 우측: 분기 SVG + 라벨 ─── */}
+          <div className="flex-1 relative min-w-0">
+            <svg
+              viewBox="0 0 200 60"
+              preserveAspectRatio="none"
+              className="absolute inset-0 w-full h-full"
             >
-              상담 흐름
-            </motion.span>
-            <span className="text-[10px] text-violet-400/60">↗</span>
-          </motion.div>
+              <defs>
+                <linearGradient id="counselGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#f9a8d4" stopOpacity="0.55" />
+                  <stop offset="100%" stopColor="#c084fc" stopOpacity="0.7" />
+                </linearGradient>
+                <linearGradient id="casualGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#f9a8d4" stopOpacity="0.55" />
+                  <stop offset="100%" stopColor="#fbbf24" stopOpacity="0.7" />
+                </linearGradient>
+                <radialGradient id="branchGlow">
+                  <stop offset="0%" stopColor="#fde68a" stopOpacity="0.6" />
+                  <stop offset="100%" stopColor="#fde68a" stopOpacity="0" />
+                </radialGradient>
+              </defs>
 
-          {/* 아래쪽 라벨 — 일상 수다 */}
-          <motion.div
-            initial={{ x: 10, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            transition={{ delay: 1.1 }}
-            className="absolute right-2 bottom-[6px] flex items-center gap-1.5"
-          >
-            <span className="text-[12px]">🍃</span>
-            <motion.span
-              animate={{ opacity: [0.65, 1, 0.65] }}
-              transition={{ duration: 2.4, repeat: Infinity, delay: 0.5 }}
-              className="text-[10px] font-extrabold tracking-tight bg-gradient-to-r from-pink-500 to-amber-500 bg-clip-text text-transparent whitespace-nowrap"
+              {/* 위쪽 path (상담) */}
+              <motion.path
+                d="M 4 30 Q 18 30 28 14 L 196 14"
+                stroke="url(#counselGrad)"
+                strokeWidth="1.8"
+                fill="none"
+                strokeLinecap="round"
+                strokeDasharray="3,2.5"
+                initial={{ pathLength: 0, opacity: 0 }}
+                animate={{ pathLength: 1, opacity: 1 }}
+                transition={{ duration: 1.0, ease: 'easeOut', delay: 0.2 }}
+              />
+              {/* 위쪽 화살촉 */}
+              <motion.polyline
+                points="190,10 196,14 190,18"
+                stroke="#c084fc"
+                strokeWidth="1.5"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 1.2 }}
+              />
+
+              {/* 아래쪽 path (일상) */}
+              <motion.path
+                d="M 4 30 Q 18 30 28 46 L 196 46"
+                stroke="url(#casualGrad)"
+                strokeWidth="1.8"
+                fill="none"
+                strokeLinecap="round"
+                strokeDasharray="3,2.5"
+                initial={{ pathLength: 0, opacity: 0 }}
+                animate={{ pathLength: 1, opacity: 1 }}
+                transition={{ duration: 1.0, ease: 'easeOut', delay: 0.4 }}
+              />
+              <motion.polyline
+                points="190,42 196,46 190,50"
+                stroke="#fbbf24"
+                strokeWidth="1.5"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 1.4 }}
+              />
+
+              {/* 분기점 글로우 */}
+              <motion.circle
+                cx="20"
+                cy="30"
+                fill="url(#branchGlow)"
+                animate={{ r: [6, 10, 6], opacity: [0.4, 0.8, 0.4] }}
+                transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+              />
+              {/* 분기점 코어 */}
+              <motion.circle
+                cx="20"
+                cy="30"
+                r="2.5"
+                fill="#fbbf24"
+                animate={{ scale: [1, 1.3, 1] }}
+                transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+              />
+
+              {/* 분기점 별 입자 */}
+              {[
+                { dx: 8, dy: -10, delay: 0.3 },
+                { dx: 14, dy: 0, delay: 0.9 },
+                { dx: 8, dy: 10, delay: 1.5 },
+              ].map((p, i) => (
+                <motion.circle
+                  key={i}
+                  cx="20"
+                  cy="30"
+                  r="1"
+                  fill="#fbbf24"
+                  initial={{ opacity: 0 }}
+                  animate={{
+                    cx: [20, 20 + p.dx],
+                    cy: [30, 30 + p.dy],
+                    opacity: [0, 1, 0],
+                  }}
+                  transition={{ duration: 1.4, delay: p.delay, repeat: Infinity }}
+                />
+              ))}
+            </svg>
+
+            {/* 위쪽 라벨: 💕 상담 흐름 (path 끝에) */}
+            <motion.div
+              initial={{ x: -8, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ delay: 0.7 }}
+              className="absolute right-0 top-0 flex items-center gap-1 pr-0.5"
+              style={{ transform: 'translateY(-4px)' }}
             >
-              일상 수다
-            </motion.span>
-            <span className="text-[10px] text-amber-400/60">↘</span>
-          </motion.div>
+              <span className="text-[10px]">💕</span>
+              <motion.span
+                animate={{ opacity: [0.65, 1, 0.65] }}
+                transition={{ duration: 2.4, repeat: Infinity }}
+                className="text-[9px] font-extrabold tracking-tight bg-gradient-to-r from-pink-500 to-violet-500 bg-clip-text text-transparent whitespace-nowrap"
+              >
+                상담 흐름
+              </motion.span>
+            </motion.div>
 
-          {/* 분기점 위에 "분기 중" 미니 라벨 */}
-          <motion.div
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1.8 }}
-            className="absolute"
-            style={{ left: '24.5%', top: '50%', transform: 'translate(-50%, 6px)' }}
-          >
-            <motion.span
-              animate={{ opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 1.6, repeat: Infinity }}
-              className="text-[8px] italic font-bold text-amber-600 whitespace-nowrap"
+            {/* 아래쪽 라벨: 🍃 일상 수다 (path 끝에) */}
+            <motion.div
+              initial={{ x: -8, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ delay: 0.9 }}
+              className="absolute right-0 bottom-0 flex items-center gap-1 pr-0.5"
+              style={{ transform: 'translateY(4px)' }}
             >
-              ✨ 분기 중
-            </motion.span>
-          </motion.div>
+              <span className="text-[10px]">🍃</span>
+              <motion.span
+                animate={{ opacity: [0.65, 1, 0.65] }}
+                transition={{ duration: 2.4, repeat: Infinity, delay: 0.5 }}
+                className="text-[9px] font-extrabold tracking-tight bg-gradient-to-r from-pink-500 to-amber-500 bg-clip-text text-transparent whitespace-nowrap"
+              >
+                일상 수다
+              </motion.span>
+            </motion.div>
 
-          {/* HOOK 라벨 (왼쪽 하단) */}
-          <p
-            className="absolute text-[9px] font-bold text-pink-600 whitespace-nowrap"
-            style={{ left: '4%', bottom: -2 }}
-          >
-            이야기 듣기
-          </p>
+            {/* "분기 중" 미니 라벨 (분기점 아래) */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 1.4 }}
+              className="absolute"
+              style={{ left: '10%', top: '50%', transform: 'translate(-50%, 7px)' }}
+            >
+              <motion.span
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 1.6, repeat: Infinity }}
+                className="text-[8px] italic font-bold text-amber-600 whitespace-nowrap"
+              >
+                ✨ 분기 중
+              </motion.span>
+            </motion.div>
+          </div>
         </div>
 
-        {/* 상태 텍스트 */}
-        <div className="text-center h-4 mt-1">
+        {/* 하단 상태 텍스트 */}
+        <div className="text-center pb-2">
           <motion.span
-            initial={{ opacity: 0, y: 4 }}
+            initial={{ opacity: 0, y: 3 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
+            transition={{ delay: 0.5 }}
             className="text-[10px] font-semibold tracking-tight bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 bg-clip-text text-transparent"
           >
             {typedStatus}

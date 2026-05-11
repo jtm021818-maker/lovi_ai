@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
 import type { BannerConfig } from '@/types/gacha.types';
@@ -43,6 +43,8 @@ export default function GachaBannerFullscreen({
   disabled,
 }: Props) {
   const [infoOpen, setInfoOpen] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const playCountRef = useRef(0);
 
   const pityPct = Math.min(pityCounter / banner.hardPity, 1);
   const inSoftPity = pityCounter >= banner.softPityStart;
@@ -65,8 +67,24 @@ export default function GachaBannerFullscreen({
     <>
       <div className="relative flex-1 flex flex-col overflow-hidden">
 
-        {/* ─── 배경 이미지 / Hero ─── */}
-        {banner.bannerImageUrl ? (
+        {/* ─── 배경 동영상 / 이미지 / Hero ─── */}
+        {banner.bannerVideoUrl ? (
+          <video
+            ref={videoRef}
+            src={banner.bannerVideoUrl}
+            autoPlay
+            playsInline
+            muted
+            className="absolute inset-0 w-full h-full object-cover object-top"
+            onEnded={() => {
+              playCountRef.current += 1;
+              if (playCountRef.current < 3 && videoRef.current) {
+                videoRef.current.currentTime = 0;
+                videoRef.current.play();
+              }
+            }}
+          />
+        ) : banner.bannerImageUrl ? (
           <Image
             src={banner.bannerImageUrl}
             alt={banner.name}

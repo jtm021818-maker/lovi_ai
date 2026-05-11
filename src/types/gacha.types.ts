@@ -14,6 +14,8 @@ export interface BannerConfig {
   description: string;
   /** 배너 히어로 이미지 URL (없으면 그라디언트 fallback) */
   bannerImageUrl?: string;
+  /** 배너 배경 동영상 URL (있으면 이미지·그라디언트보다 우선) */
+  bannerVideoUrl?: string;
   /** 배너 포인트 컬러 (버튼·피티바·테두리) */
   accentColor?: string;
   /** 배너 상단 뱃지 */
