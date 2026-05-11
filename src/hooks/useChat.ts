@@ -89,6 +89,8 @@ interface UseChatReturn {
   browseSessionMeta: BrowseSessionMeta | null;
   /** 루나 타이핑 dot — 브라우징 블록 페이싱용 */
   browseTypingDot: boolean;
+  /** 🆕 v105.2: DAILY_CHAT 작별 시그널 (timestamp). null 아니면 ChatContainer 가 5초 후 세션 종료 */
+  casualFarewellSignal: number | null;
 }
 
 export function useChat(sessionId: string): UseChatReturn {
@@ -167,6 +169,9 @@ export function useChat(sessionId: string): UseChatReturn {
   }, []);
   const [understandingLevel, setUnderstandingLevel] = useState(0);
   const [lunaThoughtBubble, setLunaThoughtBubble] = useState<string | null>(null);
+  // 🆕 v105.2: DAILY_CHAT 작별 시그널 — 클라이언트가 5초 후 silent 세션 종료 트리거
+  //   ChatContainer 가 이 값 변화를 watch 하여 completeSessionNow() 호출
+  const [casualFarewellSignal, setCasualFarewellSignal] = useState<number | null>(null);
   /** 생각 말풍선이 화면에 표시된 시각 (최소 표시 시간 계산용) */
   const thoughtBubbleShownAt = useRef<number | null>(null);
   /** 생각 말풍선 지연 제거 타이머 */
@@ -753,6 +758,15 @@ export function useChat(sessionId: string): UseChatReturn {
                 break;
               }
 
+              // 🆕 v105.2: DAILY_CHAT 작별 시그널 — 5초 후 silent 종료
+              //   ACE 가 [CASUAL_BYE] 태그 출력 → pipeline 이 이 이벤트 발행 → 클라이언트가 setTimeout 으로 자동 종료.
+              //   ChatContainer 가 casualFarewellSignal 변화를 watch.
+              case 'casual_farewell': {
+                console.log('[useChat:v105.2] 🌙 작별 시그널 수신 — 5초 후 silent 종료 예약');
+                setCasualFarewellSignal(Date.now());
+                break;
+              }
+
               // 🆕 v81: BRIDGE 몰입 모드 완료 — Luna 가 [OPERATION_COMPLETE] 태그 출력
               case 'mode_complete': {
                 const completeData = event.data as { mode: string; summary: string; nextStep?: string };
@@ -981,5 +995,7 @@ export function useChat(sessionId: string): UseChatReturn {
     resolvedBrowsePrompts,
     browseSessionMeta,
     browseTypingDot,
+    // 🆕 v105.2: DAILY_CHAT 작별 시그널
+    casualFarewellSignal,
   };
 }

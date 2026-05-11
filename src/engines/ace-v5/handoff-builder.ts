@@ -506,6 +506,7 @@ function describeIntimacy(I: number): string {
 export function describePhaseForLuna(phase: string): string {
   const map: Record<string, string> = {
     HOOK: '방금 얘기 듣기 시작한 상태. 얘가 뭔 상황인지 편하게 들어봐. 너무 깊이 파고들면 부담.',
+    DAILY_CHAT: '가벼운 일상 대화 중. 상담 흐름 없음. 친구처럼 리액션만. Phase 전환 태그 일절 X.',
     MIRROR: '얘 표면 감정 너머의 진짜 마음 같이 들여다보는 중. 깊은 공감 + 자기 관찰 유도.',
     BRIDGE: '얘 상황 충분히 알았어. 같이 뭘 할지 방향 고민하는 중. 해결책 아직 X, 얘 원하는 도움 형태 확인.',
     SOLVE: '구체적 행동 같이 짜는 중. 실행 가능한 것 제안하고 같이 다듬기.',

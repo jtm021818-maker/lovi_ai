@@ -199,7 +199,7 @@ function computeLunaThinking(
 }
 
 // 🆕 v89: 메타 태그 패턴 (hlrePost가 파싱할 것들 — 표시용 burst 에서 제거)
-const METADATA_TAG_RE_V89 = /\[(?:SITUATION_READ|LUNA_THOUGHT|PHASE_SIGNAL|SITUATION_CLEAR|MIND_READ_READY|STORY_READY|STRATEGY_READY|ACTION_PLAN|WARM_WRAP|TAROT_READY|PATTERN_MIRROR_READY|THINKING_DEEP|TONE_SELECT|DRAFT_CARD|ROLEPLAY_FEEDBACK|PANEL_REPORT|IDEA_REFINE|REQUEST_REANALYSIS|LEFT_BRAIN_HINT|RP_IN|RP_OUT|OPERATION_COMPLETE|SONG_READY|DATE_SPOT_READY|GIFT_READY|ACTIVITY_READY|ANNIVERSARY_READY|MOVIE_READY|BROWSE_READY)(?::[^\]]*)?\]/gi;
+const METADATA_TAG_RE_V89 = /\[(?:SITUATION_READ|LUNA_THOUGHT|PHASE_SIGNAL|SITUATION_CLEAR|MIND_READ_READY|STORY_READY|STRATEGY_READY|ACTION_PLAN|WARM_WRAP|TAROT_READY|PATTERN_MIRROR_READY|THINKING_DEEP|TONE_SELECT|DRAFT_CARD|ROLEPLAY_FEEDBACK|PANEL_REPORT|IDEA_REFINE|REQUEST_REANALYSIS|LEFT_BRAIN_HINT|RP_IN|RP_OUT|OPERATION_COMPLETE|SONG_READY|DATE_SPOT_READY|GIFT_READY|ACTIVITY_READY|ANNIVERSARY_READY|MOVIE_READY|BROWSE_READY|CASUAL_BYE)(?::[^\]]*)?\]/gi;
 
 // 🆕 v89: FX 태그 → 클라이언트 target 매핑
 const FX_TARGETS_V89: Record<string, 'screen' | 'bubble' | 'text' | 'avatar' | 'particle' | 'bg'> = {
@@ -384,6 +384,8 @@ export class CounselingPipeline {
     | { type: 'fx'; data: { id: string; target: 'screen' | 'bubble' | 'text' | 'avatar' | 'particle' | 'bg'; duration?: number; params?: Record<string, any>; messageId?: string } }
     // 🆕 v81: BRIDGE 몰입 모드 완료 — 프론트에서 modeStore.exit() 트리거
     | { type: 'mode_complete'; data: { mode: string; summary: string; nextStep?: string } }
+    // 🆕 v105.2: DAILY_CHAT 작별 시그널 — 클라이언트가 5초 후 silent 세션 종료
+    | { type: 'casual_farewell'; data: { source: string; sessionId?: string } }
     // 🆕 v48: 캐스케이드 재시도 상태 — UI에서 예쁜 재시도 표시용
     | { type: 'retry_status'; data: RetryStatusEvent }
     | { type: 'done'; data: { stateResult: StateResult; strategyResult: StrategyResult; suggestionShown: boolean; responseMode?: ResponseMode; updatedAxes?: Partial<ReadIgnoredAxes>; phaseV2?: ConversationPhaseV2; completedEvents?: PhaseEventType[]; lastEventTurn?: number; confirmedEmotionScore?: number; emotionHistory?: number[]; promptStyle?: string; emotionAccumulatorState?: EmotionAccumulatorState; phaseStartTurn?: number; lunaEmotionState?: string; sessionStoryState?: string; strategyMode?: StrategyMode | null; intimacyState?: import('@/engines/intimacy').IntimacyState | null; intimacyPersonaKey?: 'luna' | 'tarot'; intimacyAll?: { luna: import('@/engines/intimacy').IntimacyState; tarot: import('@/engines/intimacy').IntimacyState } | null; intimacyLevelUp?: { oldLevel: number; newLevel: number; newLevelName: string } | null; _contextLog?: any } }
@@ -2351,7 +2353,8 @@ ${researchResult.insight}
           const lbRecommendsVN = capturedLeftBrainAnalysis?.event_recommendation?.suggested === 'VN_THEATER'
             || capturedLeftBrainAnalysis?.event_recommendation?.suggested === 'EMOTION_MIRROR';
           const willEnterMirror =
-            newPhaseV2 === 'MIRROR' ||
+            // DAILY_CHAT → MIRROR 탈출 시 VN 극장 스킵 (일상 대화에서 자연스럽게 상담으로 넘어온 것 — 루나극장 맥락 없음)
+            (newPhaseV2 === 'MIRROR' && prevPhaseV2 !== 'DAILY_CHAT') ||
             // HOOK → MIRROR 전환 신호
             (newPhaseV2 === 'HOOK' && (
               hlrePost.mindReadReady === true ||                           // Luna 가 [MIND_READ_READY] 또는 [SITUATION_CLEAR]
@@ -2674,6 +2677,10 @@ ${researchResult.insight}
             const reCheckCtx: PhaseContext = {
               ...phaseCtx,
               currentPhase: newPhaseV2,
+              // 🆕 v105.1: 현재 턴 좌뇌 conversation_mode 즉시 반영 (캐시 1턴 지연 보정)
+              //   기존: phaseCtx.conversationMode = 이전 턴 캐시 → DAILY_CHAT 탈출 1턴 늦어짐
+              //   수정: 이번 턴 분석 도착 후 재판단 → 첫 무거운 발언에 즉시 반응
+              conversationMode: ((capturedLeftBrainAnalysis as any)?.conversation_mode as 'COUNSELING' | 'CASUAL' | undefined) ?? phaseCtx.conversationMode,
               completedEvents: updatedCompletedEvents,
               lastEventTurn: updatedLastEventTurn,
               phaseStartTurn: updatedPhaseStartTurn,
@@ -2704,6 +2711,15 @@ ${researchResult.insight}
         } catch (e) {
           console.warn('[Pipeline] Phase 재판단 오류 (무시):', e);
         }
+      }
+
+      // 🆕 v105.2: DAILY_CHAT 작별 인사 감지 → silent 세션 종료 시그널
+      //   ACE 가 [CASUAL_BYE] 태그를 붙이면 (작별 키워드 미러 응답 후) 클라이언트로 신호 전송.
+      //   클라이언트는 마지막 말풍선이 다 뜬 뒤 5초 후 completeSessionNow() 호출 → 백그라운드 종료.
+      //   UI 정리 카드/요약 없이 카톡 친구 작별처럼 fade out.
+      if (newPhaseV2 === 'DAILY_CHAT' && /\[CASUAL_BYE\]/i.test(fullText)) {
+        console.log('[Pipeline:v105.2] 🌙 DAILY_CHAT 작별 시그널 감지 → casual_farewell 발행');
+        yield { type: 'casual_farewell', data: { source: 'casual_bye_tag', sessionId: ragContext?.sessionId } };
       }
 
       // 🆕 v15: 이벤트 전송 (AI 응답 완료 후)

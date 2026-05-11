@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react';
 import Image from 'next/image';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { BannerConfig } from '@/types/gacha.types';
 import type { SpiritMaster, SpiritRarity } from '@/types/spirit.types';
 import { SPIRITS } from '@/data/spirits';
@@ -45,6 +45,7 @@ export default function GachaBannerFullscreen({
   const [infoOpen, setInfoOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const playCountRef = useRef(0);
+  const [poolExpanded, setPoolExpanded] = useState(false);
 
   const pityPct = Math.min(pityCounter / banner.hardPity, 1);
   const inSoftPity = pityCounter >= banner.softPityStart;
@@ -111,7 +112,7 @@ export default function GachaBannerFullscreen({
           .kcasual-title-group {
             font-family: var(--font-black-han-sans), 'Noto Sans KR', sans-serif;
             position: absolute;
-            top: 50px;
+            top: 14px;
             left: 0;
             right: 0;
             z-index: 10;
@@ -119,9 +120,9 @@ export default function GachaBannerFullscreen({
             flex-direction: column;
             align-items: center;
             pointer-events: none;
-            filter: drop-shadow(0px 8px 4px rgba(0,0,0,0.35));
+            filter: drop-shadow(0px 4px 3px rgba(0,0,0,0.45));
           }
-          
+
           .k-stroke {
             position: absolute;
             inset: 0;
@@ -136,33 +137,36 @@ export default function GachaBannerFullscreen({
             background-clip: text;
             color: transparent;
           }
-          
-          .k-stroke-sm { font-size: 26px; letter-spacing: -1px; -webkit-text-stroke: 9px #613654; }
-          .k-fill-top  { font-size: 26px; letter-spacing: -1px; background-image: linear-gradient(180deg, #ffffff 0%, #e0d4f5 100%); }
-          
-          .k-stroke-lg { font-size: 54px; letter-spacing: -2px; line-height: 1.1; -webkit-text-stroke: 16px #5a2846; }
-          .k-fill-mid  { font-size: 54px; letter-spacing: -2px; line-height: 1.1; background-image: linear-gradient(180deg, #fffce0 0%, #ffe47a 25%, #ffa6c9 65%, #ff6b9d 100%); }
-          
-          .k-stroke-md { font-size: 34px; letter-spacing: -1px; -webkit-text-stroke: 11px #5a2846; }
-          .k-fill-bot  { font-size: 34px; letter-spacing: -1px; background-image: linear-gradient(180deg, #ffffff 0%, #d8cbf0 100%); }
+
+          .k-stroke-lg { font-size: 32px; letter-spacing: -1px; line-height: 1.15; -webkit-text-stroke: 10px #5a2846; }
+          .k-fill-mid  { font-size: 32px; letter-spacing: -1px; line-height: 1.15; background-image: linear-gradient(180deg, #fffce0 0%, #ffe47a 25%, #ffa6c9 65%, #ff6b9d 100%); }
+
+          .k-stroke-md { font-size: 18px; letter-spacing: 0px; -webkit-text-stroke: 6px #5a2846; }
+          .k-fill-bot  { font-size: 18px; letter-spacing: 0px; background-image: linear-gradient(180deg, #ffffff 0%, #d8cbf0 100%); }
         `}} />
 
         {/* ─── Hero Title (K-Casual Style) ─── */}
         {banner.id === 'pickup_weekly' && (
           <div className="kcasual-title-group">
-            <div className="text-[24px] mb-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] leading-none text-white opacity-95">👑</div>
-            
-            <div className="relative inline-block whitespace-nowrap mb-[-2px]">
-              <div className="k-stroke k-stroke-sm">~ 이달의 픽업 ~</div>
-              <div className="k-fill k-fill-top">~ 이달의 픽업 ~</div>
+            {/* 이벤트 라벨 뱃지 */}
+            <div
+              className="flex items-center gap-1 px-2.5 py-[3px] rounded-full mb-1.5"
+              style={{
+                background: 'rgba(90,40,70,0.65)',
+                border: '1px solid rgba(255,180,220,0.35)',
+                backdropFilter: 'blur(6px)',
+              }}
+            >
+              <span className="text-[10px]">👑</span>
+              <span className="text-[10px] font-black tracking-[0.15em] text-white/90">이달의 픽업</span>
             </div>
 
-            <div className="relative inline-block whitespace-nowrap mb-[-4px]">
+            <div className="relative inline-block whitespace-nowrap mb-[-2px]">
               <div className="k-stroke k-stroke-lg">여왕 엘레나</div>
               <div className="k-fill k-fill-mid">여왕 엘레나</div>
             </div>
 
-            <div className="relative inline-block whitespace-nowrap mt-[-2px]">
+            <div className="relative inline-block whitespace-nowrap">
               <div className="k-stroke k-stroke-md">픽업 뽑기</div>
               <div className="k-fill k-fill-bot">픽업 뽑기</div>
             </div>
@@ -197,23 +201,58 @@ export default function GachaBannerFullscreen({
 
             {/* ─── POOL GRID ─── */}
             <div className="mb-3">
-              <SectionHeader>
-                전체 정령 풀
-                <span className="ml-1.5 text-white/40 font-bold">{pool.length}종</span>
-              </SectionHeader>
-              <div
-                className="grid gap-1 mt-1.5"
-                style={{ gridTemplateColumns: 'repeat(9, minmax(0, 1fr))' }}
+              <button
+                className="w-full"
+                onClick={() => setPoolExpanded((v) => !v)}
               >
-                {pool.map((sp, i) => (
-                  <PoolThumb
-                    key={sp.id}
-                    spirit={sp}
-                    isPickup={pickupIds.has(sp.id)}
-                    index={i}
+                <div className="flex items-center gap-2 px-1 py-0.5">
+                  <div
+                    className="h-px flex-1"
+                    style={{ background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.18))' }}
                   />
-                ))}
-              </div>
+                  <span className="text-[10px] font-black tracking-[0.12em] uppercase whitespace-nowrap flex items-center gap-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                    전체 정령 풀
+                    <span className="text-white/35 font-bold">{pool.length}종</span>
+                    <motion.span
+                      animate={{ rotate: poolExpanded ? 180 : 0 }}
+                      transition={{ duration: 0.22 }}
+                      className="inline-block text-[8px] text-white/35"
+                    >
+                      ▼
+                    </motion.span>
+                  </span>
+                  <div
+                    className="h-px flex-1"
+                    style={{ background: 'linear-gradient(to left, transparent, rgba(255,255,255,0.18))' }}
+                  />
+                </div>
+              </button>
+              <AnimatePresence initial={false}>
+                {poolExpanded && (
+                  <motion.div
+                    key="pool"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.26, ease: [0.4, 0, 0.2, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <div
+                      className="grid gap-1 mt-1.5"
+                      style={{ gridTemplateColumns: 'repeat(9, minmax(0, 1fr))' }}
+                    >
+                      {pool.map((sp, i) => (
+                        <PoolThumb
+                          key={sp.id}
+                          spirit={sp}
+                          isPickup={pickupIds.has(sp.id)}
+                          index={i}
+                        />
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             {/* ─── PITY BAR ─── */}

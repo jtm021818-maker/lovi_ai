@@ -49,7 +49,7 @@ export interface UserProfile {
 
 /** 스트리밍 이벤트 */
 export interface StreamEvent {
-  type: 'text' | 'state' | 'nudge' | 'done' | 'error' | 'suggestions' | 'panel' | 'strategy' | 'axes_progress' | 'axis_choices' | 'phase_event' | 'phase_change' | 'hlre_replace' | 'context_log' | 'luna_thinking_deep' | 'luna_thought_bubble' | 'intimacy_level_up' | 'retry_status' | 'fx' | 'mode_complete';
+  type: 'text' | 'state' | 'nudge' | 'done' | 'error' | 'suggestions' | 'panel' | 'strategy' | 'axes_progress' | 'axis_choices' | 'phase_event' | 'phase_change' | 'hlre_replace' | 'context_log' | 'luna_thinking_deep' | 'luna_thought_bubble' | 'intimacy_level_up' | 'retry_status' | 'fx' | 'mode_complete' | 'casual_farewell';
   data: string | string[] | Record<string, unknown> | Record<string, unknown>[];
 }
 

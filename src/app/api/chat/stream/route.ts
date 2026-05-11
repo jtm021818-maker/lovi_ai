@@ -714,6 +714,13 @@ export async function POST(req: NextRequest) {
               );
               break;
 
+            // 🆕 v105.2: DAILY_CHAT 작별 시그널 — 클라이언트가 5초 후 silent 세션 종료
+            case 'casual_farewell':
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ type: 'casual_farewell', data: event.data })}\n\n`)
+              );
+              break;
+
             // 🆕 v40: 루나 딥리서치 (Gemini Grounding) 로딩 UI 이벤트
             case 'luna_thinking_deep':
               controller.enqueue(

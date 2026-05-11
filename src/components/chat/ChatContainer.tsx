@@ -176,6 +176,8 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
   const { messages, isLoading, nudges, stateResult, suggestions, panelData, axesProgress, phaseEvents, currentPhase, phaseProgress, sessionStatus, sessionSummary, sendMessage, pendingEventLock, lunaThinking, understandingLevel, thinkingDeep, retryStatus, lunaThoughtBubble, intimacyLevelUp, dismissIntimacyLevelUp, intimacyDerived, intimacyDelta,
     // 🆕 v88: 루나 대화형 "같이 찾기"
     handleBrowseDecision, resolvedBrowsePrompts, browseTypingDot,
+    // 🆕 v105.2: DAILY_CHAT 작별 시그널
+    casualFarewellSignal,
   } = useChat(sessionId);
   // 🆕 v79: 마지막 AI 메시지 ID (bubble FX 매칭용)
   const lastAiMsgId = (() => {
@@ -209,6 +211,20 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
   });
   const remaining = isPremium ? Infinity : Math.max(0, FREE_DAILY_LIMIT - userMsgCount);
   const isLimitReached = !isPremium && remaining <= 0;
+
+  // 🆕 v105.2: DAILY_CHAT 작별 시그널 수신 → 5초 후 silent 세션 종료
+  //   ACE 가 [CASUAL_BYE] 태그 출력 시 pipeline 이 casualFarewellSignal 발행.
+  //   상담의 isFarewellIntent 와 동일한 5초 딜레이로 마지막 말풍선 읽을 시간 확보.
+  //   UI 카드/요약 없이 카톡 친구 작별처럼 자연스러운 fade-out.
+  useEffect(() => {
+    if (!casualFarewellSignal) return;
+    if (sessionStatus === 'completed') return;
+    console.log('[ChatContainer:v105.2] 🌙 작별 시그널 — 5초 후 세션 종료 예약');
+    const timer = setTimeout(() => {
+      completeSessionNow();
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [casualFarewellSignal, sessionStatus, completeSessionNow]);
 
   useEffect(() => {
     async function checkPremiumAndPersona() {
