@@ -320,8 +320,273 @@ interface PhaseProgressProps {
 }
 
 // ============================================================================
+// 🆕 v105: BranchedTrack — HOOK 단계 Y자 분기 시각화
+// 위쪽 path = 💕 상담 흐름 / 아래쪽 path = 🍃 일상 수다
+// 두 갈래로 갈라지는 SVG 곡선 + 분기점 펄스 글로우
+// ============================================================================
+
+function BranchedTrack({
+  lunaThinking,
+  persona,
+}: { lunaThinking?: string; persona: PersonaMode }) {
+  const displayText = lunaThinking || (persona === 'tarot' ? '카드 펼치는 중 🐱' : '이야기 듣는 중 🦊');
+  const typedStatus = useTypewriter(displayText, 70);
+
+  return (
+    <div className="w-full sticky top-[60px] z-10">
+      {/* 상단 그라디언트 라인 (3색 — 분기 암시) */}
+      <div className="h-[1px] bg-gradient-to-r from-rose-200/60 via-pink-300/40 via-50% to-amber-200/60" />
+
+      <div className="relative bg-gradient-to-br from-rose-50/85 via-white/90 to-amber-50/85 border-b border-pink-100/40 shadow-[0_4px_20px_rgba(236,72,153,0.06)] backdrop-blur-xl px-3 py-3 overflow-hidden">
+
+        {/* 떠다니는 작은 입자 (분위기) */}
+        {[
+          { x: '88%', y: '20%', delay: 0 },
+          { x: '70%', y: '60%', delay: 1.2 },
+          { x: '95%', y: '50%', delay: 2.4 },
+        ].map((p, i) => (
+          <motion.span
+            key={i}
+            className="absolute text-pink-300/40 select-none pointer-events-none text-[8px]"
+            style={{ left: p.x, top: p.y }}
+            animate={{ opacity: [0.2, 0.7, 0.2], scale: [1, 1.4, 1] }}
+            transition={{ duration: 2.4, repeat: Infinity, delay: p.delay }}
+          >
+            ✦
+          </motion.span>
+        ))}
+
+        {/* 분기 SVG */}
+        <div className="relative" style={{ height: 72 }}>
+          <svg
+            viewBox="0 0 400 80"
+            preserveAspectRatio="none"
+            className="absolute inset-0 w-full h-full"
+          >
+            <defs>
+              {/* 위쪽 상담 그라디언트 (핑크 → 바이올렛) */}
+              <linearGradient id="counselGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#f9a8d4" stopOpacity="0.55" />
+                <stop offset="100%" stopColor="#c084fc" stopOpacity="0.55" />
+              </linearGradient>
+              {/* 아래쪽 일상 그라디언트 (핑크 → 앰버) */}
+              <linearGradient id="casualGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#f9a8d4" stopOpacity="0.55" />
+                <stop offset="100%" stopColor="#fbbf24" stopOpacity="0.55" />
+              </linearGradient>
+              {/* 분기점 글로우 */}
+              <radialGradient id="branchGlow">
+                <stop offset="0%" stopColor="#fde68a" stopOpacity="0.6" />
+                <stop offset="100%" stopColor="#fde68a" stopOpacity="0" />
+              </radialGradient>
+            </defs>
+
+            {/* 위쪽 path (상담) — HOOK 원에서 위로 갈라지는 부드러운 곡선 */}
+            <motion.path
+              d="M 60 40 Q 95 40 115 22 L 380 22"
+              stroke="url(#counselGrad)"
+              strokeWidth="2.5"
+              fill="none"
+              strokeLinecap="round"
+              strokeDasharray="5,4"
+              initial={{ pathLength: 0, opacity: 0 }}
+              animate={{ pathLength: 1, opacity: 1 }}
+              transition={{ duration: 1.2, ease: 'easeOut', delay: 0.3 }}
+            />
+            {/* 위쪽 path 끝 화살촉 */}
+            <motion.polyline
+              points="372,17 380,22 372,27"
+              stroke="#c084fc"
+              strokeOpacity="0.55"
+              strokeWidth="2"
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 1.4 }}
+            />
+
+            {/* 아래쪽 path (일상) — HOOK 원에서 아래로 갈라지는 곡선 */}
+            <motion.path
+              d="M 60 40 Q 95 40 115 58 L 380 58"
+              stroke="url(#casualGrad)"
+              strokeWidth="2.5"
+              fill="none"
+              strokeLinecap="round"
+              strokeDasharray="5,4"
+              initial={{ pathLength: 0, opacity: 0 }}
+              animate={{ pathLength: 1, opacity: 1 }}
+              transition={{ duration: 1.2, ease: 'easeOut', delay: 0.5 }}
+            />
+            <motion.polyline
+              points="372,53 380,58 372,63"
+              stroke="#fbbf24"
+              strokeOpacity="0.55"
+              strokeWidth="2"
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 1.6 }}
+            />
+
+            {/* 분기점 글로우 (펄스) */}
+            <motion.circle
+              cx="100"
+              cy="40"
+              fill="url(#branchGlow)"
+              animate={{ r: [12, 18, 12], opacity: [0.4, 0.8, 0.4] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+            />
+            {/* 분기점 코어 */}
+            <motion.circle
+              cx="100"
+              cy="40"
+              r="4"
+              fill="#fbbf24"
+              animate={{ scale: [1, 1.3, 1] }}
+              transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+            />
+
+            {/* 분기점에서 위/아래로 작은 별 입자 */}
+            {[
+              { dx: 14, dy: -18, delay: 0.4 },
+              { dx: 24, dy: 0, delay: 1.0 },
+              { dx: 14, dy: 18, delay: 1.6 },
+            ].map((p, i) => (
+              <motion.circle
+                key={i}
+                cx="100"
+                cy="40"
+                r="1.6"
+                fill="#fbbf24"
+                initial={{ opacity: 0 }}
+                animate={{
+                  cx: [100, 100 + p.dx],
+                  cy: [40, 40 + p.dy],
+                  opacity: [0, 1, 0],
+                }}
+                transition={{ duration: 1.6, delay: p.delay, repeat: Infinity }}
+              />
+            ))}
+          </svg>
+
+          {/* HOOK 큰 원 (좌측 고정) */}
+          <motion.div
+            initial={{ scale: 0, rotate: -45 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ type: 'spring', stiffness: 180, damping: 14 }}
+            className="absolute"
+            style={{ left: '2%', top: '50%', transform: 'translateY(-50%)' }}
+          >
+            <div className="relative">
+              {/* 글로우 링 */}
+              <motion.div
+                className="absolute inset-[-4px] rounded-full"
+                style={{
+                  background: 'radial-gradient(circle, rgba(244,114,182,0.4), transparent 70%)',
+                }}
+                animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0.9, 0.5] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              />
+              {/* HOOK 아이콘 */}
+              <div className="relative w-12 h-12 rounded-full bg-white shadow-[0_4px_16px_rgba(236,72,153,0.3)] flex items-center justify-center p-2 ring-2 ring-pink-400/50">
+                {persona === 'tarot' ? (
+                  <CatEarIcon active={true} past={false} />
+                ) : (
+                  <FoxEarIcon active={true} past={false} />
+                )}
+              </div>
+            </div>
+          </motion.div>
+
+          {/* 위쪽 라벨 — 상담 흐름 */}
+          <motion.div
+            initial={{ x: 10, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ delay: 0.9 }}
+            className="absolute right-2 top-[2px] flex items-center gap-1.5"
+          >
+            <span className="text-[12px]">💕</span>
+            <motion.span
+              animate={{ opacity: [0.65, 1, 0.65] }}
+              transition={{ duration: 2.4, repeat: Infinity }}
+              className="text-[10px] font-extrabold tracking-tight bg-gradient-to-r from-pink-500 to-violet-500 bg-clip-text text-transparent whitespace-nowrap"
+            >
+              상담 흐름
+            </motion.span>
+            <span className="text-[10px] text-violet-400/60">↗</span>
+          </motion.div>
+
+          {/* 아래쪽 라벨 — 일상 수다 */}
+          <motion.div
+            initial={{ x: 10, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ delay: 1.1 }}
+            className="absolute right-2 bottom-[6px] flex items-center gap-1.5"
+          >
+            <span className="text-[12px]">🍃</span>
+            <motion.span
+              animate={{ opacity: [0.65, 1, 0.65] }}
+              transition={{ duration: 2.4, repeat: Infinity, delay: 0.5 }}
+              className="text-[10px] font-extrabold tracking-tight bg-gradient-to-r from-pink-500 to-amber-500 bg-clip-text text-transparent whitespace-nowrap"
+            >
+              일상 수다
+            </motion.span>
+            <span className="text-[10px] text-amber-400/60">↘</span>
+          </motion.div>
+
+          {/* 분기점 위에 "분기 중" 미니 라벨 */}
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.8 }}
+            className="absolute"
+            style={{ left: '24.5%', top: '50%', transform: 'translate(-50%, 6px)' }}
+          >
+            <motion.span
+              animate={{ opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 1.6, repeat: Infinity }}
+              className="text-[8px] italic font-bold text-amber-600 whitespace-nowrap"
+            >
+              ✨ 분기 중
+            </motion.span>
+          </motion.div>
+
+          {/* HOOK 라벨 (왼쪽 하단) */}
+          <p
+            className="absolute text-[9px] font-bold text-pink-600 whitespace-nowrap"
+            style={{ left: '4%', bottom: -2 }}
+          >
+            이야기 듣기
+          </p>
+        </div>
+
+        {/* 상태 텍스트 */}
+        <div className="text-center h-4 mt-1">
+          <motion.span
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+            className="text-[10px] font-semibold tracking-tight bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 bg-clip-text text-transparent"
+          >
+            {typedStatus}
+            <motion.span
+              animate={{ opacity: [1, 0, 1] }}
+              transition={{ duration: 0.8, repeat: Infinity }}
+              className="inline-block ml-0.5 w-[1px] h-[10px] bg-pink-300 align-middle"
+            />
+          </motion.span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
 // 🆕 v105: DailyChatTrack — 일상 대화 모드 전용 트랙 (2단계, 가벼운 톤)
-// (PhaseProgress 위에서 선언 — LSP forward reference 회피)
 // ============================================================================
 
 function DailyChatTrack({ lunaThinking }: { lunaThinking?: string }) {
@@ -433,7 +698,11 @@ function DailyChatTrack({ lunaThinking }: { lunaThinking?: string }) {
 export default function PhaseProgress({ currentPhase, progress, persona = 'luna', lunaThinking, understandingLevel }: PhaseProgressProps) {
   if (!currentPhase) return null;
 
-  // 🆕 v105: DAILY_CHAT 분기 — 가벼운 트랙 UI
+  // 🆕 v105: HOOK — Y자 분기 시각화 (두 갈래 path)
+  if (currentPhase === 'HOOK') {
+    return <BranchedTrack lunaThinking={lunaThinking} persona={persona} />;
+  }
+  // 🆕 v105: DAILY_CHAT — 일상 수다 모드 트랙
   if (currentPhase === 'DAILY_CHAT') {
     return <DailyChatTrack lunaThinking={lunaThinking} />;
   }

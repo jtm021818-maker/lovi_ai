@@ -20,6 +20,8 @@ import { routeModel } from '@/lib/ai/model-router';
 import { validateResponse } from '@/lib/ai/response-validator';
 import { retrieveMemories, formatMemoriesAsContext } from '@/lib/rag/retriever';
 import { PhaseManager, type PhaseContext, inferConversationMode } from '@/engines/phase-manager';
+// 🆕 v105: 좌뇌 LLM이 판단한 conversation_mode 를 다음 턴에 활용
+import { getLastConversationMode, setLastConversationMode } from '@/engines/phase-manager/conversation-mode-cache';
 import { HumanLikeEngine } from '@/engines/human-like';
 import { parsePhaseSignal } from '@/engines/human-like/phase-signal';
 import { resetCascadeLog, getCascadeLog } from '@/lib/ai/provider-registry';
@@ -792,12 +794,23 @@ export class CounselingPipeline {
       axisFilledCount: axesState.filledCount,
       diagnosisComplete: !axesState.needsDiagnostic,
       primaryIntent: intentResult.primaryIntent,
-      // 🆕 v105: 일상/상담 분기 — primaryIntent + emotion + scenario 휴리스틱
-      conversationMode: inferConversationMode(
-        intentResult.primaryIntent,
-        effectiveEmotionScore,
-        stateResult.scenario as unknown as string | undefined,
-      ),
+      // 🆕 v105: 일상/상담 분기
+      //   - 우선: 이전 턴 좌뇌 LLM 직접 판단 (캐시)
+      //   - fallback: primaryIntent + emotion + scenario 휴리스틱
+      conversationMode: (() => {
+        const cached = getLastConversationMode(ragContext?.sessionId);
+        if (cached) {
+          console.log(`[Pipeline:v105] 💬 좌뇌 캐시 사용: ${cached.mode} (${cached.reason ?? '-'})`);
+          return cached.mode;
+        }
+        const heuristic = inferConversationMode(
+          intentResult.primaryIntent,
+          effectiveEmotionScore,
+          stateResult.scenario as unknown as string | undefined,
+        );
+        console.log(`[Pipeline:v105] 💬 휴리스틱 결정: ${heuristic} (intent=${intentResult.primaryIntent}, emotion=${effectiveEmotionScore})`);
+        return heuristic;
+      })(),
       hasAskedForAdvice,
       hasGivenPermission: false,
       emotionBaseline: emotionBaseline,
@@ -2000,6 +2013,13 @@ ${researchResult.insight}
               }
             } else if (chunk.type === 'analysis') {
               capturedLeftBrainAnalysis = chunk.data;
+              // 🆕 v105: 좌뇌가 conversation_mode 직접 판단했으면 캐시 → 다음 턴 활용
+              const lbMode = (chunk.data as any)?.conversation_mode;
+              const lbReason = (chunk.data as any)?.conversation_mode_reason;
+              if (lbMode === 'COUNSELING' || lbMode === 'CASUAL') {
+                setLastConversationMode(ragContext?.sessionId, lbMode, lbReason);
+                console.log(`[Pipeline:v105] 💾 좌뇌 직접 판단 캐시 저장: ${lbMode} (${lbReason ?? '-'}) → 다음 턴 적용`);
+              }
             } else if (chunk.type === 'thought_bubble') {
               // 🆕 fast-path: prefetched 로 이미 yield 했으면 중복 방지
               if (!earlyThoughtYielded) {

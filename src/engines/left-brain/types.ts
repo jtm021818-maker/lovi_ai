@@ -324,6 +324,16 @@ export interface LeftBrainAnalysis {
     recommended_reason?: string | null;
   };
 
+  // 🆕 v105: 일상/상담 분기 — 좌뇌가 직접 톤·맥락 판단
+  /**
+   * "COUNSELING" = 관계/감정/결정 얘기 (코칭 흐름 필요)
+   * "CASUAL" = 인사/일상 잡담/단순 푸념 (가벼운 수다)
+   * 누락 시 휴리스틱 fallback 사용
+   */
+  conversation_mode?: 'COUNSELING' | 'CASUAL';
+  /** 🆕 v105: 분기 판단 근거 (디버그/로그용, 한 줄) */
+  conversation_mode_reason?: string;
+
   // 기존 dual-brain 호환 필드
   perceived_emotion: string;
   actual_need: string;

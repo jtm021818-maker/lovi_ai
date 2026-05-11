@@ -320,6 +320,14 @@ function parseAndValidate(raw: string, logCollector?: LogCollector): LeftBrainAn
       event_recommendation: validateEventRecommendation(p.event_recommendation),
       pacing_meta: validatePacingMeta(p.pacing_meta),
       cards_filled_this_turn: validateFilledCards(p.cards_filled_this_turn),
+      // 🆕 v105: 일상/상담 분기 — LLM 직접 판단
+      conversation_mode: (p.conversation_mode === 'CASUAL' || p.conversation_mode === 'COUNSELING')
+        ? p.conversation_mode
+        : undefined,
+      conversation_mode_reason: typeof p.conversation_mode_reason === 'string'
+        ? p.conversation_mode_reason.slice(0, 60)
+        : undefined,
+
       perceived_emotion: String(p.perceived_emotion ?? '').slice(0, 40),
       actual_need: String(p.actual_need ?? '').slice(0, 40),
       tone_to_use: String(p.tone_to_use ?? '따뜻함'),
