@@ -160,54 +160,31 @@ export default function OnboardingFlow() {
               isLoading ? 'onb-exit' : ''
             }`}
           >
-            {/* ─── 스프라이트 영역 ─── */}
+            {/* ─── 스프라이트 영역 (settings 페이지 구조 동일하게 미러) ─── */}
             <motion.div
               initial={{ opacity: 0, y: 16, scale: 0.92 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ delay: 0.15, duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
               className="relative mb-5"
             >
-              {/* 배경 소프트 글로우 */}
-              <div
-                aria-hidden
-                className="absolute inset-[-24px] rounded-full pointer-events-none"
-                style={{
-                  background:
-                    'radial-gradient(50% 50% at 50% 50%, rgba(232,98,154,0.18) 0%, rgba(180,140,220,0.1) 50%, transparent 75%)',
-                  filter: 'blur(4px)',
-                }}
-              />
-
-              {/*
-               * 스프라이트 래퍼 — 항상 보이는 soft-pink 배경
-               * LunaSprite가 로드 전(visibility:hidden)이어도 placeholder가 보임
-               */}
-              <div
-                className="relative rounded-[28px] overflow-hidden shadow-[0_14px_40px_rgba(210,100,155,0.18),0_4px_12px_rgba(210,100,155,0.12)] border-[2.5px] border-white"
-                style={{ background: '#FFE8F0' }}
-              >
-                {/* Skeleton shimmer — 스프라이트 뒤에서 항상 깔림, z-0 */}
-                <div
-                  aria-hidden
-                  className="onb-skeleton absolute inset-0 z-0 rounded-[26px]"
+              {/* 카드 배경 = 로딩 중 placeholder (settings-mascot-card 구조 동일) */}
+              <div className="onb-mascot-card">
+                <div aria-hidden className="onb-mascot-bg" />
+                <LunaSprite
+                  preset="setting"
+                  size={220}
+                  circle={false}
+                  speed="normal"
+                  className="onb-mascot-sprite"
                 />
-                {/* LunaSprite — loaded 후 visibility:visible 로 z-10에 등장 */}
-                <div className="relative z-10">
-                  <LunaSprite
-                    preset="setting"
-                    size={210}
-                    circle={false}
-                    speed="normal"
-                  />
-                </div>
               </div>
 
-              {/* 우측 상단 작은 꽃 데코 */}
+              {/* 장식 이모지 */}
               <motion.span
                 animate={{ rotate: [0, 12, -8, 0], scale: [1, 1.1, 1] }}
                 transition={{ repeat: Infinity, duration: 4.8, ease: 'easeInOut' }}
                 aria-hidden
-                className="absolute -top-3 -right-3 text-2xl drop-shadow-sm select-none"
+                className="absolute -top-3 -right-3 text-2xl drop-shadow-sm select-none pointer-events-none"
               >
                 🌸
               </motion.span>
@@ -215,7 +192,7 @@ export default function OnboardingFlow() {
                 animate={{ rotate: [0, -10, 8, 0], scale: [1, 1.08, 1] }}
                 transition={{ repeat: Infinity, duration: 5.5, ease: 'easeInOut', delay: 1.2 }}
                 aria-hidden
-                className="absolute -bottom-2 -left-3 text-lg drop-shadow-sm select-none"
+                className="absolute -bottom-2 -left-3 text-lg drop-shadow-sm select-none pointer-events-none"
               >
                 ✨
               </motion.span>
@@ -323,28 +300,24 @@ export default function OnboardingFlow() {
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
             className={`relative w-full max-w-[360px] ${isExiting ? 'onb-exit' : ''}`}
           >
-            {/* 작아진 루나 */}
+            {/* 작아진 루나 (settings 구조 동일) */}
             <div className="flex justify-center mb-5">
               <div className="relative">
-                <div
-                  className="rounded-[20px] overflow-hidden shadow-[0_8px_24px_rgba(210,100,155,0.15)] border-[2px] border-white"
-                  style={{ background: '#FFE8F0' }}
-                >
-                  <div className="onb-skeleton absolute inset-0 z-0 rounded-[18px]" />
-                  <div className="relative z-10">
-                    <LunaSprite
-                      preset="setting"
-                      size={90}
-                      circle={false}
-                      speed="normal"
-                    />
-                  </div>
+                <div className="onb-mascot-card" style={{ padding: 10 }}>
+                  <div aria-hidden className="onb-mascot-bg" />
+                  <LunaSprite
+                    preset="setting"
+                    size={90}
+                    circle={false}
+                    speed="normal"
+                    className="onb-mascot-sprite"
+                  />
                 </div>
                 <motion.span
                   animate={{ y: [0, -4, 0] }}
                   transition={{ repeat: Infinity, duration: 2.4 }}
                   aria-hidden
-                  className="absolute -top-2 -right-2 text-base select-none"
+                  className="absolute -top-2 -right-2 text-base select-none pointer-events-none"
                 >
                   🌸
                 </motion.span>
