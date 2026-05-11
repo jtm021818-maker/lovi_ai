@@ -28,6 +28,39 @@ export type ConcernDepth = 'light' | 'medium' | 'deep';
 const PHASE_ORDER: ConversationPhaseV2[] = ['HOOK', 'MIRROR', 'BRIDGE', 'SOLVE', 'EMPOWER'];
 
 // ============================================
+// 🆕 v105: 일상/상담 분기 판단 (LLM이 분류한 primaryIntent + emotion 휴리스틱)
+// ============================================
+/**
+ * 좌뇌 LLM이 이미 분류한 primaryIntent 와 emotionScore, scenario 로
+ * COUNSELING vs CASUAL 판단. 좌뇌 스키마 변경 없이 즉시 작동.
+ *
+ * - VENTING / SEEKING_ADVICE / EXPRESSING_AMBIVALENCE / INSIGHT_EXPRESSION → COUNSELING
+ * - emotionScore <= -3 또는 명확한 시나리오 있음 → COUNSELING
+ * - 그 외 (MINIMAL_RESPONSE, RESISTANCE, STORYTELLING+가벼움) → CASUAL
+ */
+export function inferConversationMode(
+  intent: ClientIntent | undefined,
+  emotionScore: number | undefined,
+  scenario: string | undefined | null,
+): 'COUNSELING' | 'CASUAL' {
+  // 강한 상담 의도 신호
+  if (intent === 'VENTING' || intent === 'SEEKING_ADVICE' ||
+      intent === 'EXPRESSING_AMBIVALENCE' || intent === 'INSIGHT_EXPRESSION') {
+    return 'COUNSELING';
+  }
+  // 강한 감정 → 상담 모드
+  if (typeof emotionScore === 'number' && emotionScore <= -3) {
+    return 'COUNSELING';
+  }
+  // 명확한 시나리오 (GENERAL 외) → 상담 모드
+  if (scenario && scenario !== 'GENERAL' && scenario !== 'UNKNOWN') {
+    return 'COUNSELING';
+  }
+  // 기본: 가벼운 대화 모드
+  return 'CASUAL';
+}
+
+// ============================================
 // 🆕 v73: Phase 별 필수 정보 카드 — context-assembler.ts 와 동기 유지
 // 카드가 모두 채워지면 자동 전환 (긍정 전환 로직)
 // ============================================
@@ -156,6 +189,7 @@ const PHASE_EVENTS: Record<ConversationPhaseV2, PhaseEventType[]> = {
            'TONE_SELECT', 'DRAFT_WORKSHOP', 'ROLEPLAY_FEEDBACK', 'PANEL_REPORT', 'IDEA_REFINE'],
   SOLVE: ['ACTION_PLAN', 'SOLUTION_CARD', 'MESSAGE_DRAFT', 'TAROT_INSIGHT'],
   EMPOWER: ['WARM_WRAP', 'SESSION_SUMMARY', 'HOMEWORK_CARD', 'GROWTH_REPORT'],
+  DAILY_CHAT: [],   // 🆕 v105: 일상 대화 — 게이트 이벤트 없음
 };
 
 // ============================================
@@ -167,6 +201,7 @@ const PHASE_START_TURNS: Record<ConversationPhaseV2, number> = {
   BRIDGE: 5,
   SOLVE: 7,
   EMPOWER: 9,
+  DAILY_CHAT: 2,    // 🆕 v105: HOOK 직후 분기
 };
 
 // ============================================
@@ -196,6 +231,9 @@ export interface PhaseContext {
   primaryIntent?: ClientIntent;
   hasAskedForAdvice: boolean;
   hasGivenPermission: boolean;
+
+  // 🆕 v105: 좌뇌가 판단한 대화 모드 (HOOK 후 분기에 사용)
+  conversationMode?: 'COUNSELING' | 'CASUAL';
 
   // 감정 기준선
   emotionBaseline?: number;
@@ -285,7 +323,7 @@ export class PhaseManager {
    * ✅ 좌뇌 pacing_meta 가 모든 페이싱 판단 책임
    */
   static getCurrentPhase(ctx: PhaseContext): ConversationPhaseV2 {
-    const { turnCount, currentPhase, phaseStartTurn, completedEvents, persona, phaseSignal, pacingMeta, consecutiveFrustratedTurns, filledCards, consecutiveReadyTurns, activeMode } = ctx;
+    const { turnCount, currentPhase, phaseStartTurn, completedEvents, persona, phaseSignal, pacingMeta, consecutiveFrustratedTurns, filledCards, consecutiveReadyTurns, activeMode, primaryIntent, currentEmotionScore, conversationMode } = ctx;
 
     // 🆕 v81: BRIDGE 몰입 모드 활성 중이면 Phase 전환 완전 bypass
     //   유저가 roleplay/draft/panel 등 진행 중 → Luna 가 [OPERATION_COMPLETE] 까지 모드 유지
@@ -293,6 +331,36 @@ export class PhaseManager {
     if (activeMode && currentPhase === 'BRIDGE') {
       console.log(`[PhaseManager] 🔒 BRIDGE 몰입 모드 '${activeMode}' 활성 → Phase 전환 bypass`);
       return currentPhase;
+    }
+
+    // 🆕 v105: DAILY_CHAT 분기 시스템
+    //   HOOK 1턴 후 conversationMode 판단 → CASUAL 이면 DAILY_CHAT 진입
+    //   DAILY_CHAT 중 강한 감정/상담 의도 감지 시 MIRROR 로 자동 escape
+    if (currentPhase === 'HOOK' && turnCount >= 2) {
+      const mode = conversationMode ?? inferConversationMode(primaryIntent, currentEmotionScore, undefined);
+      if (mode === 'CASUAL') {
+        console.log(`[PhaseManager:v105] 💬 HOOK → DAILY_CHAT (intent=${primaryIntent}, emotion=${currentEmotionScore})`);
+        return 'DAILY_CHAT';
+      }
+    }
+    if (currentPhase === 'DAILY_CHAT') {
+      // 강한 감정/상담 의도 감지 시 MIRROR 로 자연스러운 전환
+      if (typeof currentEmotionScore === 'number' && currentEmotionScore <= -4) {
+        console.log(`[PhaseManager:v105] 🔄 DAILY_CHAT → MIRROR (emotion=${currentEmotionScore} 강한 부정)`);
+        return 'MIRROR';
+      }
+      if (primaryIntent === 'VENTING' || primaryIntent === 'SEEKING_ADVICE' ||
+          primaryIntent === 'EXPRESSING_AMBIVALENCE') {
+        console.log(`[PhaseManager:v105] 🔄 DAILY_CHAT → MIRROR (intent=${primaryIntent} 상담 의도)`);
+        return 'MIRROR';
+      }
+      // 명시적 mode override
+      if (conversationMode === 'COUNSELING') {
+        console.log(`[PhaseManager:v105] 🔄 DAILY_CHAT → MIRROR (mode override)`);
+        return 'MIRROR';
+      }
+      // 그 외 → DAILY_CHAT 유지
+      return 'DAILY_CHAT';
     }
 
     const currentIdx = PHASE_ORDER.indexOf(currentPhase);

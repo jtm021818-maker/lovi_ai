@@ -44,6 +44,13 @@ export const PHASE_ALLOWED_MODES_V2: Record<ConversationPhaseV2, ResponseMode[]>
     ResponseMode.DIRECT_GUIDANCE,
     ResponseMode.PRESENCE,
   ],
+  // 🆕 v105: 일상 대화 — 가벼운 모드만
+  DAILY_CHAT: [
+    ResponseMode.MINIMAL_ENCOURAGER,
+    ResponseMode.PRESENCE,
+    ResponseMode.REFLECTION,
+    ResponseMode.OPEN_QUESTION,
+  ],
 };
 
 // ============================================
@@ -80,6 +87,27 @@ BRIDGE에서 나온 내용을 바탕으로 "실전 작전"을 같이 만드는 �
 "야 오늘 진짜 잘했어" "처음이랑 느낌 다르지?" "해보고 꼭 알려줘"
 [WARM_WRAP] 카드로 강점+감정변화+다음스텝+진심메시지 전달.
 재방문 약속은 자연스럽게 — "언제든 또 와".`,
+
+  // 🆕 v105: 일상 대화 모드 — 가벼운 수다
+  DAILY_CHAT: `[이 단계 목적: 가벼운 수다]
+지금은 일상 대화 모드. 깊은 분석/코칭/액션플랜 다 OFF.
+친구가 카톡 보낼 때 느낌으로 자연스럽게.
+
+✅ DO:
+- 짧고 자연스러운 답 (1~2문장)
+- 호기심 있는 follow-up ("그래서? ㅋㅋ", "어땠어?")
+- 일상 공감 ("나도 그래", "오~ 좋네")
+- 가벼운 농담/리액션
+
+❌ DON'T:
+- 감정 분석 ("그 감정 뒤에는...")
+- 행동 코칭 ("이렇게 해봐")
+- 깊은 자기 통찰 유도
+- 길게 늘어지는 답변
+
+⚠️ 자동 전환:
+사용자가 무거운 얘기 꺼내면 (감정 토로, 관계 고민, 결정 갈등)
+다음 턴부터 자연스럽게 MIRROR 모드로 넘어감. 본 응답에서 갑자기 코칭 시작은 NO.`,
 };
 
 // 🆕 GTC: MIRROR 턴 0 — 마음읽기 반응 전용 프롬프트
@@ -760,6 +788,28 @@ const TURN_PROMPTS: TurnPromptEntry[] = [
   { phase: 'EMPOWER', turnInPhase: 2, prompt: EMPOWER_TURN_2 },
 ];
 
+// 🆕 v105: DAILY_CHAT 기본 프롬프트
+const DAILY_CHAT_BASE = `
+## 💬 DAILY_CHAT — 가벼운 수다 모드
+
+지금은 일상 대화. 친구가 카톡 보낼 때 느낌으로.
+
+### 톤
+- 짧고 자연스럽게 (1~2문장)
+- 호기심 있는 follow-up 가능 ("그래서? ㅋㅋ", "어땠어?")
+- 가벼운 농담/리액션 ("오~ 좋네", "헐~")
+
+### 금지
+- 감정 분석 시작 X
+- 해결책 코칭 X
+- 길게 늘어지는 답변 X
+- "그러면 네 진짜 마음은~" 같은 깊이 유도 X
+
+### 자동 전환
+사용자가 무거운 얘기 꺼내면 (감정, 관계, 결정) → 다음 턴부터 자연스럽게 상담 모드로.
+지금 응답은 가볍게 받기만 OK. 갑자기 코칭 시작은 NO.
+`.trim();
+
 // Phase별 기본 프롬프트 (하위 호환)
 const PHASE_PROMPTS_FALLBACK: Record<ConversationPhaseV2, string> = {
   HOOK: HOOK_TURN_1,
@@ -767,6 +817,7 @@ const PHASE_PROMPTS_FALLBACK: Record<ConversationPhaseV2, string> = {
   BRIDGE: BRIDGE_TURN_1,
   SOLVE: SOLVE_TURN_1,
   EMPOWER: EMPOWER_TURN_1,
+  DAILY_CHAT: DAILY_CHAT_BASE,    // 🆕 v105
 };
 
 // ============================================

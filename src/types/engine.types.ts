@@ -113,13 +113,17 @@ export type ConversationPhase = 'EXPLORATION' | 'COMFORTING' | 'ACTION';
 // 🆕 v8: 5구간 이벤트 기반 턴 시스템
 // ============================================
 
-/** 5구간 Phase (v2 턴 아키텍처) */
+/** 5구간 Phase (v2 턴 아키텍처) + DAILY_CHAT 분기 (v105) */
 export type ConversationPhaseV2 =
-  | 'HOOK'      // 턴 1-2: 감정 포착 & 첫인상
-  | 'MIRROR'    // 턴 3-4: 거울처럼 비춰주기 + 첫 보상
-  | 'BRIDGE'    // 턴 5-6: 다리 놓기 + 솔루션 프리뷰
-  | 'SOLVE'     // 턴 7-8: 해결책 전달 + 실행 도구
-  | 'EMPOWER';  // 턴 9+: 임파워먼트 & 클로징
+  | 'HOOK'      // 턴 1-2: 감정 포착 & 첫인상 (분기 전)
+  | 'MIRROR'    // 턴 3-4: 거울처럼 비춰주기 + 첫 보상 (상담 path)
+  | 'BRIDGE'    // 턴 5-6: 다리 놓기 + 솔루션 프리뷰 (상담 path)
+  | 'SOLVE'     // 턴 7-8: 해결책 전달 + 실행 도구 (상담 path)
+  | 'EMPOWER'   // 턴 9+: 임파워먼트 & 클로징 (상담 path)
+  | 'DAILY_CHAT'; // 🆕 v105: 일상 대화 분기 (HOOK 후 가벼운 잡담 모드)
+
+/** 대화 모드 — 좌뇌 LLM이 판단 */
+export type ConversationMode = 'COUNSELING' | 'CASUAL';
 
 /** v2→v1 레거시 매핑 (하위 호환) */
 export const PHASE_V2_TO_V1: Record<ConversationPhaseV2, ConversationPhase> = {
@@ -128,6 +132,7 @@ export const PHASE_V2_TO_V1: Record<ConversationPhaseV2, ConversationPhase> = {
   BRIDGE: 'COMFORTING',
   SOLVE: 'ACTION',
   EMPOWER: 'ACTION',
+  DAILY_CHAT: 'EXPLORATION',  // 일상 대화 = 가벼운 탐색
 };
 
 /** Phase 이벤트 유형 (8종) */

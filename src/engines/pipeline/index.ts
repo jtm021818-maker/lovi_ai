@@ -19,7 +19,7 @@ import { saveMemory } from '@/engines/human-like/memory-engine';
 import { routeModel } from '@/lib/ai/model-router';
 import { validateResponse } from '@/lib/ai/response-validator';
 import { retrieveMemories, formatMemoriesAsContext } from '@/lib/rag/retriever';
-import { PhaseManager, type PhaseContext } from '@/engines/phase-manager';
+import { PhaseManager, type PhaseContext, inferConversationMode } from '@/engines/phase-manager';
 import { HumanLikeEngine } from '@/engines/human-like';
 import { parsePhaseSignal } from '@/engines/human-like/phase-signal';
 import { resetCascadeLog, getCascadeLog } from '@/lib/ai/provider-registry';
@@ -792,6 +792,12 @@ export class CounselingPipeline {
       axisFilledCount: axesState.filledCount,
       diagnosisComplete: !axesState.needsDiagnostic,
       primaryIntent: intentResult.primaryIntent,
+      // 🆕 v105: 일상/상담 분기 — primaryIntent + emotion + scenario 휴리스틱
+      conversationMode: inferConversationMode(
+        intentResult.primaryIntent,
+        effectiveEmotionScore,
+        stateResult.scenario as unknown as string | undefined,
+      ),
       hasAskedForAdvice,
       hasGivenPermission: false,
       emotionBaseline: emotionBaseline,

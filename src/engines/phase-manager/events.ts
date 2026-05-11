@@ -8,6 +8,7 @@
 import {
   PhaseEvent,
   PhaseEventType,
+  ConversationPhaseV2,
   EmotionThermometerData,
   InsightCardData,
   EmotionMirrorData,
@@ -1464,7 +1465,7 @@ export function createWarmWrap(
  */
 export function createSongSearching(
   mood: string,
-  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+  currentPhase: ConversationPhaseV2 = 'HOOK',
 ): PhaseEvent {
   const data: SongSearchingData = { mood };
   return {
@@ -1482,7 +1483,7 @@ export function createSongSearching(
  */
 export function createSongRecommendation(
   payload: SongRecommendationData,
-  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+  currentPhase: ConversationPhaseV2 = 'HOOK',
 ): PhaseEvent {
   return {
     type: 'SONG_RECOMMENDATION' as PhaseEventType,
@@ -1497,7 +1498,7 @@ export function createSongRecommendation(
 export function createDateSpotSearching(
   area: string,
   vibe: string,
-  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+  currentPhase: ConversationPhaseV2 = 'HOOK',
 ): PhaseEvent {
   const data: DateSpotSearchingData = { area, vibe };
   return {
@@ -1512,7 +1513,7 @@ export function createDateSpotSearching(
  */
 export function createDateSpotRecommendation(
   payload: DateSpotRecommendationData,
-  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+  currentPhase: ConversationPhaseV2 = 'HOOK',
 ): PhaseEvent {
   return {
     type: 'DATE_SPOT_RECOMMENDATION' as PhaseEventType,
@@ -1529,7 +1530,7 @@ export function createDateSpotRecommendation(
 export function createGiftSearching(
   occasion: string,
   relation: string,
-  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+  currentPhase: ConversationPhaseV2 = 'HOOK',
 ): PhaseEvent {
   const data: GiftSearchingData = { occasion, relation };
   return {
@@ -1542,7 +1543,7 @@ export function createGiftSearching(
 /** 🎁 GIFT_RECOMMENDATION — 선물 추천 완성 카드 */
 export function createGiftRecommendation(
   payload: GiftRecommendationData,
-  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+  currentPhase: ConversationPhaseV2 = 'HOOK',
 ): PhaseEvent {
   return {
     type: 'GIFT_RECOMMENDATION' as PhaseEventType,
@@ -1555,7 +1556,7 @@ export function createGiftRecommendation(
 export function createActivitySearching(
   area: string,
   category: string,
-  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+  currentPhase: ConversationPhaseV2 = 'HOOK',
 ): PhaseEvent {
   const data: ActivitySearchingData = { area, category };
   return {
@@ -1568,7 +1569,7 @@ export function createActivitySearching(
 /** 🎪 ACTIVITY_RECOMMENDATION — 체험 데이트 추천 카드 */
 export function createActivityRecommendation(
   payload: ActivityRecommendationData,
-  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+  currentPhase: ConversationPhaseV2 = 'HOOK',
 ): PhaseEvent {
   return {
     type: 'ACTIVITY_RECOMMENDATION' as PhaseEventType,
@@ -1581,7 +1582,7 @@ export function createActivityRecommendation(
 export function createAnniversarySearching(
   milestone: string,
   style: string,
-  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+  currentPhase: ConversationPhaseV2 = 'HOOK',
 ): PhaseEvent {
   const data: AnniversarySearchingData = { milestone, style };
   return {
@@ -1594,7 +1595,7 @@ export function createAnniversarySearching(
 /** 💌 ANNIVERSARY_RECOMMENDATION — 기념일 이벤트 아이디어 카드 */
 export function createAnniversaryRecommendation(
   payload: AnniversaryRecommendationData,
-  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+  currentPhase: ConversationPhaseV2 = 'HOOK',
 ): PhaseEvent {
   return {
     type: 'ANNIVERSARY_RECOMMENDATION' as PhaseEventType,
@@ -1606,7 +1607,7 @@ export function createAnniversaryRecommendation(
 /** 🎬 MOVIE_SEARCHING — 영화/드라마 검색 진행 중 */
 export function createMovieSearching(
   mood: string,
-  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+  currentPhase: ConversationPhaseV2 = 'HOOK',
 ): PhaseEvent {
   const data: MovieSearchingData = { mood };
   return {
@@ -1619,7 +1620,7 @@ export function createMovieSearching(
 /** 🎬 MOVIE_RECOMMENDATION — 영화/드라마 추천 카드 */
 export function createMovieRecommendation(
   payload: MovieRecommendationData,
-  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+  currentPhase: ConversationPhaseV2 = 'HOOK',
 ): PhaseEvent {
   return {
     type: 'MOVIE_RECOMMENDATION' as PhaseEventType,
@@ -1636,7 +1637,7 @@ export function createMovieRecommendation(
 export function createBrowseSearching(
   topic: BrowseSearchingData['topic'],
   topicLabel: string,
-  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+  currentPhase: ConversationPhaseV2 = 'HOOK',
 ): PhaseEvent {
   const data: BrowseSearchingData = { topic, topicLabel };
   return {
@@ -1649,7 +1650,7 @@ export function createBrowseSearching(
 /** 🔍 BROWSE_SESSION — 브라우징 세션 (후보 8개 포함) */
 export function createBrowseSession(
   payload: BrowseSessionData,
-  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+  currentPhase: ConversationPhaseV2 = 'HOOK',
 ): PhaseEvent {
   return {
     type: 'BROWSE_SESSION' as PhaseEventType,
@@ -1661,7 +1662,7 @@ export function createBrowseSession(
 /** 🔍 BROWSE_FINAL — 최종 결정 카드 */
 export function createBrowseFinal(
   payload: BrowseFinalData,
-  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'HOOK',
+  currentPhase: ConversationPhaseV2 = 'HOOK',
 ): PhaseEvent {
   return {
     type: 'BROWSE_FINAL' as PhaseEventType,
@@ -1677,7 +1678,7 @@ export function createBrowseFinal(
 /** 🔍 v88: BROWSE_STREAM_START — 세션 시작 (메타 + 로딩 UI) */
 export function createBrowseStreamStart(
   data: BrowseStreamStartData,
-  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'BRIDGE',
+  currentPhase: ConversationPhaseV2 = 'BRIDGE',
 ): PhaseEvent {
   return {
     type: 'BROWSE_STREAM_START' as PhaseEventType,
@@ -1689,7 +1690,7 @@ export function createBrowseStreamStart(
 /** 🔍 v88: BROWSE_STREAM_BLOCK — 말풍선/링크/리뷰/결정 블록 1개 */
 export function createBrowseStreamBlock(
   data: BrowseStreamBlockData,
-  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'BRIDGE',
+  currentPhase: ConversationPhaseV2 = 'BRIDGE',
 ): PhaseEvent {
   return {
     type: 'BROWSE_STREAM_BLOCK' as PhaseEventType,
@@ -1701,7 +1702,7 @@ export function createBrowseStreamBlock(
 /** 🔍 v88: BROWSE_STREAM_END — 세션 종료 + shortlist 요약 */
 export function createBrowseStreamEnd(
   data: BrowseStreamEndData,
-  currentPhase: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER' = 'BRIDGE',
+  currentPhase: ConversationPhaseV2 = 'BRIDGE',
 ): PhaseEvent {
   return {
     type: 'BROWSE_STREAM_END' as PhaseEventType,

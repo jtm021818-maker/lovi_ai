@@ -129,6 +129,48 @@ const SproutIcon = ({ active, past }: { active: boolean; past: boolean }) => (
   </svg>
 );
 
+/** 🆕 v105: 채팅 말풍선 아이콘 (DAILY_CHAT: 이야기 듣기 - 가벼운 진입) */
+const ChatBubbleIcon = ({ active, past }: { active: boolean; past: boolean }) => (
+  <svg viewBox="0 0 40 40" className="w-full h-full">
+    {/* 말풍선 본체 */}
+    <path d="M8 12 Q8 6 14 6 L26 6 Q32 6 32 12 L32 22 Q32 28 26 28 L18 28 L12 33 L13 28 L14 28 Q8 28 8 22 Z"
+      fill={active ? '#fce7f3' : past ? '#fdf2f8' : '#f8fafc'}
+      stroke={active ? '#ec4899' : past ? '#f9a8d4' : '#cbd5e1'}
+      strokeWidth="1.5" strokeLinejoin="round" />
+    {/* 도트 3개 */}
+    <circle cx="14" cy="17" r="1.5" fill={active ? '#ec4899' : past ? '#f9a8d4' : '#94a3b8'} />
+    <circle cx="20" cy="17" r="1.5" fill={active ? '#ec4899' : past ? '#f9a8d4' : '#94a3b8'} />
+    <circle cx="26" cy="17" r="1.5" fill={active ? '#ec4899' : past ? '#f9a8d4' : '#94a3b8'} />
+  </svg>
+);
+
+/** 🆕 v105: 꽃잎 채팅 아이콘 (DAILY_CHAT: 수다 중) */
+const FlowerChatIcon = ({ active, past }: { active: boolean; past: boolean }) => (
+  <svg viewBox="0 0 40 40" className="w-full h-full">
+    {/* 5장 꽃잎 */}
+    {[0, 72, 144, 216, 288].map((deg) => (
+      <ellipse
+        key={deg}
+        cx="20" cy="11" rx="4" ry="7"
+        fill={active ? '#fda4af' : past ? '#fecdd3' : '#e2e8f0'}
+        stroke={active ? '#e11d48' : past ? '#f43f5e' : '#cbd5e1'}
+        strokeWidth="1" strokeLinejoin="round"
+        transform={`rotate(${deg} 20 20)`}
+      />
+    ))}
+    {/* 꽃 중심 */}
+    <circle cx="20" cy="20" r="3"
+      fill={active ? '#fbbf24' : past ? '#fde68a' : '#e2e8f0'}
+      stroke={active ? '#f59e0b' : past ? '#fbbf24' : '#cbd5e1'}
+      strokeWidth="0.8" />
+    {/* 작은 잎 */}
+    <path d="M30 32 Q34 28 32 24 Q28 28 30 32 Z"
+      fill={active ? '#86efac' : past ? '#bbf7d0' : '#e2e8f0'}
+      stroke={active ? '#22c55e' : past ? '#86efac' : '#cbd5e1'}
+      strokeWidth="0.8" />
+  </svg>
+);
+
 /** 반짝이 별 아이콘 (EMPOWER: 변화 응원) */
 const SparkleIcon = ({ active, past }: { active: boolean; past: boolean }) => (
   <svg viewBox="0 0 40 40" className="w-full h-full">
@@ -277,8 +319,124 @@ interface PhaseProgressProps {
   understandingLevel?: number;
 }
 
+// ============================================================================
+// 🆕 v105: DailyChatTrack — 일상 대화 모드 전용 트랙 (2단계, 가벼운 톤)
+// (PhaseProgress 위에서 선언 — LSP forward reference 회피)
+// ============================================================================
+
+function DailyChatTrack({ lunaThinking }: { lunaThinking?: string }) {
+  const displayText = lunaThinking || '가볍게 얘기 중 🍃';
+  const typedStatus = useTypewriter(displayText, 70);
+
+  return (
+    <div className="w-full sticky top-[60px] z-10">
+      <div className="h-[1px] bg-gradient-to-r from-pink-200/60 via-rose-300/40 to-amber-200/60" />
+      <div className="bg-gradient-to-r from-pink-50/80 via-white/90 to-amber-50/80 border-b border-pink-100/40 shadow-[0_4px_20px_rgba(244,114,182,0.06)] backdrop-blur-xl px-2 py-3">
+        <div className="flex items-start w-full px-1 mb-1.5 relative">
+          {/* 진행선 배경 */}
+          <div className="absolute top-[14px] h-[3px] bg-pink-50/80 z-0 rounded-full" style={{ left: '25%', width: '50%' }} />
+          {/* 진행선 활성 */}
+          <motion.div
+            className="absolute top-[14px] h-[3px] bg-gradient-to-r from-pink-300 via-rose-300 to-amber-300 z-[1] rounded-full"
+            initial={{ width: 0 }}
+            animate={{ width: '50%' }}
+            style={{ left: '25%' }}
+            transition={{ type: 'spring', damping: 20, stiffness: 100 }}
+          >
+            <motion.div
+              className="absolute right-0 top-1/2 -translate-y-1/2 w-[7px] h-[7px] rounded-full bg-rose-400"
+              animate={{
+                boxShadow: ['0 0 4px 2px rgba(244,114,182,0.4)', '0 0 8px 4px rgba(244,114,182,0.6)', '0 0 4px 2px rgba(244,114,182,0.4)'],
+                scale: [1, 1.3, 1],
+              }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+            />
+          </motion.div>
+
+          {/* 1단계: 이야기 듣기 (완료) */}
+          <div className="relative z-10 flex flex-col items-center" style={{ width: '50%' }}>
+            <div className="relative">
+              <motion.div className="w-8 h-8 rounded-full flex items-center justify-center p-1 bg-rose-50 shadow-sm">
+                <ChatBubbleIcon active={false} past={true} />
+              </motion.div>
+              <motion.div
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-rose-400 rounded-full flex items-center justify-center z-30 shadow-sm"
+              >
+                <svg viewBox="0 0 12 12" className="w-2 h-2">
+                  <path d="M2 6 L5 9 L10 3" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </motion.div>
+            </div>
+            <div className="text-center mt-1.5 w-full">
+              <span className="text-[9px] font-bold block whitespace-nowrap text-rose-400">이야기 듣기</span>
+            </div>
+          </div>
+
+          {/* 2단계: 수다 중 (현재) */}
+          <div className="relative z-10 flex flex-col items-center" style={{ width: '50%' }}>
+            <div className="relative">
+              <motion.svg viewBox="0 0 44 44" className="absolute -inset-1 w-[calc(100%+8px)] h-[calc(100%+8px)] z-20">
+                <motion.circle
+                  cx="22" cy="22" r="20"
+                  fill="none" stroke="#f472b6" strokeWidth="2" strokeLinecap="round" strokeDasharray="0 1"
+                  initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.2, ease: 'easeOut' }}
+                />
+              </motion.svg>
+              <motion.div
+                animate={{ y: [0, -2, 0] }}
+                transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                className="w-8 h-8 rounded-full flex items-center justify-center p-1 bg-white/70 backdrop-blur-sm shadow-[0_2px_12px_rgba(236,72,153,0.25)] scale-110"
+              >
+                <FlowerChatIcon active={true} past={false} />
+              </motion.div>
+            </div>
+            <div className="text-center mt-1.5 w-full">
+              <span className="text-[9px] font-bold block whitespace-nowrap text-pink-600">수다 중</span>
+            </div>
+          </div>
+
+          {/* 분기 힌트 */}
+          <div className="absolute right-[2%] top-[8px] flex flex-col items-center opacity-30 pointer-events-none">
+            <motion.div
+              animate={{ opacity: [0.2, 0.5, 0.2] }}
+              transition={{ duration: 2.4, repeat: Infinity }}
+              className="text-[8px] text-slate-400 italic"
+            >
+              ↗ 깊은 얘기?
+            </motion.div>
+          </div>
+        </div>
+
+        {/* 상태 문구 */}
+        <div className="text-center h-4">
+          <motion.span
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="text-[10px] font-semibold text-pink-400/80 tracking-tight"
+          >
+            {typedStatus}
+            <motion.span
+              animate={{ opacity: [1, 0, 1] }}
+              transition={{ duration: 0.8, repeat: Infinity }}
+              className="inline-block ml-0.5 w-[1px] h-[10px] bg-pink-300 align-middle"
+            />
+          </motion.span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PhaseProgress({ currentPhase, progress, persona = 'luna', lunaThinking, understandingLevel }: PhaseProgressProps) {
   if (!currentPhase) return null;
+
+  // 🆕 v105: DAILY_CHAT 분기 — 가벼운 트랙 UI
+  if (currentPhase === 'DAILY_CHAT') {
+    return <DailyChatTrack lunaThinking={lunaThinking} />;
+  }
 
   const steps = persona === 'tarot' ? TAROT_STEPS : LUNA_STEPS;
   const currentIndex = steps.findIndex(p => p.id === currentPhase);

@@ -16,30 +16,39 @@ export interface ActiveSpirit {
 export async function getActiveSpirits(userId: string): Promise<ActiveSpirit[]> {
   const supabase = await createServerSupabaseClient();
 
-  // 배치된 정령 ID 조회
-  const { data: roomRow } = await supabase
-    .from('room_state')
-    .select('placed_spirits')
-    .eq('user_id', userId)
-    .maybeSingle();
+  // 🆕 v104.3: 방(room_state) 배치 정령 우선. 없으면 보유 정령 전체 fallback.
+  // 기존 v83: room 배치 안 했으면 무조건 [] → 가챠 직후 유저 100% 이벤트 미발동
+  // 변경: 방 배치는 큐레이션(고급 유저용). 비어있으면 보유 정령 자동 활성.
+  const [roomResult, ownedResult] = await Promise.all([
+    supabase
+      .from('room_state')
+      .select('placed_spirits')
+      .eq('user_id', userId)
+      .maybeSingle(),
+    supabase
+      .from('user_spirits')
+      .select('spirit_id, bond_lv')
+      .eq('user_id', userId),
+  ]);
 
-  const placed: Array<{ spiritId: SpiritId }> = (roomRow?.placed_spirits as any) ?? [];
-  if (placed.length === 0) return [];
+  const placed: Array<{ spiritId: SpiritId }> = (roomResult.data?.placed_spirits as any) ?? [];
+  const owned = (ownedResult.data ?? []).filter((r) => r.bond_lv >= 1);
 
-  const placedIds = placed.map((p) => p.spiritId);
+  // 보유 정령이 0이면 빈 배열
+  if (owned.length === 0) return [];
 
-  const { data: spiritRows } = await supabase
-    .from('user_spirits')
-    .select('spirit_id, bond_lv')
-    .eq('user_id', userId)
-    .in('spirit_id', placedIds);
+  // 방 배치 있으면 그것만 (사용자 명시적 큐레이션 존중)
+  // 없으면 보유 정령 전체 자동 활성 (신규 유저 디폴트)
+  if (placed.length > 0) {
+    const placedIds = new Set(placed.map((p) => p.spiritId));
+    const filtered = owned.filter((r) => placedIds.has(r.spirit_id as SpiritId));
+    if (filtered.length > 0) {
+      return filtered.map((r) => ({ spiritId: r.spirit_id as SpiritId, bondLv: r.bond_lv }));
+    }
+    // 배치된 정령이 user_spirits 와 불일치 → fallback to 전체
+  }
 
-  // 🆕 v104.2: bond_lv >= 1 로 완화 (Lv1 갓 뽑은 정령도 이벤트 발동 가능)
-  // 기존 v83: Lv3+ 필터로 인해 가챠 직후 90% 유저가 이벤트 미발동
-  // 정령별 발동 가중치/쿨다운으로 희소성 유지
-  return (spiritRows ?? [])
-    .filter((r) => r.bond_lv >= 1)
-    .map((r) => ({ spiritId: r.spirit_id as SpiritId, bondLv: r.bond_lv }));
+  return owned.map((r) => ({ spiritId: r.spirit_id as SpiritId, bondLv: r.bond_lv }));
 }
 
 export interface SpiritBuffs {
