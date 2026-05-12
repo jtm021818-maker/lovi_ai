@@ -26,7 +26,7 @@ export async function POST(_req: NextRequest, ctx: Params) {
   const [{ data: row }, { data: life }] = await Promise.all([
     supabase
       .from('user_inventory_items')
-      .select('id, item_id, source, used_at, item:item_master(name_ko, emoji, category)')
+      .select('id, item_id, source, quantity, used_at, item:item_master(name_ko, emoji, category)')
       .eq('id', id)
       .eq('user_id', user.id)
       .maybeSingle(),
@@ -35,6 +35,7 @@ export async function POST(_req: NextRequest, ctx: Params) {
 
   if (!row) return NextResponse.json({ error: '미보유 아이템' }, { status: 404 });
   if (row.used_at) return NextResponse.json({ error: '이미 사용함' }, { status: 400 });
+  const currentQty = (row as any).quantity ?? 1;
   if (life?.is_deceased) {
     return NextResponse.json({
       error: '루나는 더 이상 받을 수 없어',
@@ -58,12 +59,20 @@ export async function POST(_req: NextRequest, ctx: Params) {
     isLunasOwn,
   });
 
-  // 인벤토리 마킹
-  await supabase
-    .from('user_inventory_items')
-    .update({ used_at: new Date().toISOString() })
-    .eq('id', row.id)
-    .eq('user_id', user.id);
+  // 🆕 v116.4: quantity > 1 이면 1개 차감, 1개 이하면 row 삭제 (가방에서 사라짐)
+  if (currentQty > 1) {
+    await supabase
+      .from('user_inventory_items')
+      .update({ quantity: currentQty - 1, is_new: false })
+      .eq('id', row.id)
+      .eq('user_id', user.id);
+  } else {
+    await supabase
+      .from('user_inventory_items')
+      .delete()
+      .eq('id', row.id)
+      .eq('user_id', user.id);
+  }
 
   // luna_memories 에 special memory 추가 (Day 100 회고에 활용 가능)
   const memoryTitle = `${itemMaster.emoji} ${itemMaster.name_ko}`;

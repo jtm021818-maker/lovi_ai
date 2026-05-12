@@ -28,7 +28,7 @@ export async function POST(req: NextRequest, ctx: Params) {
 
   const { data: row } = await supabase
     .from('user_inventory_items')
-    .select('id, used_at, item:item_master(use_effect)')
+    .select('id, quantity, used_at, item:item_master(use_effect)')
     .eq('id', id)
     .eq('user_id', user.id)
     .maybeSingle();
@@ -39,6 +39,7 @@ export async function POST(req: NextRequest, ctx: Params) {
   if (itemMaster?.use_effect !== 'wish') {
     return NextResponse.json({ error: '소원 아이템 아님' }, { status: 400 });
   }
+  const currentQty = (row as any).quantity ?? 1;
 
   const { data: wish } = await supabase
     .from('user_wishes')
@@ -50,11 +51,20 @@ export async function POST(req: NextRequest, ctx: Params) {
     .select()
     .maybeSingle();
 
-  await supabase
-    .from('user_inventory_items')
-    .update({ used_at: new Date().toISOString() })
-    .eq('id', row.id)
-    .eq('user_id', user.id);
+  // 🆕 v116.4: quantity > 1 이면 1개 차감, 1개 이하면 row 삭제 (FK ON DELETE SET NULL 로 소원 기록 안전)
+  if (currentQty > 1) {
+    await supabase
+      .from('user_inventory_items')
+      .update({ quantity: currentQty - 1, is_new: false })
+      .eq('id', row.id)
+      .eq('user_id', user.id);
+  } else {
+    await supabase
+      .from('user_inventory_items')
+      .delete()
+      .eq('id', row.id)
+      .eq('user_id', user.id);
+  }
 
   return NextResponse.json({
     ok: true,

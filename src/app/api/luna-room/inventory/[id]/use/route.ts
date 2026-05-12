@@ -24,7 +24,7 @@ export async function POST(_req: NextRequest, ctx: Params) {
 
   const { data: row } = await supabase
     .from('user_inventory_items')
-    .select('id, item_id, used_at, item:item_master(is_consumable, use_effect, name_ko)')
+    .select('id, item_id, quantity, used_at, item:item_master(is_consumable, use_effect, name_ko)')
     .eq('id', id)
     .eq('user_id', user.id)
     .maybeSingle();
@@ -34,9 +34,11 @@ export async function POST(_req: NextRequest, ctx: Params) {
   if (!itemMaster?.is_consumable) {
     return NextResponse.json({ error: '소모품 아님' }, { status: 400 });
   }
+  // 🆕 v116.4: quantity-aware consumption — 잔존 row(used_at 마킹된 옛 데이터)는 사용 차단
   if (row.used_at) {
     return NextResponse.json({ error: '이미 사용함' }, { status: 400 });
   }
+  const currentQty = (row as any).quantity ?? 1;
 
   let resultMessage = '';
   switch (itemMaster.use_effect) {
@@ -74,15 +76,25 @@ export async function POST(_req: NextRequest, ctx: Params) {
       resultMessage = `${itemMaster.name_ko} 사용함`;
   }
 
-  await supabase
-    .from('user_inventory_items')
-    .update({ used_at: new Date().toISOString(), is_new: false })
-    .eq('id', id)
-    .eq('user_id', user.id);
+  // 🆕 v116.4: quantity > 1 이면 1개 차감, 1개 이하면 row 자체 삭제 (가방에서 사라짐)
+  if (currentQty > 1) {
+    await supabase
+      .from('user_inventory_items')
+      .update({ quantity: currentQty - 1, is_new: false })
+      .eq('id', id)
+      .eq('user_id', user.id);
+  } else {
+    await supabase
+      .from('user_inventory_items')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id);
+  }
 
   return NextResponse.json({
     ok: true,
     effect: itemMaster.use_effect,
     message: resultMessage,
+    remainingQuantity: Math.max(0, currentQty - 1),
   });
 }

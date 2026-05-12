@@ -356,12 +356,15 @@ export interface PhaseContext {
 
 // ============================================
 // 🆕 v116: 일상 5-Phase 전환 로직
+// 🔒 v116.5: 분기 고정 — HOOK 에서 일상으로 갈라진 뒤에는 상담 트랙(MIRROR)으로
+//   되돌아가지 않는다. 중간에 UI 가 다른 분기로 바뀌는 사용자 혼란을 방지.
+//   (예전: 강한 감정/VENTING intent/HEAVY_TURN/COUNSELING override 시 MIRROR escape)
+//   무거운 발언이 나와도 일상 phase 안에서 LLM 이 톤으로 받아낸다.
 //
 // 우선순위:
-//   1. 무거운 얘기 / HEAVY_TURN / COUNSELING override → MIRROR escape
-//   2. 게이트 태그 (CATCHUP_OPEN, BANTER_FLOW, LINGER_START, CASUAL_BYE) → 즉시 다음
-//   3. 짧은 응답 streak → LINGER 또는 FAREWELL 진입
-//   4. safety_max turn 초과 → 자동 전환 (LLM 태그 누락 안전망)
+//   1. 게이트 태그 (CATCHUP_OPEN, BANTER_FLOW, LINGER_START, CASUAL_BYE) → 즉시 다음
+//   2. 짧은 응답 streak → LINGER 또는 FAREWELL 진입
+//   3. safety_max turn 초과 → 자동 전환 (LLM 태그 누락 안전망)
 // ============================================
 function getCasualNextPhase(
   ctx: PhaseContext,
@@ -371,30 +374,12 @@ function getCasualNextPhase(
     turnCount,
     phaseStartTurn,
     completedEvents,
-    primaryIntent,
-    currentEmotionScore,
-    conversationMode,
     consecutiveShortReplies = 0,
   } = ctx;
 
-  // 1. 강한 감정 / 상담 의도 → MIRROR escape
-  if (typeof currentEmotionScore === 'number' && currentEmotionScore <= -4) {
-    console.log(`[PhaseManager:v116] 🔄 ${currentCasualPhase} → MIRROR (emotion=${currentEmotionScore} 강한 부정)`);
-    return 'MIRROR';
-  }
-  if (primaryIntent === 'VENTING' || primaryIntent === 'SEEKING_ADVICE' ||
-      primaryIntent === 'EXPRESSING_AMBIVALENCE') {
-    console.log(`[PhaseManager:v116] 🔄 ${currentCasualPhase} → MIRROR (intent=${primaryIntent} 상담 의도)`);
-    return 'MIRROR';
-  }
-  if (completedEvents.includes('HEAVY_TURN')) {
-    console.log(`[PhaseManager:v116] 🔄 ${currentCasualPhase} → MIRROR ([HEAVY_TURN] 태그)`);
-    return 'MIRROR';
-  }
-  if (conversationMode === 'COUNSELING') {
-    console.log(`[PhaseManager:v116] 🔄 ${currentCasualPhase} → MIRROR (mode override)`);
-    return 'MIRROR';
-  }
+  // 🔒 v116.5: 분기 고정 — CASUAL→MIRROR escape 제거.
+  //   일상 분기로 들어온 이상 트랙은 그대로 유지한다. 깊은 상담 의도/강한 감정은
+  //   ACE/우뇌가 같은 일상 트랙 안에서 톤으로 흡수한다.
 
   // FAREWELL 은 종료 단계 — 유지 (silent terminate 는 클라이언트가 처리)
   if (currentCasualPhase === 'FAREWELL') return 'FAREWELL';
