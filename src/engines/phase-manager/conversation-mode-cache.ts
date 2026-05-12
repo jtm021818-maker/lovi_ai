@@ -57,3 +57,56 @@ export function clearConversationMode(sessionId: string | undefined | null): voi
   if (!sessionId) return;
   CACHE.delete(sessionId);
 }
+
+// ============================================
+// 🆕 v116.1: Short-Reply Streak Cache
+//
+// 일상 phase 자연 fade-out 안전망. 유저가 짧은 응답 ("응", "ㅇㅋ", "ㅋㅋ")만 반복하면
+// BANTER → LINGER, LINGER → FAREWELL 로 자동 전환.
+//
+// 갱신 규칙 (pipeline 에서 매 턴 호출):
+//   - userMessageLength <= 5 AND 감정 깊이 없음 → streak++
+//   - userMessageLength > 5 OR 감정 1점 이상 → streak = 0 (리셋)
+//   - 단순 동의 ("응 맞아!") 는 streak 리셋 (감정 깊이 있으면)
+// ============================================
+const SHORT_REPLY_CACHE = new Map<string, { count: number; updatedAt: number }>();
+
+/** 짧은 응답 streak 카운트 조회. 없거나 만료면 0. */
+export function getShortReplyStreak(sessionId: string | undefined | null): number {
+  if (!sessionId) return 0;
+  const cached = SHORT_REPLY_CACHE.get(sessionId);
+  if (!cached) return 0;
+  if (Date.now() - cached.updatedAt > TTL_MS) {
+    SHORT_REPLY_CACHE.delete(sessionId);
+    return 0;
+  }
+  return cached.count;
+}
+
+/** 짧은 응답 streak 갱신. */
+export function updateShortReplyStreak(
+  sessionId: string | undefined | null,
+  userMessageLength: number,
+  hasEmotionalDepth: boolean,
+): number {
+  if (!sessionId) return 0;
+  const SHORT_MSG_THRESHOLD = 5;   // 5자 이하 = 짧은 응답
+  const isShort = userMessageLength <= SHORT_MSG_THRESHOLD && !hasEmotionalDepth;
+  const prev = getShortReplyStreak(sessionId);
+  const next = isShort ? prev + 1 : 0;
+  SHORT_REPLY_CACHE.set(sessionId, { count: next, updatedAt: Date.now() });
+  // 캐시 사이즈 보호 (lazy cleanup)
+  if (SHORT_REPLY_CACHE.size >= 500) {
+    const now = Date.now();
+    for (const [k, v] of SHORT_REPLY_CACHE.entries()) {
+      if (now - v.updatedAt > TTL_MS) SHORT_REPLY_CACHE.delete(k);
+    }
+  }
+  return next;
+}
+
+/** 세션 종료 시 정리. */
+export function clearShortReplyStreak(sessionId: string | undefined | null): void {
+  if (!sessionId) return;
+  SHORT_REPLY_CACHE.delete(sessionId);
+}

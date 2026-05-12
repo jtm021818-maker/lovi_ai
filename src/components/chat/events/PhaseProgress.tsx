@@ -559,7 +559,197 @@ function BranchedTrack({
 }
 
 // ============================================================================
-// 🆕 v105: DailyChatTrack — 일상 대화 모드 전용 트랙 (2단계, 가벼운 톤)
+// 🆕 v116: 일상 5-Phase 보조 아이콘 (LINGER 달 / FAREWELL 손 흔들기)
+// ============================================================================
+
+/** 작은 달 아이콘 (LINGER: 톤 다운, pre-closing) */
+const SmallMoonIcon = ({ active, past }: { active: boolean; past: boolean }) => (
+  <svg viewBox="0 0 40 40" className="w-full h-full">
+    {/* 초승달 */}
+    <path d="M26 6 C18 6 12 12 12 20 C12 28 18 34 26 34 C20 31 16 26 16 20 C16 14 20 9 26 6 Z"
+      fill={active ? '#ddd6fe' : past ? '#ede9fe' : '#f1f5f9'}
+      stroke={active ? '#7c3aed' : past ? '#a78bfa' : '#cbd5e1'}
+      strokeWidth="1.5" strokeLinejoin="round" />
+    {/* 작은 별 */}
+    <circle cx="30" cy="10" r="1.2" fill={active ? '#fbbf24' : past ? '#fde68a' : '#e2e8f0'} />
+    <circle cx="32" cy="22" r="0.8" fill={active ? '#fbbf24' : past ? '#fde68a' : '#e2e8f0'} />
+  </svg>
+);
+
+/** 손 흔들기 아이콘 (FAREWELL: 작별 인사) */
+const WaveHandIcon = ({ active, past }: { active: boolean; past: boolean }) => (
+  <svg viewBox="0 0 40 40" className="w-full h-full">
+    {/* 손바닥 (둥근 사각형) */}
+    <path d="M14 16 Q14 10 18 10 L24 10 Q28 10 28 16 L28 26 Q28 32 22 32 L18 32 Q14 32 14 26 Z"
+      fill={active ? '#fed7aa' : past ? '#ffedd5' : '#f1f5f9'}
+      stroke={active ? '#ea580c' : past ? '#fb923c' : '#cbd5e1'}
+      strokeWidth="1.5" strokeLinejoin="round" />
+    {/* 손가락 4개 디테일 */}
+    <line x1="17" y1="14" x2="17" y2="20" stroke={active ? '#ea580c' : past ? '#fb923c' : '#94a3b8'} strokeWidth="0.8" />
+    <line x1="20" y1="13" x2="20" y2="20" stroke={active ? '#ea580c' : past ? '#fb923c' : '#94a3b8'} strokeWidth="0.8" />
+    <line x1="23" y1="13" x2="23" y2="20" stroke={active ? '#ea580c' : past ? '#fb923c' : '#94a3b8'} strokeWidth="0.8" />
+    <line x1="26" y1="14" x2="26" y2="20" stroke={active ? '#ea580c' : past ? '#fb923c' : '#94a3b8'} strokeWidth="0.8" />
+    {/* 작은 흔들림 표시 (양옆 곡선) */}
+    <path d="M8 14 Q5 16 8 18" fill="none" stroke={active ? '#fbbf24' : past ? '#fde68a' : '#e2e8f0'} strokeWidth="1" strokeLinecap="round" />
+    <path d="M32 14 Q35 16 32 18" fill="none" stroke={active ? '#fbbf24' : past ? '#fde68a' : '#e2e8f0'} strokeWidth="1" strokeLinecap="round" />
+  </svg>
+);
+
+/** 작은 컵 아이콘 (CATCHUP: 안부 - 일상 한 잔) */
+const TeaCupIcon = ({ active, past }: { active: boolean; past: boolean }) => (
+  <svg viewBox="0 0 40 40" className="w-full h-full">
+    {/* 컵 본체 */}
+    <path d="M10 14 L10 28 Q10 32 14 32 L24 32 Q28 32 28 28 L28 14 Z"
+      fill={active ? '#bbf7d0' : past ? '#dcfce7' : '#f1f5f9'}
+      stroke={active ? '#16a34a' : past ? '#86efac' : '#cbd5e1'}
+      strokeWidth="1.5" strokeLinejoin="round" />
+    {/* 손잡이 */}
+    <path d="M28 18 Q34 18 34 22 Q34 26 28 26" fill="none"
+      stroke={active ? '#16a34a' : past ? '#86efac' : '#cbd5e1'}
+      strokeWidth="1.5" strokeLinecap="round" />
+    {/* 김 */}
+    <path d="M16 10 Q15 7 16 4 M20 10 Q19 7 20 4 M24 10 Q23 7 24 4"
+      fill="none" stroke={active ? '#86efac' : past ? '#bbf7d0' : '#e2e8f0'}
+      strokeWidth="1" strokeLinecap="round" opacity="0.7" />
+  </svg>
+);
+
+// ============================================================================
+// 🆕 v116: CasualPhaseTrack — 일상 5-Phase 전용 트랙
+// (DAILY_CHAT 호환 alias 도 같이 처리)
+// ============================================================================
+type CasualPhaseId = 'GREET' | 'CATCHUP' | 'BANTER' | 'LINGER' | 'FAREWELL';
+
+type CasualIcon = typeof ChatBubbleIcon;
+const CASUAL_STEPS: ReadonlyArray<{
+  id: CasualPhaseId;
+  label: string;
+  status: string;
+  Icon: CasualIcon;
+  activeColor: string;
+}> = [
+  { id: 'GREET',    label: '인사',  status: '왔어~ 👋',         Icon: ChatBubbleIcon, activeColor: 'text-pink-600' },
+  { id: 'CATCHUP',  label: '안부',  status: '오늘 어땠어 🍃',   Icon: TeaCupIcon,     activeColor: 'text-emerald-600' },
+  { id: 'BANTER',   label: '수다',  status: '재밌게 노는 중 🎈', Icon: FlowerChatIcon, activeColor: 'text-rose-600' },
+  { id: 'LINGER',   label: '여운',  status: '톤 다운 🌙',        Icon: SmallMoonIcon,  activeColor: 'text-violet-600' },
+  { id: 'FAREWELL', label: '작별',  status: '또 봐~ ✨',         Icon: WaveHandIcon,   activeColor: 'text-orange-600' },
+];
+
+function CasualPhaseTrack({ currentPhase, lunaThinking }: { currentPhase: CasualPhaseId; lunaThinking?: string }) {
+  const currentIdx = CASUAL_STEPS.findIndex(s => s.id === currentPhase);
+  const safeIdx = currentIdx < 0 ? 0 : currentIdx;
+  const currentStep = CASUAL_STEPS[safeIdx];
+  const displayText = lunaThinking || currentStep.status;
+  const typedStatus = useTypewriter(displayText, 70);
+
+  const iconCount = CASUAL_STEPS.length;
+  const slotWidth = 100 / iconCount;
+  const startOffset = slotWidth / 2;
+  const barRange = 100 - slotWidth;
+  const basePercent = (safeIdx / (iconCount - 1)) * 100;
+
+  return (
+    <div className="w-full sticky top-[60px] z-10">
+      <div className="h-[1px] bg-gradient-to-r from-pink-200/60 via-rose-300/40 to-amber-200/60" />
+      <div className="bg-gradient-to-r from-pink-50/80 via-white/90 to-amber-50/80 border-b border-pink-100/40 shadow-[0_4px_20px_rgba(244,114,182,0.06)] backdrop-blur-xl px-2 py-3">
+        <div className="flex justify-between items-start w-full px-1 mb-1.5 relative">
+          {/* 진행선 배경 */}
+          <div
+            className="absolute top-[14px] h-[3px] bg-pink-50/80 z-0 rounded-full"
+            style={{ left: `${startOffset}%`, width: `${barRange}%` }}
+          />
+          {/* 진행선 활성 */}
+          <motion.div
+            className="absolute top-[14px] h-[3px] bg-gradient-to-r from-pink-300 via-rose-300 to-amber-300 z-[1] rounded-full"
+            initial={{ width: 0 }}
+            animate={{ width: `${basePercent * (barRange / 100)}%` }}
+            style={{ left: `${startOffset}%` }}
+            transition={{ type: 'spring', damping: 20, stiffness: 100 }}
+          >
+            <motion.div
+              className="absolute right-0 top-1/2 -translate-y-1/2 w-[7px] h-[7px] rounded-full bg-rose-400"
+              animate={{
+                boxShadow: ['0 0 4px 2px rgba(244,114,182,0.4)', '0 0 8px 4px rgba(244,114,182,0.6)', '0 0 4px 2px rgba(244,114,182,0.4)'],
+                scale: [1, 1.3, 1],
+              }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+            />
+          </motion.div>
+
+          {CASUAL_STEPS.map((step, idx) => {
+            const isPast = idx < safeIdx;
+            const isCurrent = idx === safeIdx;
+            const StepIcon = step.Icon;
+            return (
+              <div key={step.id} className="relative z-10 flex flex-col items-center flex-1">
+                <div className="relative">
+                  {isCurrent && (
+                    <motion.svg viewBox="0 0 44 44" className="absolute -inset-1 w-[calc(100%+8px)] h-[calc(100%+8px)] z-20">
+                      <motion.circle
+                        cx="22" cy="22" r="20"
+                        fill="none" stroke="#f472b6" strokeWidth="2" strokeLinecap="round" strokeDasharray="0 1"
+                        initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.2, ease: 'easeOut' }}
+                      />
+                    </motion.svg>
+                  )}
+                  <motion.div
+                    animate={isCurrent ? { y: [0, -2, 0] } : {}}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center p-1 ${
+                      isCurrent ? 'bg-white/70 backdrop-blur-sm shadow-[0_2px_12px_rgba(236,72,153,0.25)] scale-110'
+                                : isPast ? 'bg-rose-50 shadow-sm' : 'bg-white/40'
+                    }`}
+                  >
+                    <StepIcon active={isCurrent} past={isPast} />
+                  </motion.div>
+                  {isPast && (
+                    <motion.div
+                      initial={{ scale: 0, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-rose-400 rounded-full flex items-center justify-center z-30 shadow-sm"
+                    >
+                      <svg viewBox="0 0 12 12" className="w-2 h-2">
+                        <path d="M2 6 L5 9 L10 3" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </motion.div>
+                  )}
+                </div>
+                <div className="text-center mt-1.5 w-full">
+                  <span className={`text-[9px] font-bold block whitespace-nowrap ${
+                    isCurrent ? step.activeColor : isPast ? 'text-rose-400' : 'text-slate-400'
+                  }`}>
+                    {step.label}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 상태 문구 */}
+        <div className="text-center h-4">
+          <motion.span
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="text-[10px] font-semibold text-pink-400/80 tracking-tight"
+          >
+            {typedStatus}
+            <motion.span
+              animate={{ opacity: [1, 0, 1] }}
+              transition={{ duration: 0.8, repeat: Infinity }}
+              className="inline-block ml-0.5 w-[1px] h-[10px] bg-pink-300 align-middle"
+            />
+          </motion.span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// 🆕 v105: DailyChatTrack — 일상 대화 모드 호환 트랙 (DAILY_CHAT alias 표시용)
+// v116 이후로는 CasualPhaseTrack 이 주요 렌더링. 이건 fallback.
 // ============================================================================
 
 function DailyChatTrack({ lunaThinking }: { lunaThinking?: string }) {
@@ -675,9 +865,14 @@ export default function PhaseProgress({ currentPhase, progress, persona = 'luna'
   if (currentPhase === 'HOOK') {
     return <BranchedTrack lunaThinking={lunaThinking} persona={persona} />;
   }
-  // 🆕 v105: DAILY_CHAT — 일상 수다 모드 트랙
+  // 🆕 v116: 일상 5-Phase 트랙 (GREET/CATCHUP/BANTER/LINGER/FAREWELL)
+  if (currentPhase === 'GREET' || currentPhase === 'CATCHUP' || currentPhase === 'BANTER'
+      || currentPhase === 'LINGER' || currentPhase === 'FAREWELL') {
+    return <CasualPhaseTrack currentPhase={currentPhase} lunaThinking={lunaThinking} />;
+  }
+  // 🆕 v105: DAILY_CHAT — 호환 alias (BANTER 와 동일 취급)
   if (currentPhase === 'DAILY_CHAT') {
-    return <DailyChatTrack lunaThinking={lunaThinking} />;
+    return <CasualPhaseTrack currentPhase="BANTER" lunaThinking={lunaThinking} />;
   }
 
   const steps = persona === 'tarot' ? TAROT_STEPS : LUNA_STEPS;

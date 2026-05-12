@@ -113,14 +113,20 @@ export type ConversationPhase = 'EXPLORATION' | 'COMFORTING' | 'ACTION';
 // 🆕 v8: 5구간 이벤트 기반 턴 시스템
 // ============================================
 
-/** 5구간 Phase (v2 턴 아키텍처) + DAILY_CHAT 분기 (v105) */
+/** 5구간 Phase (v2 턴 아키텍처) + DAILY_CHAT 분기 (v105) + 일상 5단계 (v116) */
 export type ConversationPhaseV2 =
   | 'HOOK'      // 턴 1-2: 감정 포착 & 첫인상 (분기 전)
   | 'MIRROR'    // 턴 3-4: 거울처럼 비춰주기 + 첫 보상 (상담 path)
   | 'BRIDGE'    // 턴 5-6: 다리 놓기 + 솔루션 프리뷰 (상담 path)
   | 'SOLVE'     // 턴 7-8: 해결책 전달 + 실행 도구 (상담 path)
   | 'EMPOWER'   // 턴 9+: 임파워먼트 & 클로징 (상담 path)
-  | 'DAILY_CHAT'; // 🆕 v105: 일상 대화 분기 (HOOK 후 가벼운 잡담 모드)
+  | 'DAILY_CHAT' // 🆕 v105: 일상 대화 분기 (호환 alias — BANTER 와 동일 취급)
+  // 🆕 v116: 일상 5-Phase System (DCPS)
+  | 'GREET'     // 일상 1단계: 인사 (어 왔어~)
+  | 'CATCHUP'   // 일상 2단계: 안부/근황 (그래서 오늘 뭐 했어)
+  | 'BANTER'    // 일상 3단계: 본 수다 (자유 주제 흐름)
+  | 'LINGER'    // 일상 4단계: 여운/pre-closing (톤 다운)
+  | 'FAREWELL'; // 일상 5단계: 작별 (응 잘 자~)
 
 /** 대화 모드 — 좌뇌 LLM이 판단 */
 export type ConversationMode = 'COUNSELING' | 'CASUAL';
@@ -132,8 +138,25 @@ export const PHASE_V2_TO_V1: Record<ConversationPhaseV2, ConversationPhase> = {
   BRIDGE: 'COMFORTING',
   SOLVE: 'ACTION',
   EMPOWER: 'ACTION',
-  DAILY_CHAT: 'EXPLORATION',  // 일상 대화 = 가벼운 탐색
+  DAILY_CHAT: 'EXPLORATION',
+  // 🆕 v116: 일상 5단계 모두 EXPLORATION 으로 매핑 (가벼운 탐색)
+  GREET: 'EXPLORATION',
+  CATCHUP: 'EXPLORATION',
+  BANTER: 'EXPLORATION',
+  LINGER: 'EXPLORATION',
+  FAREWELL: 'EXPLORATION',
 };
+
+/** 🆕 v116: 일상 phase 5종 집합 (헬퍼) */
+export const CASUAL_PHASES: ReadonlyArray<ConversationPhaseV2> = [
+  'GREET', 'CATCHUP', 'BANTER', 'LINGER', 'FAREWELL',
+] as const;
+
+/** 🆕 v116: 일상 phase 인지 검사 (DAILY_CHAT 도 일상 모드로 인식) */
+export function isCasualPhase(phase: ConversationPhaseV2 | undefined | null): boolean {
+  if (!phase) return false;
+  return phase === 'DAILY_CHAT' || CASUAL_PHASES.includes(phase);
+}
 
 /** Phase 이벤트 유형 (8종) */
 export type PhaseEventType =
@@ -223,7 +246,15 @@ export type PhaseEventType =
   | 'SPIRIT_MEMORY_KEY'         // 🗝️ book_keeper — 패턴 키워드 카드
   // UR (2)
   | 'SPIRIT_CROWN_RECLAIM'      // 👑 queen_elena — 가치 3가지 봉인 해제
-  | 'SPIRIT_WISH_GRANT';        // 🌟 star_dust — 월간 소원 if-then
+  | 'SPIRIT_WISH_GRANT'         // 🌟 star_dust — 월간 소원 if-then
+  // ──────────────────────────────
+  // 🆕 v116: 일상 5-Phase 게이트 태그 (UI 카드 없음 — 순수 phase 전환 시그널)
+  // ──────────────────────────────
+  | 'CATCHUP_OPEN'              // 💌 GREET → CATCHUP 게이트 (인사 끝, 안부 시작)
+  | 'BANTER_FLOW'               // 🧃 CATCHUP → BANTER 게이트 (본 수다 모드 진입)
+  | 'LINGER_START'              // 🌙 BANTER → LINGER 게이트 (톤 다운, pre-closing)
+  | 'CASUAL_BYE'                // 👋 LINGER → FAREWELL 게이트 (작별, silent 종료 trigger)
+  | 'HEAVY_TURN';               // 🚨 일상 → MIRROR escape (무거운 감정/상담 의도 감지)
 
 /** Phase 이벤트 데이터 */
 export interface PhaseEvent {

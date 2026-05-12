@@ -28,6 +28,45 @@ export type ConcernDepth = 'light' | 'medium' | 'deep';
 const PHASE_ORDER: ConversationPhaseV2[] = ['HOOK', 'MIRROR', 'BRIDGE', 'SOLVE', 'EMPOWER'];
 
 // ============================================
+// 🆕 v116: 일상 5-Phase System (DCPS)
+// HOOK 후 CASUAL 분기 → GREET → CATCHUP → BANTER → LINGER → FAREWELL
+// ============================================
+const CASUAL_PHASE_ORDER: ConversationPhaseV2[] = ['GREET', 'CATCHUP', 'BANTER', 'LINGER', 'FAREWELL'];
+
+/** 일상 phase 게이트 태그 — LLM 이 부착하면 즉시 다음 phase */
+const CASUAL_GATE_EVENTS: Partial<Record<ConversationPhaseV2, PhaseEventType[]>> = {
+  GREET:   ['CATCHUP_OPEN'],
+  CATCHUP: ['BANTER_FLOW'],
+  BANTER:  ['LINGER_START'],
+  LINGER:  ['CASUAL_BYE'],
+};
+
+/** 일상 phase safety_max — LLM 태그 누락 안전망 */
+const CASUAL_SAFETY_TURNS: Partial<Record<ConversationPhaseV2, number>> = {
+  GREET:    1,   // 1턴 후 자동 CATCHUP
+  CATCHUP:  4,
+  BANTER:   15,
+  LINGER:   3,
+  FAREWELL: 1,
+};
+
+/** 짧은 응답 streak 임계치 — LLM 태그 없이도 자연 종료 유도 */
+const SHORT_REPLY_BANTER_TO_LINGER = 3;   // BANTER 에서 짧은 응답 3회 → LINGER
+const SHORT_REPLY_LINGER_TO_FAREWELL = 2; // LINGER 에서 짧은 응답 2회 → FAREWELL
+
+/** 다음 일상 phase 헬퍼 */
+function nextCasualPhase(current: ConversationPhaseV2): ConversationPhaseV2 {
+  const idx = CASUAL_PHASE_ORDER.indexOf(current);
+  if (idx < 0 || idx >= CASUAL_PHASE_ORDER.length - 1) return current;
+  return CASUAL_PHASE_ORDER[idx + 1];
+}
+
+/** 일상 phase 여부 (DAILY_CHAT 호환 alias 포함) */
+function isCasualPhaseInternal(phase: ConversationPhaseV2): boolean {
+  return phase === 'DAILY_CHAT' || CASUAL_PHASE_ORDER.includes(phase);
+}
+
+// ============================================
 // 🆕 v105: 일상/상담 분기 판단 (LLM이 분류한 primaryIntent + emotion 휴리스틱)
 // ============================================
 /**
@@ -189,7 +228,13 @@ const PHASE_EVENTS: Record<ConversationPhaseV2, PhaseEventType[]> = {
            'TONE_SELECT', 'DRAFT_WORKSHOP', 'ROLEPLAY_FEEDBACK', 'PANEL_REPORT', 'IDEA_REFINE'],
   SOLVE: ['ACTION_PLAN', 'SOLUTION_CARD', 'MESSAGE_DRAFT', 'TAROT_INSIGHT'],
   EMPOWER: ['WARM_WRAP', 'SESSION_SUMMARY', 'HOMEWORK_CARD', 'GROWTH_REPORT'],
-  DAILY_CHAT: [],   // 🆕 v105: 일상 대화 — 게이트 이벤트 없음
+  DAILY_CHAT: [],   // 🆕 v105: 일상 대화 — 게이트 이벤트 없음 (호환 alias)
+  // 🆕 v116: 일상 5-Phase 게이트 태그 (UI 카드 없음 — 순수 phase 전환 시그널)
+  GREET:    ['CATCHUP_OPEN'],
+  CATCHUP:  ['BANTER_FLOW'],
+  BANTER:   ['LINGER_START', 'HEAVY_TURN'],
+  LINGER:   ['CASUAL_BYE'],
+  FAREWELL: [],
 };
 
 // ============================================
@@ -201,7 +246,13 @@ const PHASE_START_TURNS: Record<ConversationPhaseV2, number> = {
   BRIDGE: 5,
   SOLVE: 7,
   EMPOWER: 9,
-  DAILY_CHAT: 2,    // 🆕 v105: HOOK 직후 분기
+  DAILY_CHAT: 2,    // 🆕 v105: HOOK 직후 분기 (호환)
+  // 🆕 v116: 일상 5-Phase 기본 진입 턴 (참조용 — 실제 진입 턴은 phaseStartTurn 으로 동적 갱신)
+  GREET:    2,
+  CATCHUP:  3,
+  BANTER:   5,
+  LINGER:   13,
+  FAREWELL: 15,
 };
 
 // ============================================
@@ -298,6 +349,90 @@ export interface PhaseContext {
 
   // 🆕 v73: 연속 READY 턴 카운트 (2턴 연속이면 긍정 전환)
   consecutiveReadyTurns?: number;
+
+  // 🆕 v116.1: 이번 턴 user 메시지 길이 (일상 phase 페이싱 디버깅용)
+  lastUserMessageLength?: number;
+}
+
+// ============================================
+// 🆕 v116: 일상 5-Phase 전환 로직
+//
+// 우선순위:
+//   1. 무거운 얘기 / HEAVY_TURN / COUNSELING override → MIRROR escape
+//   2. 게이트 태그 (CATCHUP_OPEN, BANTER_FLOW, LINGER_START, CASUAL_BYE) → 즉시 다음
+//   3. 짧은 응답 streak → LINGER 또는 FAREWELL 진입
+//   4. safety_max turn 초과 → 자동 전환 (LLM 태그 누락 안전망)
+// ============================================
+function getCasualNextPhase(
+  ctx: PhaseContext,
+  currentCasualPhase: ConversationPhaseV2,
+): ConversationPhaseV2 {
+  const {
+    turnCount,
+    phaseStartTurn,
+    completedEvents,
+    primaryIntent,
+    currentEmotionScore,
+    conversationMode,
+    consecutiveShortReplies = 0,
+  } = ctx;
+
+  // 1. 강한 감정 / 상담 의도 → MIRROR escape
+  if (typeof currentEmotionScore === 'number' && currentEmotionScore <= -4) {
+    console.log(`[PhaseManager:v116] 🔄 ${currentCasualPhase} → MIRROR (emotion=${currentEmotionScore} 강한 부정)`);
+    return 'MIRROR';
+  }
+  if (primaryIntent === 'VENTING' || primaryIntent === 'SEEKING_ADVICE' ||
+      primaryIntent === 'EXPRESSING_AMBIVALENCE') {
+    console.log(`[PhaseManager:v116] 🔄 ${currentCasualPhase} → MIRROR (intent=${primaryIntent} 상담 의도)`);
+    return 'MIRROR';
+  }
+  if (completedEvents.includes('HEAVY_TURN')) {
+    console.log(`[PhaseManager:v116] 🔄 ${currentCasualPhase} → MIRROR ([HEAVY_TURN] 태그)`);
+    return 'MIRROR';
+  }
+  if (conversationMode === 'COUNSELING') {
+    console.log(`[PhaseManager:v116] 🔄 ${currentCasualPhase} → MIRROR (mode override)`);
+    return 'MIRROR';
+  }
+
+  // FAREWELL 은 종료 단계 — 유지 (silent terminate 는 클라이언트가 처리)
+  if (currentCasualPhase === 'FAREWELL') return 'FAREWELL';
+
+  // CASUAL_BYE 태그는 모든 phase 에서 즉시 FAREWELL (작별 인사 우선)
+  if (completedEvents.includes('CASUAL_BYE')) {
+    console.log(`[PhaseManager:v116] 👋 ${currentCasualPhase} → FAREWELL ([CASUAL_BYE] 태그)`);
+    return 'FAREWELL';
+  }
+
+  // 2. 게이트 태그 충족 → 즉시 다음 phase
+  const gates = CASUAL_GATE_EVENTS[currentCasualPhase] ?? [];
+  if (gates.some(g => completedEvents.includes(g))) {
+    const next = nextCasualPhase(currentCasualPhase);
+    console.log(`[PhaseManager:v116] ✅ 게이트 충족 → ${currentCasualPhase} → ${next}`);
+    return next;
+  }
+
+  // 3. 짧은 응답 streak — 자연 fade-out 안전망
+  if (currentCasualPhase === 'BANTER' && consecutiveShortReplies >= SHORT_REPLY_BANTER_TO_LINGER) {
+    console.log(`[PhaseManager:v116] 🌙 짧은 응답 ${consecutiveShortReplies}회 → BANTER → LINGER`);
+    return 'LINGER';
+  }
+  if (currentCasualPhase === 'LINGER' && consecutiveShortReplies >= SHORT_REPLY_LINGER_TO_FAREWELL) {
+    console.log(`[PhaseManager:v116] 👋 짧은 응답 ${consecutiveShortReplies}회 → LINGER → FAREWELL`);
+    return 'FAREWELL';
+  }
+
+  // 4. safety_max 안전망
+  const turnsInPhase = turnCount - phaseStartTurn;
+  const safetyMax = CASUAL_SAFETY_TURNS[currentCasualPhase] ?? 99;
+  if (turnsInPhase >= safetyMax) {
+    const next = nextCasualPhase(currentCasualPhase);
+    console.log(`[PhaseManager:v116] ⏰ safety_max ${turnsInPhase}/${safetyMax} → ${currentCasualPhase} → ${next}`);
+    return next;
+  }
+
+  return currentCasualPhase;
 }
 
 // ============================================
@@ -333,34 +468,21 @@ export class PhaseManager {
       return currentPhase;
     }
 
-    // 🆕 v105: DAILY_CHAT 분기 시스템
-    //   HOOK 1턴 후 conversationMode 판단 → CASUAL 이면 DAILY_CHAT 진입
-    //   DAILY_CHAT 중 강한 감정/상담 의도 감지 시 MIRROR 로 자동 escape
+    // 🆕 v105/v116: 일상 분기 시스템
+    //   HOOK 1턴 후 conversationMode 판단 → CASUAL 이면 GREET 진입 (v116: 5-phase 진입점)
+    //   일상 phase 중 강한 감정/상담 의도 감지 시 MIRROR 로 자동 escape
     if (currentPhase === 'HOOK' && turnCount >= 2) {
       const mode = conversationMode ?? inferConversationMode(primaryIntent, currentEmotionScore, undefined);
       if (mode === 'CASUAL') {
-        console.log(`[PhaseManager:v105] 💬 HOOK → DAILY_CHAT (intent=${primaryIntent}, emotion=${currentEmotionScore})`);
-        return 'DAILY_CHAT';
+        console.log(`[PhaseManager:v116] 💌 HOOK → GREET (intent=${primaryIntent}, emotion=${currentEmotionScore})`);
+        return 'GREET';
       }
     }
-    if (currentPhase === 'DAILY_CHAT') {
-      // 강한 감정/상담 의도 감지 시 MIRROR 로 자연스러운 전환
-      if (typeof currentEmotionScore === 'number' && currentEmotionScore <= -4) {
-        console.log(`[PhaseManager:v105] 🔄 DAILY_CHAT → MIRROR (emotion=${currentEmotionScore} 강한 부정)`);
-        return 'MIRROR';
-      }
-      if (primaryIntent === 'VENTING' || primaryIntent === 'SEEKING_ADVICE' ||
-          primaryIntent === 'EXPRESSING_AMBIVALENCE') {
-        console.log(`[PhaseManager:v105] 🔄 DAILY_CHAT → MIRROR (intent=${primaryIntent} 상담 의도)`);
-        return 'MIRROR';
-      }
-      // 명시적 mode override
-      if (conversationMode === 'COUNSELING') {
-        console.log(`[PhaseManager:v105] 🔄 DAILY_CHAT → MIRROR (mode override)`);
-        return 'MIRROR';
-      }
-      // 그 외 → DAILY_CHAT 유지
-      return 'DAILY_CHAT';
+
+    // 🆕 v116: 일상 5-Phase 흐름 처리 (DAILY_CHAT 호환 alias 포함)
+    if (isCasualPhaseInternal(currentPhase)) {
+      const normalized = currentPhase === 'DAILY_CHAT' ? 'BANTER' : currentPhase;
+      return getCasualNextPhase(ctx, normalized);
     }
 
     const currentIdx = PHASE_ORDER.indexOf(currentPhase);

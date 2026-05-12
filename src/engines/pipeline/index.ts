@@ -21,7 +21,11 @@ import { validateResponse } from '@/lib/ai/response-validator';
 import { retrieveMemories, formatMemoriesAsContext } from '@/lib/rag/retriever';
 import { PhaseManager, type PhaseContext, inferConversationMode } from '@/engines/phase-manager';
 // 🆕 v105: 좌뇌 LLM이 판단한 conversation_mode 를 다음 턴에 활용
-import { getLastConversationMode, setLastConversationMode } from '@/engines/phase-manager/conversation-mode-cache';
+import {
+  getLastConversationMode,
+  setLastConversationMode,
+  updateShortReplyStreak,
+} from '@/engines/phase-manager/conversation-mode-cache';
 import { HumanLikeEngine } from '@/engines/human-like';
 import { parsePhaseSignal } from '@/engines/human-like/phase-signal';
 import { resetCascadeLog, getCascadeLog } from '@/lib/ai/provider-registry';
@@ -796,6 +800,25 @@ export class CounselingPipeline {
       axisFilledCount: axesState.filledCount,
       diagnosisComplete: !axesState.needsDiagnostic,
       primaryIntent: intentResult.primaryIntent,
+      // 🆕 v116.1: 짧은 응답 streak — 일상 phase 자연 fade-out 안전망
+      //   매 턴 user 메시지 길이 + 감정 깊이로 누적/리셋
+      //   감정 깊이 = |emotion| >= 1 OR intent !== MINIMAL_RESPONSE
+      consecutiveShortReplies: (() => {
+        const userMsgLen = (userMessage ?? '').trim().length;
+        const hasEmotionalDepth =
+          Math.abs(effectiveEmotionScore ?? 0) >= 1 ||
+          intentResult.primaryIntent !== 'MINIMAL_RESPONSE';
+        const newStreak = updateShortReplyStreak(
+          ragContext?.sessionId,
+          userMsgLen,
+          hasEmotionalDepth,
+        );
+        if (newStreak > 0) {
+          console.log(`[Pipeline:v116.1] 🤏 짧은 응답 streak=${newStreak} (msgLen=${userMsgLen}, depth=${hasEmotionalDepth})`);
+        }
+        return newStreak;
+      })(),
+      lastUserMessageLength: (userMessage ?? '').trim().length,
       // 🆕 v105: 일상/상담 분기
       //   - 우선: 이전 턴 좌뇌 LLM 직접 판단 (캐시)
       //   - fallback: primaryIntent + emotion + scenario 휴리스틱
@@ -2713,12 +2736,42 @@ ${researchResult.insight}
         }
       }
 
-      // 🆕 v105.2: DAILY_CHAT 작별 인사 감지 → silent 세션 종료 시그널
+      // 🆕 v116: 일상 5-Phase 게이트 태그 파싱
+      //   [CATCHUP_OPEN] / [BANTER_FLOW] / [LINGER_START] / [HEAVY_TURN] / [CASUAL_BYE]
+      //   → completedEvents 추가 → 다음 턴 PhaseManager 가 phase 전환 결정
+      const isCasualContext = newPhaseV2 === 'DAILY_CHAT'
+        || newPhaseV2 === 'GREET' || newPhaseV2 === 'CATCHUP'
+        || newPhaseV2 === 'BANTER' || newPhaseV2 === 'LINGER' || newPhaseV2 === 'FAREWELL';
+      if (isCasualContext) {
+        if (/\[CATCHUP_OPEN\]/i.test(fullText) && !updatedCompletedEvents.includes('CATCHUP_OPEN')) {
+          updatedCompletedEvents.push('CATCHUP_OPEN');
+          console.log('[Pipeline:v116] 💌 [CATCHUP_OPEN] 태그 감지 → GREET → CATCHUP 게이트');
+        }
+        if (/\[BANTER_FLOW\]/i.test(fullText) && !updatedCompletedEvents.includes('BANTER_FLOW')) {
+          updatedCompletedEvents.push('BANTER_FLOW');
+          console.log('[Pipeline:v116] 🎈 [BANTER_FLOW] 태그 감지 → CATCHUP → BANTER 게이트');
+        }
+        if (/\[LINGER_START\]/i.test(fullText) && !updatedCompletedEvents.includes('LINGER_START')) {
+          updatedCompletedEvents.push('LINGER_START');
+          console.log('[Pipeline:v116] 🌙 [LINGER_START] 태그 감지 → BANTER → LINGER 게이트');
+        }
+        if (/\[HEAVY_TURN\]/i.test(fullText) && !updatedCompletedEvents.includes('HEAVY_TURN')) {
+          updatedCompletedEvents.push('HEAVY_TURN');
+          console.log('[Pipeline:v116] 🚨 [HEAVY_TURN] 태그 감지 → 일상 → MIRROR escape 게이트');
+        }
+        if (/\[CASUAL_BYE\]/i.test(fullText) && !updatedCompletedEvents.includes('CASUAL_BYE')) {
+          updatedCompletedEvents.push('CASUAL_BYE');
+          console.log('[Pipeline:v116] 👋 [CASUAL_BYE] 태그 감지 → FAREWELL 게이트');
+        }
+      }
+
+      // 🆕 v105.2 / v116: 일상 작별 인사 감지 → silent 세션 종료 시그널
       //   ACE 가 [CASUAL_BYE] 태그를 붙이면 (작별 키워드 미러 응답 후) 클라이언트로 신호 전송.
       //   클라이언트는 마지막 말풍선이 다 뜬 뒤 5초 후 completeSessionNow() 호출 → 백그라운드 종료.
       //   UI 정리 카드/요약 없이 카톡 친구 작별처럼 fade out.
-      if (newPhaseV2 === 'DAILY_CHAT' && /\[CASUAL_BYE\]/i.test(fullText)) {
-        console.log('[Pipeline:v105.2] 🌙 DAILY_CHAT 작별 시그널 감지 → casual_farewell 발행');
+      //   v116: DAILY_CHAT 외에 LINGER/FAREWELL/BANTER/CATCHUP/GREET phase 에서도 허용 (LLM 자율 즉시 종료 OK)
+      if (isCasualContext && /\[CASUAL_BYE\]/i.test(fullText)) {
+        console.log(`[Pipeline:v116] 🌙 ${newPhaseV2} 작별 시그널 감지 → casual_farewell 발행`);
         yield { type: 'casual_farewell', data: { source: 'casual_bye_tag', sessionId: ragContext?.sessionId } };
       }
 
