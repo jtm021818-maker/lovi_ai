@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 💜 v87: WarmWrapSynthesizer — LLM 이 [WARM_WRAP] 태그 빠뜨렸을 때 자동 합성 폴백
  *
  * EMPOWER 진입 후 AI 가 태그 안 찍고 자연스럽게 흘려보내면,
@@ -99,7 +99,7 @@ export async function synthesizeWarmWrap(
   try {
     const prompt = buildPrompt(params);
     const response = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-3.1-flash-lite',
       config: { maxOutputTokens: 500, temperature: 0.75 },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 📍 v84.1: DateSpotSearch — Brave Search + Gemini Flash-Lite 합성
  *
  * 변경: Gemini grounded (₩45/호출) → Brave Web Search + 일반 Gemini (~₩8/호출).
@@ -160,7 +160,7 @@ async function _runDateSpotSearchImpl(params: DateSpotSearchParams, key: string)
     const prompt = buildSynthesisPrompt(params, snippets);
 
     const response = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-3.1-flash-lite',
       config: {
         maxOutputTokens: 1200,
         temperature: 0.6,

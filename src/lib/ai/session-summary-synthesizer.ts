@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 📝 v87-b: SessionSummarySynthesizer — 언니가 상담 끝에 쥐어주는 손편지
  *
  * 분석 리포트 아님. bullet/수치/요약 없음.
@@ -94,7 +94,7 @@ export async function synthesizeSessionLetter(
   try {
     const prompt = buildPrompt(params);
     const response = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-3.1-flash-lite',
       config: { maxOutputTokens: 400, temperature: 0.85 },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });

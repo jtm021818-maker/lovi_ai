@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 🎁 v85: GiftSearch — Brave Search + Gemini Flash-Lite 합성
  *
  * 2026 한국 연애 선물 트렌드(각인/포토북/경험형) 반영.
@@ -154,7 +154,7 @@ async function _runGiftSearchImpl(params: GiftSearchParams, key: string): Promis
     const prompt = buildSynthesisPrompt(params, snippets);
 
     const response = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-3.1-flash-lite',
       config: { maxOutputTokens: 1000, temperature: 0.7 },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });

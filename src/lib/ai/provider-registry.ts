@@ -1,11 +1,11 @@
 /**
- * AI 프로바이더 레지스트리 (Gemini 전용)
+ * AI 프로바이더 레지스트리 (Gemini 3.1 전용 통일)
  *
- * [v52 — Gemini 멀티모델 캐스케이드]
- * 무료 Rate Limit 기반 최적 분배:
- * - 2.5 Flash-Lite: 전체 1순위 (메인 상담 + 이벤트 + 분석)
- * - 2 Flash:        폴백 (RPD 무제한)
- * - 2 Flash-Lite:   경량 분석/검증 (RPD 무제한)
+ * [v63 — Gemini 3.1 라인업 통일 (2026-05-13)]
+ * - 3.1 Flash-Lite GA (2026-05-07 정식 출시): 전체 1순위 — 메인/분석/이벤트/검증
+ * - 3 Flash Preview:                          복잡한 추론 폴백 (PhD GPQA 90.4%)
+ * - 3.1 Flash Image Preview (Nano Banana 2):  이미지 생성 전용
+ * - Claude Sonnet 4.6 완전 제거.
  */
 
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
@@ -26,34 +26,35 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 export type Provider = 'gemini' | 'groq' | 'cerebras' | 'anthropic';
 export type ModelTier = 'haiku' | 'sonnet' | 'opus';
 
-/** Claude 모델 ID — 상담 메인용 */
+/** @deprecated Claude 사용 중단 — Gemini 3.x로 통일. 호환성을 위해 상수만 유지. */
 export const ANTHROPIC_MODELS = {
-  SONNET_4_6: 'claude-sonnet-4-5-20250929',  // Sonnet 4.6 (alias 사용 가능 시 'claude-sonnet-4-6'로 변경)
+  SONNET_4_6: 'claude-sonnet-4-5-20250929',
 } as const;
 
 export const GEMINI_MODELS = {
-  // 🆕 v62: 4개 모델 가성비 라인업 (가격 오름차순)
-  //   $0.10 | 2.5 Flash Lite        — 최저가, 단순 분석/검증/요약
-  //   $0.25 | 3.1 Flash Lite preview — 추론 향상 + 2.5x 빠름, 균형
-  //   $0.30 | 2.5 Flash              — 안정적 폴백
-  //   $0.50 | 3 Flash preview        — 최강 추론 (PhD GPQA 90.4%, SWE 78%)
-  FLASH_LITE_25: 'gemini-2.5-flash-lite',           // $0.10
-  FLASH_LITE_31: 'gemini-3.1-flash-lite-preview',   // $0.25
-  FLASH_25:      'gemini-2.5-flash',                // $0.30
-  FLASH_3:       'gemini-3-flash-preview',          // $0.50
+  // 🆕 v63 (2026-05-13): Gemini 3.1 라인업 통일
+  //   $0.25/$1.50 | 3.1 Flash-Lite GA  — 전체 1순위, 2.5 Flash 대비 2.5x 빠름
+  //   $0.50       | 3 Flash Preview    — 복잡한 추론 폴백 (PhD GPQA 90.4%, SWE 78%)
+  //   (preview)   | 3.1 Flash Image    — Nano Banana 2 (이미지 생성)
+  FLASH_LITE_GA: 'gemini-3.1-flash-lite',           // ⭐ GA 정식 출시 (2026-05-07)
+  FLASH_3:       'gemini-3-flash-preview',          // 추론 폴백
+  IMAGE_31:      'gemini-3.1-flash-image-preview',  // Nano Banana 2
 
-  // 하위 호환 매핑
-  FLASH_15:      'gemini-2.5-flash-lite',
-  FLASH_20:      'gemini-2.5-flash',
-  FLASH_LITE_20: 'gemini-2.5-flash-lite',
+  // 하위 호환 alias — 모두 3.1 Lite GA 로 통일
+  FLASH_LITE_25: 'gemini-3.1-flash-lite',
+  FLASH_LITE_31: 'gemini-3.1-flash-lite',
+  FLASH_25:      'gemini-3-flash-preview',  // 구 2.5 Flash 폴백 자리 → 3 Flash Preview
+  FLASH_15:      'gemini-3.1-flash-lite',
+  FLASH_20:      'gemini-3.1-flash-lite',
+  FLASH_LITE_20: 'gemini-3.1-flash-lite',
 } as const;
 
 /** 프로바이더별 모델 매핑 (기본 — modelOverride로 재정의 가능) */
 const PROVIDER_MODELS: Record<Provider, Record<ModelTier, string>> = {
   gemini: {
-    haiku: GEMINI_MODELS.FLASH_LITE_25,       // 전체 1순위: 2.5 Flash Lite
-    sonnet: GEMINI_MODELS.FLASH_LITE_25,      // 전체 1순위: 2.5 Flash Lite
-    opus: GEMINI_MODELS.FLASH_25,             // 안정적 폴백: 2.5 Flash
+    haiku: GEMINI_MODELS.FLASH_LITE_GA,       // 전체 1순위: 3.1 Flash Lite GA
+    sonnet: GEMINI_MODELS.FLASH_LITE_GA,      // 전체 1순위: 3.1 Flash Lite GA
+    opus: GEMINI_MODELS.FLASH_3,              // 추론 폴백: 3 Flash Preview
   },
   groq: {
     haiku: 'llama-3.1-8b-instant',
@@ -66,7 +67,7 @@ const PROVIDER_MODELS: Record<Provider, Record<ModelTier, string>> = {
     opus: 'llama3.1-70b'
   },
   anthropic: {
-    haiku: ANTHROPIC_MODELS.SONNET_4_6,       // 상담 전용 (모든 티어 동일)
+    haiku: ANTHROPIC_MODELS.SONNET_4_6,
     sonnet: ANTHROPIC_MODELS.SONNET_4_6,
     opus: ANTHROPIC_MODELS.SONNET_4_6,
   },

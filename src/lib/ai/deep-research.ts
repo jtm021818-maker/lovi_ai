@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 🆕 v40: DeepResearch — 루나가 "진짜 생각하는" 순간
  *
  * 핵심 철학:
@@ -188,7 +188,7 @@ export async function runDeepResearch(
     const prompt = buildResearchPrompt(params);
 
     const response = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash-lite', // v52: 전체 1순위 통일
+      model: 'gemini-3.1-flash-lite', // v52: 전체 1순위 통일
       config: {
         tools: [{ googleSearch: {} }], // 🔍 Google Search grounding 활성화
         maxOutputTokens: 600,

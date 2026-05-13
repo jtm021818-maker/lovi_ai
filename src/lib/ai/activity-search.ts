@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 🎪 v85: ActivitySearch — 체험 데이트(방탈출/공방/원데이클래스/와인 등) 추천
  *
  * 2026 트렌드 "함께 성장하는 경험" 직결. DateSpot(장소) 과 다른 축 — "뭘 할까".
@@ -148,7 +148,7 @@ async function _runActivitySearchImpl(params: ActivitySearchParams, key: string)
     const prompt = buildSynthesisPrompt(params, snippets);
 
     const response = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-3.1-flash-lite',
       config: { maxOutputTokens: 1200, temperature: 0.6 },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });

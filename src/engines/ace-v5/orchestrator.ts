@@ -10,7 +10,7 @@
  *   6. 메타 발화 제거 + 태그 첨부
  */
 
-import { streamWithProvider, ANTHROPIC_MODELS, GEMINI_MODELS } from '@/lib/ai/provider-registry';
+import { streamWithProvider, GEMINI_MODELS } from '@/lib/ai/provider-registry';
 import { analyzeLeftBrain } from '@/engines/left-brain';
 import { LogCollector } from '@/lib/utils/logger';
 
@@ -270,7 +270,7 @@ export async function* executeAceV5(
           ...firstCallParams,
           handoffText: refinedHandoffText,
           isReanalysis: true,
-          model: 'claude',
+          model: 'gemini',  // v63: Claude 제거 — Gemini 3 Flash Preview 단일
           metaAwareness: (refinedAnalysis.analysis as any)?.meta_awareness ?? null,
           selfExpression: passSelfExpression((refinedAnalysis.analysis as any)?.self_expression),
           thinkingLevel: 'high',
@@ -490,10 +490,9 @@ async function* streamVoiceOnceGen(
     nicknameSnapshot: params.nicknameSnapshot ?? null,
   });
 
-  const provider = params.model === 'claude' ? 'anthropic' : 'gemini';
-  const modelId = params.model === 'claude'
-    ? ANTHROPIC_MODELS.SONNET_4_6
-    : GEMINI_MODELS.FLASH_3;
+  // v63: Claude 완전 제거 — Gemini 3 Flash Preview 단일.
+  const provider = 'gemini' as const;
+  const modelId = GEMINI_MODELS.FLASH_3;
 
   const thinkingLevel = params.thinkingLevel ?? 'minimal';
 

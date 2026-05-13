@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 🆕 v117: MemoryCaptionSynthesizer — 기억 카드 폴라로이드 캡션 자동 생성
  *
  * 레벨업 발생 시 호출. 최근 대화 + 트리거 종류 → 손글씨 1~2줄 캡션.
@@ -107,7 +107,7 @@ export async function synthesizeMemoryCaption(
   try {
     const prompt = buildPrompt(params);
     const result = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: { temperature: 0.85, maxOutputTokens: 200 },
     });

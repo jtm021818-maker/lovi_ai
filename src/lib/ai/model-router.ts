@@ -1,8 +1,9 @@
 /**
- * 모델 라우터 (v50 — Gemini 전용)
+ * 모델 라우터 (v63 — Gemini 3.1 통일, 2026-05-13)
  *
  * [라우팅 원칙]
- * 모든 태스크를 Gemini로 통일
+ * - 1순위: 3.1 Flash-Lite GA (정식 출시)
+ * - 추론 폴백: 3 Flash Preview
  */
 
 import { StrategyType, RiskLevel } from '@/types/engine.types';
@@ -33,11 +34,11 @@ export function routeModel(
   const cascade = getProviderCascade('main_response', strategy, riskStr as RiskLevel);
   const maxTokens = getMaxTokensForTask('main_response', strategy);
 
-  // 위기 대응: Gemini 2.5 Flash 우선
+  // 위기 대응: 3 Flash Preview 우선 (강한 추론)
   if (riskLevel === RiskLevel.CRITICAL || riskLevel === RiskLevel.HIGH) {
     return {
-      tier: 'sonnet',
-      reason: '🔴 위기 대응: 3.1 Flash-Lite → 2.5 Flash',
+      tier: 'opus',
+      reason: '🔴 위기 대응: 3 Flash Preview → 3.1 Lite GA',
       maxTokens: 512,
       cascade,
     };
@@ -46,34 +47,34 @@ export function routeModel(
   // 위기 지원 전략
   if (strategy === StrategyType.CRISIS_SUPPORT) {
     return {
-      tier: 'sonnet',
-      reason: '🆘 위기 지원: 3.1 Flash-Lite → 2.5 Flash',
+      tier: 'opus',
+      reason: '🆘 위기 지원: 3 Flash Preview → 3.1 Lite GA',
       maxTokens: 512,
       cascade,
     };
   }
 
-  // 🆕 v25: 모든 일반 전략 → Gemini Flash 우선 (한국어 품질 최우선)
+  // 일반 전략 → 3.1 Lite GA 우선 (가성비 + 빠름)
   const reasonMap: Record<StrategyType, string> = {
-    [StrategyType.CALMING]: '🧊 안정화: 3.1 Flash-Lite → 2.5 Flash',
-    [StrategyType.CBT]: '🧠 CBT: 3.1 Flash-Lite → 2.5 Flash',
-    [StrategyType.ACT]: '💎 ACT: 3.1 Flash-Lite → 2.5 Flash',
-    [StrategyType.MI]: '⚖️ MI: 3.1 Flash-Lite → 2.5 Flash',
-    [StrategyType.SUPPORT]: '🤗 공감: 3.1 Flash-Lite → 2.5 Flash',
-    [StrategyType.CRISIS_SUPPORT]: '🆘 위기: 3.1 Flash-Lite → 2.5 Flash',
+    [StrategyType.CALMING]: '🧊 안정화: 3.1 Lite GA → 3 Flash Preview',
+    [StrategyType.CBT]: '🧠 CBT: 3 Flash Preview → 3.1 Lite GA',
+    [StrategyType.ACT]: '💎 ACT: 3 Flash Preview → 3.1 Lite GA',
+    [StrategyType.MI]: '⚖️ MI: 3.1 Lite GA → 3 Flash Preview',
+    [StrategyType.SUPPORT]: '🤗 공감: 3.1 Lite GA → 3 Flash Preview',
+    [StrategyType.CRISIS_SUPPORT]: '🆘 위기: 3 Flash Preview → 3.1 Lite GA',
   };
 
   return {
     tier: 'sonnet',
-    reason: reasonMap[strategy] || '🤗 공감: 3.1 Flash-Lite → 2.5 Flash',
+    reason: reasonMap[strategy] || '🤗 공감: 3.1 Lite GA → 3 Flash Preview',
     maxTokens,
     cascade,
   };
 }
 
-/** 모델 티어별 표시 이름 (v51 — 멀티모델) */
+/** 모델 티어별 표시 이름 (v63 — Gemini 3.1 통일) */
 export const MODEL_TIER_DISPLAY: Record<ModelTier, string> = {
-  haiku: '2 Flash-Lite (분석/라운지)',
-  sonnet: '3.1 Flash-Lite (상담 메인)',
-  opus: '2.5 Flash (폴백)',
+  haiku: '3.1 Flash-Lite GA (경량)',
+  sonnet: '3.1 Flash-Lite GA (메인)',
+  opus: '3 Flash Preview (추론 폴백)',
 };

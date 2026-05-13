@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 🔍 v88: BrowseAgent — 루나 "같이 찾자" 스트리밍 에이전트 루프
  *
  * 핵심:
@@ -154,7 +154,7 @@ ${meta.constraints?.length ? `맥락: ${meta.constraints.join(', ')}` : ''}
 
   try {
     const r = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-3.1-flash-lite',
       config: { maxOutputTokens: 200, temperature: 0.85 },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });
@@ -191,7 +191,7 @@ ${meta.constraints?.length ? `맥락: ${meta.constraints.join(', ')}` : ''}
 
   try {
     const r = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-3.1-flash-lite',
       config: { maxOutputTokens: 250, temperature: 0.6 },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });
@@ -349,7 +349,7 @@ verdict='show' 또는 'ask' 일 땐 다음을 채워:
 
   try {
     const r = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.1-flash-lite',
       config: { maxOutputTokens: 1200, temperature: 0.75 },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });
@@ -419,7 +419,7 @@ ${shortlist.map((s, i) => `  ${i + 1}. ${s.title}`).join('\n') || '  (없음)'}
 
   try {
     const r = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-3.1-flash-lite',
       config: { maxOutputTokens: 300, temperature: 0.85 },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });

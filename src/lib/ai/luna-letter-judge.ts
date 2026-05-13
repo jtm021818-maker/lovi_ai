@@ -1,4 +1,4 @@
-/**
+﻿/**
  * v101: 루나의 자율 판단 — 이번 세션 후 편지/추억을 쓸지 결정
  *
  * "사람처럼" 결정한다:
@@ -125,7 +125,7 @@ export async function runLunaLetterJudge(input: JudgeInput): Promise<JudgeDecisi
     try {
       const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const res = await client.models.generateContent({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-3.1-flash-lite',
         contents: [{ role: 'user', parts: [{ text: userMsg }] }],
         config: {
           systemInstruction: SYSTEM,

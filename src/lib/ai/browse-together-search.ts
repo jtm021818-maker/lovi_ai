@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 🔍 v85.6: BrowseTogetherSearch — 같이 찾기 (멀티턴 탐색 전략)
  *
  * 기존 단발 추천(GIFT/ACTIVITY/DATE_SPOT 등) 과 달리:
@@ -225,7 +225,7 @@ async function _runImpl(
     const prompt = buildSynthesisPrompt(params, snippets);
 
     const response = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-3.1-flash-lite',
       config: {
         maxOutputTokens: 5120,
         temperature: 0.7,

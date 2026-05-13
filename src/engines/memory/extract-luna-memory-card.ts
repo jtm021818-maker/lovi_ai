@@ -1,4 +1,4 @@
-/**
+﻿/**
  * v90: 세션 종료 시 "이번 세션의 가장 인상적인 한 순간" 을 LunaMemory 카드로 자동 생성.
  *
  * 입력: 세션 메시지 전체
@@ -51,7 +51,7 @@ ${dialogue}
     try {
       const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const result = await client.models.generateContent({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-3.1-flash-lite',
         contents: [{ role: 'user', parts: [{ text: userMsg }] }],
         config: {
           systemInstruction: SYSTEM,

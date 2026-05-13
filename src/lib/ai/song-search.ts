@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 🎵 v84.1: SongSearch — Brave Search + Gemini Flash-Lite 합성
  *
  * 변경: Gemini grounded (₩45/호출) → Brave Web Search + 일반 Gemini (~₩8/호출).
@@ -151,7 +151,7 @@ async function _runSongSearchImpl(params: SongSearchParams, key: string): Promis
     const prompt = buildSynthesisPrompt(params, snippets);
 
     const response = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-3.1-flash-lite',
       config: {
         // tools 없음 — grounding 안 함 (비용 절감)
         maxOutputTokens: 800,

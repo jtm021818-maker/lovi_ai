@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 🆕 v117: DailyLogSynthesizer — 매일 1줄 손글씨 일기 자동 생성.
  *
  * 호출 위치: src/app/api/cron/daily-log/route.ts (Vercel cron, 매일 자정 KST).
@@ -68,7 +68,7 @@ export async function synthesizeDailyLog(params: DailyLogParams): Promise<{ cont
   try {
     const prompt = buildPrompt(params);
     const result = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: { temperature: 0.85, maxOutputTokens: 240 },
     });

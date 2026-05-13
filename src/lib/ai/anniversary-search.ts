@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 💌 v85: AnniversarySearch — 기념일 이벤트 아이디어 (서프라이즈/편지/미니 이벤트)
  *
  * 장소/선물과 달리 "실행 가이드" 중심. 2026 "질적인 시간" 트렌드.
@@ -156,7 +156,7 @@ async function _runImpl(params: AnniversarySearchParams, key: string): Promise<A
     const prompt = buildSynthesisPrompt(params, snippets);
 
     const response = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-3.1-flash-lite',
       config: { maxOutputTokens: 1300, temperature: 0.75 },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });

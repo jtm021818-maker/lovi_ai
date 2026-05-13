@@ -12,7 +12,7 @@
  */
 
 import { generateWithProvider, streamWithProvider } from '@/lib/ai/provider-registry';
-import { ANTHROPIC_MODELS, GEMINI_MODELS } from '@/lib/ai/provider-registry';
+import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
 
 import { detectHighStakes, getStakeHint } from './high-stakes-detector';
 import { BRAIN_SYSTEM_PROMPT } from './brain-prompt';
@@ -323,13 +323,14 @@ export async function* streamClaudeVoice(params: {
     chatHistory: params.chatHistory,
   });
 
+  // v63: Claude 제거 — Gemini 3 Flash Preview 로 voice rephrase
   const stream = streamWithProvider(
-    'anthropic',
+    'gemini',
     VOICE_SYSTEM_PROMPT,
     [{ role: 'user' as const, content: userMessage }],
-    'sonnet',
+    'opus',
     400,                                  // 말풍선만이라 적게
-    ANTHROPIC_MODELS.SONNET_4_6,
+    GEMINI_MODELS.FLASH_3,
   );
 
   for await (const chunk of stream) {
@@ -770,7 +771,7 @@ export async function* executeDualBrain(
           intimacyLevel: extractIntimacy(input.contextBlock),
           // 🆕 v80 fix: input.currentPhase 우선 — contextBlock regex 실패 시 잘못된 기본값(HOOK) 방지
           phase: (input.currentPhase as string) || extractPhase(input.contextBlock),
-          model: 'claude',   // 🆕 v56: claude_rephrase 경로는 Claude 모델 명시
+          model: 'gemini',   // v63: Claude 제거 — claude_rephrase 경로도 Gemini 3 Flash Preview 사용
           memoryBundle,      // 🆕 v76
           chatHistory: input.chatHistory,   // 🆕 v78: 치매 방지 — 우뇌가 맥락 직접 봄
           completedEvents: input.completedEvents,  // 🆕 v86: 중복 이벤트 멘트 방지

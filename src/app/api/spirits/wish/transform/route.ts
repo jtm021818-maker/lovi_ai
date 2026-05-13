@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 🌟 v104: POST /api/spirits/wish/transform
  *
  * 별똥이 카드용 — 유저 소원 1줄 → if-then 변환 (Gemini Flash-Lite).
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
 }`;
 
     const resp = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: { responseMimeType: 'application/json' },
     });

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Gemini Vision 캐스케이드 — 듀얼 키 × 멀티 모델
  * Plan: docs/xray-v2-pro-plan.md §4.1
  *
@@ -14,17 +14,15 @@ const API_KEYS = [
 ].filter(Boolean) as string[];
 
 /**
- * 우선순위:
- * 1. gemini-2.5-pro          — bbox 정확도 최고
- * 2. gemini-2.5-flash        — 빠름 + bbox 지원
- * 3. gemini-2.5-flash-lite   — RPD 여유 + bbox 지원
- * 4. gemini-2.0-flash        — bbox 미지원 폴백 (분석은 살림)
+ * 우선순위 (v63 — Gemini 3.1 통일, 2026-05-13):
+ * 1. gemini-3.1-pro-preview   — bbox 정확도 최고 (3.1 Pro Preview)
+ * 2. gemini-3.1-flash-lite    — GA 안정 폴백
+ * 3. gemini-3-flash-preview   — 추론 폴백
  */
 const MODEL_CASCADE_V2 = [
-  'gemini-2.5-pro',
-  'gemini-2.5-flash',
-  'gemini-2.5-flash-lite',
-  'gemini-2.0-flash',
+  'gemini-3.1-pro-preview',
+  'gemini-3.1-flash-lite',
+  'gemini-3-flash-preview',
 ];
 
 export interface VisionResult {

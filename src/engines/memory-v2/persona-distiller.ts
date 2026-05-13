@@ -1,4 +1,4 @@
-/**
+﻿/**
  * v110 Persona Distiller — 세션 → 사용자에 대한 사실(persona facts) 추출 + bi-temporal 갱신.
  *
  * 추출된 사실은 luna_persona_facts 에 INSERT.
@@ -130,7 +130,7 @@ ${summary}
     try {
       const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const result = await client.models.generateContent({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-3.1-flash-lite',
         contents: [{ role: 'user', parts: [{ text: userMsg }] }],
         config: {
           systemInstruction: SYSTEM,

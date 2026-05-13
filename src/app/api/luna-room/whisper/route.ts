@@ -1,4 +1,4 @@
-/**
+﻿/**
  * POST /api/luna-room/whisper
  *
  * "지금 한마디 다시 듣기" — LLM 보강 1회 (Gemini Flash-Lite).
@@ -102,7 +102,7 @@ ${memoryText ? `\n[기억]\n${memoryText.slice(0, 240)}` : ''}
     try {
       const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const result = await client.models.generateContent({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-3.1-flash-lite',
         contents: [{ role: 'user', parts: [{ text: userMsg }] }],
         config: {
           systemInstruction: SYSTEM,

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * v110 Luna Self-State Updater — 루나 자신의 톤/적응 상태를 누적 갱신.
  *
  * 이번 세션에서 "루나의 어떤 시도가 유저에게 통했고, 어떤 게 실패했나" 를 LLM 이 판정.
@@ -99,7 +99,7 @@ ${summary}
     try {
       const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const result = await client.models.generateContent({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-3.1-flash-lite',
         contents: [{ role: 'user', parts: [{ text: userMsg }] }],
         config: {
           systemInstruction: SYSTEM,

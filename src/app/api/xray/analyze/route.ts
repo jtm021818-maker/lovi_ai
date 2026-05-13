@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { getUserTier, checkXrayDailyLimit, recordXrayUsage } from '@/lib/subscription';
@@ -12,9 +12,8 @@ const API_KEYS = [
 ].filter(Boolean) as string[];
 
 const FALLBACK_MODELS = [
-  'gemini-2.5-flash-lite',    // 1순위: v52 전체 통일
-  'gemini-2.0-flash',                 // 2순위: RPD 무제한 폴백
-  'gemini-2.0-flash-lite',            // 3순위: 경량 폴백
+  'gemini-3.1-flash-lite',    // 1순위: GA 정식 출시 (2026-05-07)
+  'gemini-3-flash-preview',   // 2순위: 추론 폴백
 ];
 
 const XRAY_PROMPT = `당신은 연애 심리 전문가 '루나'입니다.

@@ -23,7 +23,7 @@ export interface EnginePromptLogInput {
   engine: string;
   /** 턴 인덱스 */
   turnIdx?: number;
-  /** 호출 모델 ID (예: gemini-2.5-flash-lite, claude-sonnet-4-5-20250929) */
+  /** 호출 모델 ID (예: gemini-3.1-flash-lite, gemini-3-flash-preview) */
   model: string;
   /** 프로바이더 (예: gemini, anthropic) */
   provider?: string;

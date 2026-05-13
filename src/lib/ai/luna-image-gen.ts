@@ -1,4 +1,4 @@
-/**
+﻿/**
  * v101: 루나의 추억 이미지 생성기
  *
  * 무료 이미지 생성 캐스케이드 (2026 기준):
@@ -134,8 +134,8 @@ async function tryGemini(prompt: string, memoryId: string): Promise<string | nul
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
 
-  // gemini-2.5-flash-image-preview (or compatible)
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key='
+  // gemini-3.1-flash-image-preview (or compatible)
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent?key='
     + encodeURIComponent(key);
 
   const controller = new AbortController();

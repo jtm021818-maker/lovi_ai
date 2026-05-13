@@ -1,4 +1,4 @@
-/**
+﻿/**
  * POST /api/luna-room/greeting
  *
  * v114: 영상 후 첫 톡 — 루나가 "본인 시점"에서 친구한테 자연스럽게 말 거는 1~3개 메시지.
@@ -166,7 +166,7 @@ JSON 한 개만 출력:`;
     try {
       const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const result = await client.models.generateContent({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-3.1-flash-lite',
         contents: [{ role: 'user', parts: [{ text: userMsg }] }],
         config: {
           systemInstruction: SYSTEM,

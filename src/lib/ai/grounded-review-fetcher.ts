@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 🔍 v88: GroundedReviewFetcher — Gemini grounding 으로 실제 리뷰 문장 수집
  *
  * Brave 는 빠르지만 스니펫 뿐이라 "리뷰 원문 한 줄" 을 뽑기 약함.
@@ -90,7 +90,7 @@ ${context ? `맥락: ${context}` : ''}
 
   try {
     const response = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.1-flash-lite',
       config: {
         tools: [{ googleSearch: {} } as any],
         maxOutputTokens: 900,

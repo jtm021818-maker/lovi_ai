@@ -1,4 +1,4 @@
-/**
+﻿/**
  * v110 Importance Scorer — 세션 종료 시 에피소드의 중요도(1~10)를 LLM 이 판정.
  *
  * Generative Agents (Park et al., 2023) 의 importance scoring 차용.
@@ -72,7 +72,7 @@ ${summary}
     try {
       const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const result = await client.models.generateContent({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-3.1-flash-lite',
         contents: [{ role: 'user', parts: [{ text: userMsg }] }],
         config: {
           systemInstruction: SYSTEM,

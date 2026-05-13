@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 🧚 v104: Spirit Event Synthesizer
  *
  * 게이트 통과 후 카드 데이터 합성:
@@ -65,7 +65,7 @@ function gemini(): GoogleGenAI {
   return _gemini;
 }
 
-const MODEL = 'gemini-2.5-flash-lite';
+const MODEL = 'gemini-3.1-flash-lite';
 const TIMEOUT_MS = 9000;
 
 // ────────────────────────────────────────────────────────────

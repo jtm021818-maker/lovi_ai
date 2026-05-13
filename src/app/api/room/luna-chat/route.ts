@@ -5,7 +5,7 @@
  * - 인증: getSession() (로컬 쿠키 디코드, 비용 0)
  * - 메모리: user_profiles.memory_profile
  * - 최근 상담 요약: counseling_sessions 최근 3개
- * - 모델: gemini-2.0-flash-lite → gemini-2.0-flash → Groq llama (모두 무료)
+ * - 모델: Groq llama-3.3-70b → Cerebras llama-3.1-70b → Gemini 3.1 Flash-Lite GA (폴백)
  * - 단일 API 호출 (좌뇌/우뇌 분리 없음)
  */
 

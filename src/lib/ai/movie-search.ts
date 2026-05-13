@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 🎬 v85: MovieSearch — 감정 기반 영화/드라마/OTT 추천
  *
  * 노래 이벤트의 시각 버전. 플랫폼(넷플릭스/티빙/디즈니+/웨이브/왓챠)/년도가 빠르게 바뀌어 Brave 필수.
@@ -143,7 +143,7 @@ async function _runImpl(params: MovieSearchParams, key: string): Promise<MovieRe
     const prompt = buildSynthesisPrompt(params, snippets);
 
     const response = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-3.1-flash-lite',
       config: { maxOutputTokens: 1000, temperature: 0.7 },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });

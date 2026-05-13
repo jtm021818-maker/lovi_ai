@@ -1,4 +1,4 @@
-/**
+﻿/**
  * v110 Reflection — 세션 종료 후 또는 주간 단위로 루나가 스스로 의미 정리.
  *
  * 두 모드:
@@ -72,7 +72,7 @@ async function callLLM(systemMsg: string, userMsg: string): Promise<{ digest: st
     try {
       const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const result = await client.models.generateContent({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-3.1-flash-lite',
         contents: [{ role: 'user', parts: [{ text: userMsg }] }],
         config: {
           systemInstruction: systemMsg,

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * LLM 기반 풍부한 session_summary 생성 (v90)
  *
  * 기존 문제: complete/route.ts:generateSummary() 가 60자 단문 ("읽씹에 대해 12턴…")
@@ -65,7 +65,7 @@ ${dialogue}
     try {
       const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const result = await client.models.generateContent({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-3.1-flash-lite',
         contents: [{ role: 'user', parts: [{ text: userMsg }] }],
         config: {
           systemInstruction: SUMMARY_SYSTEM,
