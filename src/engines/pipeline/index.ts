@@ -392,7 +392,7 @@ export class CounselingPipeline {
     | { type: 'casual_farewell'; data: { source: string; sessionId?: string } }
     // 🆕 v48: 캐스케이드 재시도 상태 — UI에서 예쁜 재시도 표시용
     | { type: 'retry_status'; data: RetryStatusEvent }
-    | { type: 'done'; data: { stateResult: StateResult; strategyResult: StrategyResult; suggestionShown: boolean; responseMode?: ResponseMode; updatedAxes?: Partial<ReadIgnoredAxes>; phaseV2?: ConversationPhaseV2; completedEvents?: PhaseEventType[]; lastEventTurn?: number; confirmedEmotionScore?: number; emotionHistory?: number[]; promptStyle?: string; emotionAccumulatorState?: EmotionAccumulatorState; phaseStartTurn?: number; lunaEmotionState?: string; sessionStoryState?: string; strategyMode?: StrategyMode | null; intimacyState?: import('@/engines/intimacy').IntimacyState | null; intimacyPersonaKey?: 'luna' | 'tarot'; intimacyAll?: { luna: import('@/engines/intimacy').IntimacyState; tarot: import('@/engines/intimacy').IntimacyState } | null; intimacyLevelUp?: { oldLevel: number; newLevel: number; newLevelName: string } | null; _contextLog?: any } }
+    | { type: 'done'; data: { stateResult: StateResult; strategyResult: StrategyResult; suggestionShown: boolean; responseMode?: ResponseMode; updatedAxes?: Partial<ReadIgnoredAxes>; phaseV2?: ConversationPhaseV2; completedEvents?: PhaseEventType[]; lastEventTurn?: number; confirmedEmotionScore?: number; emotionHistory?: number[]; promptStyle?: string; emotionAccumulatorState?: EmotionAccumulatorState; phaseStartTurn?: number; lunaEmotionState?: string; sessionStoryState?: string; strategyMode?: StrategyMode | null; intimacyState?: import('@/engines/intimacy').IntimacyState | null; intimacyPersonaKey?: 'luna' | 'tarot'; intimacyAll?: { luna: import('@/engines/intimacy').IntimacyState; tarot: import('@/engines/intimacy').IntimacyState } | null; intimacyLevelUp?: { oldLevel: number; newLevel: number; newLevelName: string } | null; intimacyDelta?: { trust: number; openness: number; bond: number; respect: number; triggers: string[] } | null; _contextLog?: any } }
   > {
     const logCollector = new LogCollector();
     // 🆕 v31: Step 1 + Step 4를 병렬 실행 (상태분석과 RAG는 독립적 — ~200~500ms 절약)
@@ -1585,6 +1585,14 @@ export class CounselingPipeline {
     // 🆕 v41.1: 친밀도 — 페르소나별 독립 처리 (루나/타로냥 완전 분리)
     const intimacyPersonaKey: 'luna' | 'tarot' = persona === 'tarot' ? 'tarot' : 'luna';
     let intimacyLevelUp: { oldLevel: number; newLevel: number; newLevelName: string } | null = null;
+    // 🆕 v117 B3: per-turn delta (toast 용)
+    let intimacyDelta: {
+      trust: number;
+      openness: number;
+      bond: number;
+      respect: number;
+      triggers: string[];
+    } | null = null;
     if (hlreActive && persona !== 'panel') {
       try {
         // 세션 시작 훅 (감쇠 + 재방문 트리거) — 첫 호출에서만 실행
@@ -1609,6 +1617,19 @@ export class CounselingPipeline {
           console.log(
             `[Pipeline:${intimacyPersonaKey}] 🦊 친밀도 트리거: [${intimacyResult.detectedTriggers.join(', ')}]${intimacyResult.levelChanged ? ' ⬆️ LEVEL UP' : ''}`,
           );
+        }
+
+        // 🆕 v117 B3: delta 절대값 합 > 0.5 일 때만 toast 발행 (잡음 필터)
+        const d = intimacyResult.delta;
+        const sumAbs = Math.abs(d.trust) + Math.abs(d.openness) + Math.abs(d.bond) + Math.abs(d.respect);
+        if (sumAbs >= 0.5) {
+          intimacyDelta = {
+            trust: d.trust,
+            openness: d.openness,
+            bond: d.bond,
+            respect: d.respect,
+            triggers: intimacyResult.detectedTriggers,
+          };
         }
 
         if (intimacyResult.levelChanged) {
@@ -3125,6 +3146,6 @@ ${researchResult.insight}
       engineLogs: logCollector.getLogs(),
     };
 
-    yield { type: 'done', data: { stateResult, strategyResult, suggestionShown: gateResult.show, responseMode: therapeuticResponse.mode, updatedAxes: currentScenario === RelationshipScenario.READ_AND_IGNORED ? updatedAxes : undefined, phaseV2: newPhaseV2, completedEvents: updatedCompletedEvents, lastEventTurn: updatedLastEventTurn, confirmedEmotionScore, emotionHistory: updatedEmotionHistory, promptStyle: currentPromptStyle, emotionAccumulatorState: updatedAccumulator, phaseStartTurn: updatedPhaseStartTurn, lunaEmotionState: hlreActive ? hlre.serializeEmotionState() : undefined, sessionStoryState: hlreActive ? hlre.serializeSessionStory() : undefined, strategyMode: activeStrategyMode, intimacyState: hlreActive ? hlre.getIntimacyState(intimacyPersonaKey) : null, intimacyPersonaKey: hlreActive ? intimacyPersonaKey : undefined, intimacyAll: hlreActive ? hlre.getIntimacyAll() : null, intimacyLevelUp, _contextLog } };
+    yield { type: 'done', data: { stateResult, strategyResult, suggestionShown: gateResult.show, responseMode: therapeuticResponse.mode, updatedAxes: currentScenario === RelationshipScenario.READ_AND_IGNORED ? updatedAxes : undefined, phaseV2: newPhaseV2, completedEvents: updatedCompletedEvents, lastEventTurn: updatedLastEventTurn, confirmedEmotionScore, emotionHistory: updatedEmotionHistory, promptStyle: currentPromptStyle, emotionAccumulatorState: updatedAccumulator, phaseStartTurn: updatedPhaseStartTurn, lunaEmotionState: hlreActive ? hlre.serializeEmotionState() : undefined, sessionStoryState: hlreActive ? hlre.serializeSessionStory() : undefined, strategyMode: activeStrategyMode, intimacyState: hlreActive ? hlre.getIntimacyState(intimacyPersonaKey) : null, intimacyPersonaKey: hlreActive ? intimacyPersonaKey : undefined, intimacyAll: hlreActive ? hlre.getIntimacyAll() : null, intimacyLevelUp, intimacyDelta, _contextLog } };
   }
 }

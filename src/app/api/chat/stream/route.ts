@@ -793,6 +793,7 @@ export async function POST(req: NextRequest) {
               const intimacyAll = (event.data as any).intimacyAll;
               const intimacyPersonaKey = (event.data as any).intimacyPersonaKey as 'luna' | 'tarot' | undefined;
               const intimacyLevelUp = (event.data as any).intimacyLevelUp;
+              const intimacyDelta = (event.data as any).intimacyDelta;
               if (intimacyAll && intimacyPersonaKey) {
                 // fire-and-forget DB 저장 — 기존 데이터 보호 + 활성 페르소나만 업데이트
                 (async () => {
@@ -861,6 +862,41 @@ export async function POST(req: NextRequest) {
                 console.log(
                   `[Intimacy] 🎉 레벨업 이벤트 전송: Lv.${intimacyLevelUp.oldLevel} → Lv.${intimacyLevelUp.newLevel} (${intimacyLevelUp.newLevelName})`,
                 );
+
+              }
+
+              // 🆕 v117 B3: 친밀도 delta 토스트 이벤트 — 레벨업이 아닌 작은 변화도 가시화
+              if (intimacyDelta && !intimacyLevelUp) {
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({ type: 'intimacy_delta', data: intimacyDelta })}\n\n`,
+                  ),
+                );
+              }
+
+              if (intimacyLevelUp) {
+                // 🆕 v117: 레벨업 시 기억 카드 1장 자동 생성 (fire-and-forget)
+                (async () => {
+                  try {
+                    const { createMemoryCardForLevelUp } = await import('@/lib/relationship/memory-card-writer');
+                    const persona = (intimacyPersonaKey ?? 'luna') as 'luna' | 'tarot';
+                    const recentTurns = (chatHistory ?? [])
+                      .slice(-6)
+                      .map(m => ({
+                        role: m.role === 'user' ? 'user' as const : 'assistant' as const,
+                        content: String(m.content ?? ''),
+                      }));
+                    await createMemoryCardForLevelUp({
+                      supabase,
+                      userId: user.id,
+                      persona,
+                      newLevel: intimacyLevelUp.newLevel,
+                      recentTurns,
+                    });
+                  } catch (e) {
+                    console.warn('[MemoryCard] 생성 실패 (무시):', (e as Error).message);
+                  }
+                })();
               }
 
               // 🆕 v34: AI 동적 컨텍스트 로그 — SSE로 클라이언트 전송 + 서버 콘솔

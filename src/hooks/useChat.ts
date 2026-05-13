@@ -724,6 +724,24 @@ export function useChat(sessionId: string): UseChatReturn {
                 break;
               }
 
+              // 🆕 v117 B3: 친밀도 per-turn 델타 토스트
+              case 'intimacy_delta': {
+                const d = event.data as any;
+                const total =
+                  Math.abs(d?.trust ?? 0) +
+                  Math.abs(d?.openness ?? 0) +
+                  Math.abs(d?.bond ?? 0) +
+                  Math.abs(d?.respect ?? 0);
+                const value = Number(total.toFixed(1));
+                if (value >= 0.5) {
+                  console.log('[useChat] 💜 친밀도 델타:', value, d?.triggers);
+                  if (deltaTimerRef.current) clearTimeout(deltaTimerRef.current);
+                  setIntimacyDelta({ value, key: Date.now() });
+                  deltaTimerRef.current = setTimeout(() => setIntimacyDelta(null), 2500);
+                }
+                break;
+              }
+
               // 🆕 v40: 루나 딥리서치 — "진짜 생각하는 중" UI 이벤트
               case 'luna_thinking_deep': {
                 const deepData = event.data as any;

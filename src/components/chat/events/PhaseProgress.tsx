@@ -326,75 +326,9 @@ interface PhaseProgressProps {
 // ============================================================================
 
 // ============================================================================
-// 🆕 v116.7: BranchChip — 글래스 pill + 회전 BorderBeam
-// ============================================================================
-function BranchChip({
-  variant,
-  icon,
-  label,
-}: {
-  variant: 'counsel' | 'casual';
-  icon: string;
-  label: string;
-}) {
-  const isCounsel = variant === 'counsel';
-  const grad = isCounsel
-    ? 'linear-gradient(135deg, rgba(252,231,243,0.92) 0%, rgba(237,233,254,0.92) 100%)'
-    : 'linear-gradient(135deg, rgba(255,237,213,0.92) 0%, rgba(254,205,211,0.92) 100%)';
-  const borderColor = isCounsel ? 'rgba(244,114,182,0.45)' : 'rgba(251,146,60,0.5)';
-  const textColor = isCounsel ? '#be185d' : '#b45309';
-  const beamA = isCounsel ? '#f472b6' : '#fbbf24';
-  const beamB = isCounsel ? '#c084fc' : '#fb923c';
-
-  return (
-    <motion.div
-      className="relative"
-      animate={{ y: [0, -1.5, 0] }}
-      transition={{
-        duration: isCounsel ? 2.4 : 2.8,
-        repeat: Infinity,
-        ease: 'easeInOut',
-        delay: isCounsel ? 0 : 0.4,
-      }}
-    >
-      {/* 회전하는 conic-gradient BorderBeam */}
-      <motion.div
-        className="absolute -inset-[1.5px] rounded-full pointer-events-none"
-        style={{
-          background: `conic-gradient(from 0deg, transparent 0%, ${beamA} 12%, transparent 28%, transparent 50%, ${beamB} 62%, transparent 78%)`,
-          opacity: 0.75,
-        }}
-        animate={{ rotate: 360 }}
-        transition={{ duration: isCounsel ? 4 : 4.6, repeat: Infinity, ease: 'linear' }}
-      />
-      {/* 칩 본체 — 글래스모피즘 */}
-      <div
-        className="relative flex items-center gap-1.5 px-2.5 py-[5px] rounded-full whitespace-nowrap"
-        style={{
-          background: grad,
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
-          border: `1px solid ${borderColor}`,
-          boxShadow: isCounsel
-            ? '0 2px 8px rgba(244,114,182,0.22), inset 0 1px 1px rgba(255,255,255,0.7)'
-            : '0 2px 8px rgba(251,146,60,0.24), inset 0 1px 1px rgba(255,255,255,0.7)',
-        }}
-      >
-        <span className="text-[12px] leading-none">{icon}</span>
-        <span
-          className="text-[10px] font-extrabold tracking-tight"
-          style={{ color: textColor, fontFamily: '"Pretendard", system-ui' }}
-        >
-          {label}
-        </span>
-      </div>
-    </motion.div>
-  );
-}
-
-// ============================================================================
-// 🆕 v116.7: BranchedTrack — 글래스 오브 + 빛 흐름 빔 + 두 destination 칩
-// (요즘 10~20대 여자 감성: 파스텔 + 글래스모피즘 + sparkle + 손글씨)
+// 🆕 v116.9: BranchedTrack — "조용히 듣고 있어" 모먼트
+// (분기 메커니즘 표시 제거. 루나가 가만히 듣는 모습 한 컷.
+//  손그림 꽃잎 + 두근거리는 하트 + 타이핑 도트 + 손글씨 카피)
 // ============================================================================
 function BranchedTrack({
   lunaThinking,
@@ -404,220 +338,184 @@ function BranchedTrack({
   const typedStatus = useTypewriter(displayText, 70);
   const isTarot = persona === 'tarot';
 
+  // 떠다니는 손그림 꽃잎 데이터
+  const petals = [
+    { l: '6%',  t: '12%', size: 16, rot: -22, delay: 0.0 },
+    { l: '24%', t: '70%', size: 12, rot: 30,  delay: 0.7 },
+    { l: '46%', t: '14%', size: 11, rot: -8,  delay: 1.1 },
+    { l: '64%', t: '74%', size: 13, rot: 18,  delay: 0.3 },
+    { l: '84%', t: '20%', size: 10, rot: -28, delay: 1.6 },
+    { l: '92%', t: '64%', size: 14, rot: 12,  delay: 0.9 },
+  ];
+
+  const petalFill = isTarot ? '#e9d5ff' : '#fbcfe8';
+  const petalStroke = isTarot ? '#c4b5fd' : '#f9a8d4';
+  const petalCore = isTarot ? '#fde68a' : '#fde68a';
+
   return (
     <div className="w-full sticky top-[60px] z-10">
-      {/* 상단 그라디언트 라인 */}
       <div
         className="h-[1px]"
         style={{
           background: isTarot
-            ? 'linear-gradient(to right, rgba(196,181,253,0.5), rgba(244,114,182,0.45), rgba(254,215,170,0.4))'
-            : 'linear-gradient(to right, rgba(251,207,232,0.55), rgba(244,114,182,0.45), rgba(254,215,170,0.5))',
+            ? 'linear-gradient(to right, transparent, rgba(196,181,253,0.55), transparent)'
+            : 'linear-gradient(to right, transparent, rgba(244,114,182,0.55), transparent)',
         }}
       />
-
       <div
-        className="relative overflow-hidden backdrop-blur-xl border-b"
+        className="relative overflow-hidden backdrop-blur-xl border-b py-3 px-4"
         style={{
           background: isTarot
-            ? 'linear-gradient(135deg, rgba(250,245,255,0.95) 0%, rgba(255,245,250,0.92) 50%, rgba(255,250,242,0.95) 100%)'
-            : 'linear-gradient(135deg, rgba(255,250,252,0.95) 0%, rgba(255,243,247,0.92) 50%, rgba(255,247,235,0.95) 100%)',
-          borderColor: 'rgba(244,114,182,0.12)',
-          boxShadow: '0 4px 22px rgba(244,114,182,0.10)',
+            ? 'linear-gradient(135deg, rgba(252,247,255,0.96) 0%, rgba(255,247,252,0.96) 100%)'
+            : 'linear-gradient(135deg, rgba(255,247,251,0.96) 0%, rgba(255,250,243,0.96) 100%)',
+          borderColor: 'rgba(244,114,182,0.10)',
+          boxShadow: '0 2px 18px rgba(244,114,182,0.07)',
         }}
       >
-        {/* 떠다니는 sparkle 입자 — 백그라운드 */}
-        {[
-          { l: '12%', t: '34%', s: 3,   d: 0.0, c: '#fbcfe8' },
-          { l: '34%', t: '20%', s: 2,   d: 0.5, c: '#fef3c7' },
-          { l: '48%', t: '70%', s: 2.5, d: 1.0, c: '#fce7f3' },
-          { l: '62%', t: '24%', s: 2,   d: 0.3, c: '#fef3c7' },
-          { l: '78%', t: '64%', s: 3,   d: 0.8, c: '#fbcfe8' },
-          { l: '90%', t: '32%', s: 2,   d: 1.4, c: '#fef3c7' },
-        ].map((p, i) => (
-          <motion.div
+        {/* 떠다니는 손그림 꽃잎 (벚꽃 5장) */}
+        {petals.map((p, i) => (
+          <motion.svg
             key={i}
-            className="absolute rounded-full pointer-events-none"
-            style={{
-              left: p.l,
-              top: p.t,
-              width: p.s,
-              height: p.s,
-              background: p.c,
-              boxShadow: `0 0 6px ${p.c}`,
-              filter: 'blur(0.3px)',
+            viewBox="0 0 20 20"
+            width={p.size}
+            height={p.size}
+            className="absolute pointer-events-none"
+            style={{ left: p.l, top: p.t }}
+            animate={{
+              y: [0, -6, 0],
+              rotate: [p.rot, p.rot + 10, p.rot],
+              opacity: [0.4, 0.85, 0.4],
             }}
-            animate={{ y: [-2, -8, -2], opacity: [0.35, 1, 0.35] }}
-            transition={{ duration: 2.4 + i * 0.3, repeat: Infinity, delay: p.d, ease: 'easeInOut' }}
-          />
+            transition={{ duration: 4 + i * 0.5, repeat: Infinity, delay: p.delay, ease: 'easeInOut' }}
+          >
+            {[0, 72, 144, 216, 288].map((deg) => (
+              <ellipse
+                key={deg}
+                cx="10" cy="5.5" rx="2.3" ry="3.8"
+                fill={petalFill}
+                stroke={petalStroke}
+                strokeWidth="0.5"
+                transform={`rotate(${deg} 10 10)`}
+              />
+            ))}
+            <circle cx="10" cy="10" r="1.6" fill={petalCore} />
+          </motion.svg>
         ))}
 
-        {/* 메인 row */}
-        <div className="relative flex items-center px-3 py-2.5 gap-2.5 min-h-[72px]">
+        {/* 메인 행 — 루나 아바타 + 상태 문구 */}
+        <div className="relative flex items-center gap-3 min-h-[58px]">
 
-          {/* ─── 좌측: 루나 글래스 오브 + 라벨 ─── */}
-          <div className="flex-shrink-0 flex flex-col items-center gap-1">
+          {/* 루나 아바타 + 하트 펄스 */}
+          <div className="flex-shrink-0">
             <div className="relative">
               {/* 외곽 글로우 펄스 */}
               <motion.div
-                className="absolute inset-[-6px] rounded-full pointer-events-none"
+                className="absolute inset-[-8px] rounded-full pointer-events-none"
                 style={{
                   background: isTarot
-                    ? 'radial-gradient(circle, rgba(196,181,253,0.45), transparent 70%)'
-                    : 'radial-gradient(circle, rgba(251,113,133,0.4), transparent 70%)',
+                    ? 'radial-gradient(circle, rgba(196,181,253,0.42), transparent 65%)'
+                    : 'radial-gradient(circle, rgba(251,113,133,0.45), transparent 65%)',
                 }}
-                animate={{ scale: [1, 1.18, 1], opacity: [0.45, 0.95, 0.45] }}
-                transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                animate={{ scale: [1, 1.22, 1], opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
               />
               {/* 글래스 오브 */}
               <div
-                className="relative w-11 h-11 rounded-full flex items-center justify-center p-1.5"
+                className="relative w-12 h-12 rounded-full flex items-center justify-center p-1.5"
                 style={{
-                  background: 'rgba(255,255,255,0.75)',
+                  background: 'rgba(255,255,255,0.88)',
                   backdropFilter: 'blur(10px)',
                   WebkitBackdropFilter: 'blur(10px)',
                   boxShadow: isTarot
-                    ? '0 4px 14px rgba(124,58,237,0.28), inset 0 1px 2px rgba(255,255,255,0.95), inset 0 -2px 4px rgba(196,181,253,0.32)'
-                    : '0 4px 14px rgba(244,114,182,0.30), inset 0 1px 2px rgba(255,255,255,0.95), inset 0 -2px 4px rgba(251,207,232,0.38)',
-                  border: '1.5px solid rgba(255,255,255,0.85)',
+                    ? '0 4px 14px rgba(124,58,237,0.26), inset 0 1px 2px rgba(255,255,255,0.95)'
+                    : '0 4px 14px rgba(244,114,182,0.30), inset 0 1px 2px rgba(255,255,255,0.95)',
+                  border: '1.5px solid rgba(255,255,255,0.9)',
                 }}
               >
                 {isTarot ? <CatEarIcon active={true} past={false} /> : <FoxEarIcon active={true} past={false} />}
               </div>
+
+              {/* 우상단 작은 하트 (둥둥) */}
+              <motion.svg
+                viewBox="0 0 24 24" width={14} height={14}
+                className="absolute -top-1 -right-1.5 pointer-events-none"
+                animate={{ y: [0, -2, 0], rotate: [-10, 5, -10] }}
+                transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+              >
+                <path
+                  d="M12 21s-7-4.5-9-9c-1.5-3.5 1-7 4.5-7 2 0 3.5 1.2 4.5 2.5C13 6.2 14.5 5 16.5 5 20 5 22.5 8.5 21 12c-2 4.5-9 9-9 9z"
+                  fill={isTarot ? '#c084fc' : '#fb7185'}
+                  stroke="white"
+                  strokeWidth="1.5"
+                />
+              </motion.svg>
             </div>
-            <p
-              className="text-[9px] font-bold whitespace-nowrap"
+          </div>
+
+          {/* 중앙: "조용히 듣고 있어" + 타이핑 도트 + 두근거리는 하트 */}
+          <div className="flex-1 flex items-center gap-2 min-w-0">
+            <motion.svg
+              viewBox="0 0 24 24" width={18} height={18}
+              animate={{ scale: [1, 1.22, 1] }}
+              transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+              style={{ filter: 'drop-shadow(0 1.5px 2.5px rgba(244,114,182,0.4))' }}
+            >
+              <path
+                d="M12 21s-7-4.5-9-9c-1.5-3.5 1-7 4.5-7 2 0 3.5 1.2 4.5 2.5C13 6.2 14.5 5 16.5 5 20 5 22.5 8.5 21 12c-2 4.5-9 9-9 9z"
+                fill={isTarot ? '#c084fc' : '#f472b6'}
+                stroke={isTarot ? '#9333ea' : '#ec4899'}
+                strokeWidth="1"
+              />
+            </motion.svg>
+
+            <span
+              className="text-[15px] font-bold leading-none whitespace-nowrap"
               style={{
-                color: isTarot ? '#9333ea' : '#ec4899',
-                letterSpacing: '0.02em',
-                fontFamily: '"Pretendard", system-ui',
+                fontFamily: '"Gowun Dodum", "Nanum Pen Script", system-ui',
+                background: isTarot
+                  ? 'linear-gradient(90deg, #9333ea 0%, #c084fc 100%)'
+                  : 'linear-gradient(90deg, #ec4899 0%, #fb7185 100%)',
+                backgroundClip: 'text',
+                WebkitBackgroundClip: 'text',
+                color: 'transparent',
+                letterSpacing: '-0.005em',
               }}
             >
-              이야기 듣기
-            </p>
-          </div>
+              조용히 듣고 있어
+            </span>
 
-          {/* ─── 중앙: 빛 흐름 빔 + 손글씨 "어디로 갈까" ─── */}
-          <div className="relative flex-1 h-[54px]">
-            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 54" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="bmUp" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%"   stopColor={isTarot ? '#c4b5fd' : '#fbcfe8'} stopOpacity="0" />
-                  <stop offset="40%"  stopColor={isTarot ? '#a78bfa' : '#f472b6'} stopOpacity="0.85" />
-                  <stop offset="100%" stopColor={isTarot ? '#c4b5fd' : '#f9a8d4'} stopOpacity="0" />
-                </linearGradient>
-                <linearGradient id="bmDn" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%"   stopColor="#fed7aa" stopOpacity="0" />
-                  <stop offset="40%"  stopColor="#fbbf24" stopOpacity="0.85" />
-                  <stop offset="100%" stopColor="#fde68a" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-
-              {/* 위 빔 (상담) */}
-              <motion.path
-                d="M 2 27 Q 24 27 46 14 L 98 14"
-                stroke="url(#bmUp)"
-                strokeWidth="1.6"
-                fill="none"
-                strokeLinecap="round"
-                initial={{ pathLength: 0, opacity: 0 }}
-                animate={{ pathLength: 1, opacity: 1 }}
-                transition={{ duration: 0.9, ease: 'easeOut', delay: 0.15 }}
-              />
-              {/* 아래 빔 (일상) */}
-              <motion.path
-                d="M 2 27 Q 24 27 46 40 L 98 40"
-                stroke="url(#bmDn)"
-                strokeWidth="1.6"
-                fill="none"
-                strokeLinecap="round"
-                initial={{ pathLength: 0, opacity: 0 }}
-                animate={{ pathLength: 1, opacity: 1 }}
-                transition={{ duration: 0.9, ease: 'easeOut', delay: 0.3 }}
-              />
-
-              {/* 빛 입자 — 위 빔 따라 깜빡 */}
-              <motion.circle
-                cx="46" cy="14" r="1.5"
-                fill={isTarot ? '#a78bfa' : '#f472b6'}
-                animate={{ opacity: [0, 1, 0], r: [1, 2.2, 1] }}
-                transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-              />
-              <motion.circle
-                cx="72" cy="14" r="1.2"
-                fill={isTarot ? '#c084fc' : '#fb7185'}
-                animate={{ opacity: [0, 1, 0], r: [0.8, 1.8, 0.8] }}
-                transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut', delay: 0.6 }}
-              />
-              {/* 빛 입자 — 아래 빔 */}
-              <motion.circle
-                cx="46" cy="40" r="1.5"
-                fill="#fbbf24"
-                animate={{ opacity: [0, 1, 0], r: [1, 2.2, 1] }}
-                transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut', delay: 0.9 }}
-              />
-              <motion.circle
-                cx="72" cy="40" r="1.2"
-                fill="#fb923c"
-                animate={{ opacity: [0, 1, 0], r: [0.8, 1.8, 0.8] }}
-                transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut', delay: 1.5 }}
-              />
-
-              {/* 분기점 코어 (좌측 빔 시작점) */}
-              <motion.circle
-                cx="2" cy="27" r="2.5"
-                fill={isTarot ? '#a78bfa' : '#f472b6'}
-                animate={{ scale: [1, 1.4, 1], opacity: [0.85, 1, 0.85] }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
-              />
-            </svg>
-
-            {/* 손글씨 중앙 라벨 — 살짝 떠다님 */}
-            <motion.div
-              className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 pointer-events-none"
-              animate={{ y: [-1, 1, -1], opacity: [0.7, 1, 0.7] }}
-              transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
-            >
-              <span
-                className="text-[10px] font-bold whitespace-nowrap"
-                style={{
-                  fontFamily: '"Gowun Dodum", "Nanum Pen Script", system-ui',
-                  background: isTarot
-                    ? 'linear-gradient(90deg, #a78bfa, #f472b6)'
-                    : 'linear-gradient(90deg, #f472b6, #fbbf24)',
-                  backgroundClip: 'text',
-                  WebkitBackgroundClip: 'text',
-                  color: 'transparent',
-                  letterSpacing: '-0.01em',
-                }}
-              >
-                ✦ 어디로 갈까
-              </span>
-            </motion.div>
-          </div>
-
-          {/* ─── 우측: 두 destination 칩 ─── */}
-          <div className="flex-shrink-0 flex flex-col gap-1.5 items-end">
-            <BranchChip variant="counsel" icon="💕" label="상담 흐름" />
-            <BranchChip variant="casual"  icon="🌸" label="일상 수다" />
+            {/* 타이핑 도트 (3개) */}
+            <div className="flex items-center gap-[3px] ml-0.5">
+              {[0, 1, 2].map((i) => (
+                <motion.span
+                  key={i}
+                  className="block rounded-full"
+                  style={{
+                    width: 5, height: 5,
+                    background: isTarot ? '#a78bfa' : '#f472b6',
+                    boxShadow: isTarot
+                      ? '0 0 4px rgba(167,139,250,0.6)'
+                      : '0 0 4px rgba(244,114,182,0.6)',
+                  }}
+                  animate={{ y: [0, -3, 0], opacity: [0.4, 1, 0.4] }}
+                  transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15, ease: 'easeInOut' }}
+                />
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* 하단 상태 텍스트 — 손글씨 그라디언트 */}
-        <div className="text-center pb-2 px-3">
+        {/* 하단 상태 문구 (typewriter) */}
+        <div className="text-center pt-2">
           <motion.span
             initial={{ opacity: 0, y: 3 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
+            transition={{ delay: 0.3 }}
             className="text-[11px] font-bold tracking-tight"
             style={{
-              fontFamily: '"Gowun Dodum", "Pretendard", system-ui',
-              background: isTarot
-                ? 'linear-gradient(90deg, #a78bfa 0%, #c084fc 50%, #f472b6 100%)'
-                : 'linear-gradient(90deg, #f472b6 0%, #fb7185 50%, #fbbf24 100%)',
-              backgroundClip: 'text',
-              WebkitBackgroundClip: 'text',
-              color: 'transparent',
+              fontFamily: '"Gowun Dodum", system-ui',
+              color: isTarot ? '#9333ea' : '#ec4899',
+              opacity: 0.78,
             }}
           >
             {typedStatus}
