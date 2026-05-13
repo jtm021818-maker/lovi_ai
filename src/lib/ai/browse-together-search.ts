@@ -16,6 +16,7 @@ import {
   LUNA_BROWSE_STANCE_GUIDE,
   scrubForbiddenPhrasing,
 } from './luna-tone';
+import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
 import type {
   BrowseSessionData,
   BrowseCandidate,
@@ -225,7 +226,7 @@ async function _runImpl(
     const prompt = buildSynthesisPrompt(params, snippets);
 
     const response = await gemini.models.generateContent({
-      model: 'gemini-3.1-flash-lite',
+      model: GEMINI_MODELS.FLASH_LITE_GA,
       config: {
         maxOutputTokens: 5120,
         temperature: 0.7,

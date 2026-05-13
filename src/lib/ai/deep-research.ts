@@ -21,6 +21,7 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
+import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
 
 const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -188,7 +189,7 @@ export async function runDeepResearch(
     const prompt = buildResearchPrompt(params);
 
     const response = await gemini.models.generateContent({
-      model: 'gemini-3.1-flash-lite', // v52: 전체 1순위 통일
+      model: GEMINI_MODELS.FLASH_LITE_GA, // v52: 전체 1순위 통일
       config: {
         tools: [{ googleSearch: {} }], // 🔍 Google Search grounding 활성화
         maxOutputTokens: 600,

@@ -8,6 +8,7 @@ import { GoogleGenAI } from '@google/genai';
 import { braveWebSearch, formatBraveResultsForPrompt, type BraveWebResult } from './brave-search';
 import { LUNA_SYNTHESIS_PREAMBLE, scrubForbiddenPhrasing } from './luna-tone';
 import type { MovieRecommendationData, MovieCard } from '@/types/engine.types';
+import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
 
 const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -143,7 +144,7 @@ async function _runImpl(params: MovieSearchParams, key: string): Promise<MovieRe
     const prompt = buildSynthesisPrompt(params, snippets);
 
     const response = await gemini.models.generateContent({
-      model: 'gemini-3.1-flash-lite',
+      model: GEMINI_MODELS.FLASH_LITE_GA,
       config: { maxOutputTokens: 1000, temperature: 0.7 },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });

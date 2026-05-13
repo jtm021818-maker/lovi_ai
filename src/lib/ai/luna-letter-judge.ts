@@ -11,6 +11,7 @@
 
 import { GoogleGenAI } from '@google/genai';
 import type { LunaMemory, LifeStageInfo } from '@/lib/luna-life';
+import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
 
 export interface JudgeInput {
   /** 세션 메시지 (최근 25턴 권장) */
@@ -125,7 +126,7 @@ export async function runLunaLetterJudge(input: JudgeInput): Promise<JudgeDecisi
     try {
       const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const res = await client.models.generateContent({
-        model: 'gemini-3.1-flash-lite',
+        model: GEMINI_MODELS.FLASH_LITE_GA,
         contents: [{ role: 'user', parts: [{ text: userMsg }] }],
         config: {
           systemInstruction: SYSTEM,

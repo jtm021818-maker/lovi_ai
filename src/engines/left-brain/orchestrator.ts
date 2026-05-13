@@ -97,17 +97,18 @@ ${conflictsText}
       console.log(`======================================================================\n`);
     }
 
-    // 🆕 v63.1: 좌뇌는 큰 JSON (10+ 필드) 출력해야 해서 안정성 우선
-    //   1순위: 2.5 Flash Lite ($0.10) — 검증된 안정 JSON 출력 (가장 가성비)
-    //   2순위: 2.5 Flash ($0.30) — 안정 폴백
-    //   3순위: 3.1 Flash Lite ($0.25) — 최후 시도 (가끔 큰 JSON 깨짐)
+    // 🆕 v63.3 (2026-05-13): 503 회복 시간 + provider 분리 캐스케이드
+    //   기존 문제: Preview 모델은 503 회복 30~120분, 폴백 효과 없음
+    //              + 3개 모두 Gemini provider → API 전체 다운 시 전부 실패
+    //   해결: GA Stable 우선 (503 회복 5~15분) + 마지막은 다른 인프라(Groq)
     //
-    //   각 시도: 호출 → JSON parseAndValidate 검증 → 실패면 다음 모델
-    //   타임아웃: 모델당 8초
-    const LEFT_BRAIN_CASCADE = [
-      { name: '2.5-flash-lite', id: GEMINI_MODELS.FLASH_LITE_25 },
-      { name: '2.5-flash',      id: GEMINI_MODELS.FLASH_25 },
-      { name: '3.1-flash-lite', id: GEMINI_MODELS.FLASH_LITE_31 },
+    //   1순위: gemini 3.1 Flash Lite GA  — 메인 (GA, 회복 빠름)
+    //   2순위: gemini 2.5 Flash GA       — GA Stable 폴백 (다른 capacity pool)
+    //   3순위: groq llama-3.3-70b        — Gemini 전체 다운 우회
+    const LEFT_BRAIN_CASCADE: Array<{ name: string; id: string; provider: 'gemini' | 'groq' }> = [
+      { name: '3.1-flash-lite', id: GEMINI_MODELS.FLASH_LITE_GA, provider: 'gemini' },
+      { name: '2.5-flash-ga',   id: GEMINI_MODELS.FLASH_25_GA,   provider: 'gemini' },
+      { name: 'groq-llama-70b', id: 'llama-3.3-70b-versatile',   provider: 'groq' },
     ];
 
     let parsed: LeftBrainAnalysis | null = null;
@@ -122,7 +123,7 @@ ${conflictsText}
         engine: 'LEFT_BRAIN',
         turnIdx: input.turnIdx,
         model: model.id,
-        provider: 'gemini',
+        provider: model.provider,
         systemPrompt: fullSystemPrompt,
         userMessage: input.userUtterance,
         extra: { cascadeModel: model.name, phase: input.phase, intimacyLevel: input.intimacyLevel },
@@ -133,13 +134,14 @@ ${conflictsText}
         //        + 프롬프트에 "간결 출력" 규칙 명시 → LLM 이 자진해서 짧게 출력
         //        timeout 15초 유지
         //        3모델 모두 실패하던 증상 완전 차단
+        // 🆕 v63.2: provider 다양화 — Gemini API 다운 시 Groq 폴백
         const rawOutput = await Promise.race([
           generateWithProvider(
-            'gemini',
+            model.provider,
             fullSystemPrompt,
             [{ role: 'user' as const, content: input.userUtterance }],
-            'haiku',
-            4000, // v71: 8000 → 4000 (충분 + 응답 시간 단축)
+            'sonnet', // groq 폴백 시 70b 모델 호출 (haiku=8b)
+            4000,
             model.id,
           ),
           new Promise<never>((_, reject) =>

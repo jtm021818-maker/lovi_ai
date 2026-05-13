@@ -10,6 +10,7 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
+import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
 import type { SpiritId } from '@/types/spirit.types';
 import {
   SPIRIT_TYPE_A,
@@ -65,7 +66,7 @@ function gemini(): GoogleGenAI {
   return _gemini;
 }
 
-const MODEL = 'gemini-3.1-flash-lite';
+const MODEL = GEMINI_MODELS.FLASH_LITE_GA;
 const TIMEOUT_MS = 9000;
 
 // ────────────────────────────────────────────────────────────

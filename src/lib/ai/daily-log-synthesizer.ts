@@ -9,6 +9,7 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
+import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
 
 const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -68,7 +69,7 @@ export async function synthesizeDailyLog(params: DailyLogParams): Promise<{ cont
   try {
     const prompt = buildPrompt(params);
     const result = await gemini.models.generateContent({
-      model: 'gemini-3.1-flash-lite',
+      model: GEMINI_MODELS.FLASH_LITE_GA,
       contents: prompt,
       config: { temperature: 0.85, maxOutputTokens: 240 },
     });

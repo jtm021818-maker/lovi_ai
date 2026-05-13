@@ -855,7 +855,7 @@ export async function* executeDualBrain(
       routePath: route.path,
       stakesType: stakes.type,
     });
-    const echoFallback = generateEchoResponse(input.userInput);
+    const echoFallback = generateEchoResponse(input.userInput, input.sessionId);
     fullResponseText = echoFallback;
     yield { type: 'text', data: echoFallback };
   }
@@ -924,11 +924,57 @@ export async function* executeDualBrain(
 /**
  * 🆕 v63: 폴백 echo 응답 생성기
  * Brain 실패 시에도 자연스러운 누나 톤으로 응답 (LLM 안 부르고 즉답).
- * 키워드 기반 분기 + 안전한 보수적 멘트.
+ *
+ * v63.3 (2026-05-13): Gemini API 503 연속 발생 시 매번 동일 응답이 나오는 문제 수정
+ *   - 각 카테고리 응답 풀 3~5개로 확장
+ *   - 직전 응답과 다른 것 선택 (세션 단위 캐시)
  */
-function generateEchoResponse(userInput: string): string {
+const ECHO_LAST_BY_SESSION = new Map<string, string>();
+
+const ECHO_POOLS = {
+  empty: [
+    '음...|||다시 말해줄래?',
+    '어 잠깐|||방금 뭐라 했어?',
+    '응?|||한 번만 더',
+  ],
+  crisis: [
+    '야 잠깐|||지금 많이 힘든 거 같아|||어디야 너?',
+    '야야|||무슨 일이야|||지금 어디 있어?',
+    '잠깐만|||너 괜찮아?|||말해봐 천천히',
+  ],
+  positive: [
+    '오 진짜?ㅋㅋ|||어떻게 된 건데?',
+    '헐 대박|||자세히 말해봐',
+    '와|||그래서 어떻게 됐어?',
+    '오올|||뭐야 뭐야',
+  ],
+  negative: [
+    '아... 무슨 일이야|||말해봐',
+    '어... 잠깐|||천천히 말해봐',
+    '음 일단 말해봐|||무슨 일이야',
+    '아이고|||무슨 일 있었어?',
+  ],
+  default: [
+    '오 잠깐|||그게 어떻게 된 건데?',
+    '어 진짜?|||더 말해봐',
+    '응응|||그래서?',
+    '음 뭔 일이야|||천천히 말해봐',
+    '아 그래?|||무슨 상황인데?',
+  ],
+} as const;
+
+function pickEcho(pool: readonly string[], sessionId?: string): string {
+  const last = sessionId ? ECHO_LAST_BY_SESSION.get(sessionId) : undefined;
+  const candidates = pool.filter((s) => s !== last);
+  const list = candidates.length > 0 ? candidates : pool;
+  const picked = list[Math.floor(Math.random() * list.length)];
+  if (sessionId) ECHO_LAST_BY_SESSION.set(sessionId, picked);
+  return picked;
+}
+
+function generateEchoResponse(userInput: string, sessionId?: string): string {
   const text = (userInput ?? '').trim();
-  if (!text) return '음...|||다시 말해줄래?';
+  if (!text) return pickEcho(ECHO_POOLS.empty, sessionId);
 
   // 긍정 키워드
   const isPositive = /(좋아|기뻐|행복|설레|생겼|만났|사귀|고백|성공|붙었|합격|뿌듯)/.test(text);
@@ -936,17 +982,10 @@ function generateEchoResponse(userInput: string): string {
   const isCrisis = /(죽고싶|자살|살기 싫|끝내고싶)/.test(text);
   const isNegative = /(힘들|짜증|울|싫|헤어|배신|읽씹|싸웠|불안|무서|외로)/.test(text);
 
-  if (isCrisis) {
-    return '야 잠깐|||지금 많이 힘든 거 같아|||어디야 너?';
-  }
-  if (isPositive) {
-    return '오 진짜?ㅋㅋ|||어떻게 된 건데?';
-  }
-  if (isNegative) {
-    return '아... 무슨 일이야|||말해봐';
-  }
-  // 기본: 호기심 표현
-  return '오 잠깐|||그게 어떻게 된 건데?';
+  if (isCrisis) return pickEcho(ECHO_POOLS.crisis, sessionId);
+  if (isPositive) return pickEcho(ECHO_POOLS.positive, sessionId);
+  if (isNegative) return pickEcho(ECHO_POOLS.negative, sessionId);
+  return pickEcho(ECHO_POOLS.default, sessionId);
 }
 
 /** 태그만 있는 suffix 생성 헬퍼 */

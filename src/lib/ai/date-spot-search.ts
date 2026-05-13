@@ -15,6 +15,7 @@ import { GoogleGenAI } from '@google/genai';
 import { braveWebSearch, formatBraveResultsForPrompt, type BraveWebResult } from './brave-search';
 import { LUNA_SYNTHESIS_PREAMBLE, scrubForbiddenPhrasing } from './luna-tone';
 import type { DateSpotRecommendationData, DateSpot } from '@/types/engine.types';
+import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
 
 const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -160,7 +161,7 @@ async function _runDateSpotSearchImpl(params: DateSpotSearchParams, key: string)
     const prompt = buildSynthesisPrompt(params, snippets);
 
     const response = await gemini.models.generateContent({
-      model: 'gemini-3.1-flash-lite',
+      model: GEMINI_MODELS.FLASH_LITE_GA,
       config: {
         maxOutputTokens: 1200,
         temperature: 0.6,

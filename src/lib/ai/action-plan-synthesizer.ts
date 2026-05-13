@@ -10,6 +10,7 @@
 
 import { GoogleGenAI } from '@google/genai';
 import { LUNA_SYNTHESIS_PREAMBLE } from './luna-tone';
+import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
 
 const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -129,7 +130,7 @@ export async function synthesizeActionPlan(
   try {
     const prompt = buildPrompt(params);
     const response = await gemini.models.generateContent({
-      model: 'gemini-3.1-flash-lite',
+      model: GEMINI_MODELS.FLASH_LITE_GA,
       config: { maxOutputTokens: 900, temperature: 0.7 },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });

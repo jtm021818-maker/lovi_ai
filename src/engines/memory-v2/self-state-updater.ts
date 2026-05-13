@@ -7,6 +7,7 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
+import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 interface UpdateParams {
@@ -99,7 +100,7 @@ ${summary}
     try {
       const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const result = await client.models.generateContent({
-        model: 'gemini-3.1-flash-lite',
+        model: GEMINI_MODELS.FLASH_LITE_GA,
         contents: [{ role: 'user', parts: [{ text: userMsg }] }],
         config: {
           systemInstruction: SYSTEM,

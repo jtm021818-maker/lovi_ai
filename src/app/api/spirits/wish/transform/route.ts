@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { GoogleGenAI } from '@google/genai';
+import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
 
 interface TransformBody {
   wish: string;
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
 }`;
 
     const resp = await gemini.models.generateContent({
-      model: 'gemini-3.1-flash-lite',
+      model: GEMINI_MODELS.FLASH_LITE_GA,
       contents: prompt,
       config: { responseMimeType: 'application/json' },
     });

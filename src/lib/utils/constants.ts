@@ -101,11 +101,14 @@ export const MIN_EMBEDDING_TEXT_LENGTH = 10;
 /**
  * Gemini 임베딩 모델
  * - v62: text-embedding-004 deprecated → gemini-embedding-001 으로 교체
- * - 기본 3072차원이지만 outputDimensionality 옵션으로 768로 축소 (DB pgvector 호환)
+ * - v63.3 (2026-05-13): gemini-embedding-2 GA 승격 → 최신 모델로 마이그레이션
+ *   · 멀티모달 지원 (텍스트 + 이미지)
+ *   · outputDimensionality 옵션 동일 (768로 축소 가능)
+ *   · DB schema 호환 유지 (768d)
  */
-export const EMBEDDING_MODEL = 'gemini-embedding-001';
+export const EMBEDDING_MODEL = 'gemini-embedding-2';
 
-/** 임베딩 벡터 차원 (DB schema = 768, gemini-embedding-001 은 outputDimensionality 로 축소) */
+/** 임베딩 벡터 차원 (DB schema = 768, gemini-embedding-2 도 outputDimensionality 로 축소) */
 export const EMBEDDING_DIMENSIONS = 768;
 
 /** RAG 유사도 임계값 */

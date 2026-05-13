@@ -33,6 +33,7 @@ import {
   type BrowseCandidateSeed,
 } from './browse-session-store';
 import type { BrowseBlock, BrowseSessionMeta } from '@/types/engine.types';
+import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
 
 const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -154,7 +155,7 @@ ${meta.constraints?.length ? `맥락: ${meta.constraints.join(', ')}` : ''}
 
   try {
     const r = await gemini.models.generateContent({
-      model: 'gemini-3.1-flash-lite',
+      model: GEMINI_MODELS.FLASH_LITE_GA,
       config: { maxOutputTokens: 200, temperature: 0.85 },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });
@@ -191,7 +192,7 @@ ${meta.constraints?.length ? `맥락: ${meta.constraints.join(', ')}` : ''}
 
   try {
     const r = await gemini.models.generateContent({
-      model: 'gemini-3.1-flash-lite',
+      model: GEMINI_MODELS.FLASH_LITE_GA,
       config: { maxOutputTokens: 250, temperature: 0.6 },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });
@@ -349,7 +350,7 @@ verdict='show' 또는 'ask' 일 땐 다음을 채워:
 
   try {
     const r = await gemini.models.generateContent({
-      model: 'gemini-3.1-flash-lite',
+      model: GEMINI_MODELS.FLASH_LITE_GA,
       config: { maxOutputTokens: 1200, temperature: 0.75 },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });
@@ -419,7 +420,7 @@ ${shortlist.map((s, i) => `  ${i + 1}. ${s.title}`).join('\n') || '  (없음)'}
 
   try {
     const r = await gemini.models.generateContent({
-      model: 'gemini-3.1-flash-lite',
+      model: GEMINI_MODELS.FLASH_LITE_GA,
       config: { maxOutputTokens: 300, temperature: 0.85 },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });

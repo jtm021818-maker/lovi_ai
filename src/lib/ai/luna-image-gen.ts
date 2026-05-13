@@ -11,6 +11,7 @@
  */
 
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
 
 const STYLE_SUFFIX =
   'soft watercolor illustration, dreamy nostalgic memory, '
@@ -135,7 +136,7 @@ async function tryGemini(prompt: string, memoryId: string): Promise<string | nul
   if (!key) return null;
 
   // gemini-3.1-flash-image-preview (or compatible)
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent?key='
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODELS.IMAGE_31}:generateContent?key=`
     + encodeURIComponent(key);
 
   const controller = new AbortController();

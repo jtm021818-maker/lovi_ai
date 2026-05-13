@@ -11,6 +11,7 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
+import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
 
 interface GenerateParams {
   scenario: string;          // 한국어 라벨 (예: "읽씹 상황")
@@ -65,7 +66,7 @@ ${dialogue}
     try {
       const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const result = await client.models.generateContent({
-        model: 'gemini-3.1-flash-lite',
+        model: GEMINI_MODELS.FLASH_LITE_GA,
         contents: [{ role: 'user', parts: [{ text: userMsg }] }],
         config: {
           systemInstruction: SUMMARY_SYSTEM,

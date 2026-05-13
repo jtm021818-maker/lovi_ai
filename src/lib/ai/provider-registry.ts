@@ -32,12 +32,18 @@ export const ANTHROPIC_MODELS = {
 } as const;
 
 export const GEMINI_MODELS = {
-  // 🆕 v63 (2026-05-13): Gemini 3.1 라인업 통일
-  //   $0.25/$1.50 | 3.1 Flash-Lite GA  — 전체 1순위, 2.5 Flash 대비 2.5x 빠름
-  //   $0.50       | 3 Flash Preview    — 복잡한 추론 폴백 (PhD GPQA 90.4%, SWE 78%)
-  //   (preview)   | 3.1 Flash Image    — Nano Banana 2 (이미지 생성)
+  // 🆕 v63.3 (2026-05-13): 503 회복 시간 기반 라인업 재배치
+  //   [GA Stable — 503 회복 5~15분, 폴백으로 최적]
+  //   $0.25/$1.50 | 3.1 Flash-Lite GA   — 전체 1순위 (2026-05-07 정식)
+  //   $0.30       | 2.5 Flash GA        — 2순위 폴백 (다른 인프라, 회복 빠름)
+  //   [Preview — 503 회복 30~120분, 정확도 최고일 때만]
+  //   $0.50       | 3 Flash Preview     — 복잡한 추론 (PhD GPQA 90.4%)
+  //   (preview)   | 3.1 Pro Preview     — 비전 bbox 최고 (XRay v2 후순위)
+  //   (preview)   | 3.1 Flash Image     — Nano Banana 2 (이미지 생성)
   FLASH_LITE_GA: 'gemini-3.1-flash-lite',           // ⭐ GA 정식 출시 (2026-05-07)
-  FLASH_3:       'gemini-3-flash-preview',          // 추론 폴백
+  FLASH_25_GA:   'gemini-2.5-flash',                // ⭐ GA Stable 폴백 (503 회복 빠름)
+  FLASH_3:       'gemini-3-flash-preview',          // Preview 추론 폴백
+  PRO_31:        'gemini-3.1-pro-preview',          // Preview 비전 bbox (XRay v2)
   IMAGE_31:      'gemini-3.1-flash-image-preview',  // Nano Banana 2
 
   // 하위 호환 alias — 모두 3.1 Lite GA 로 통일

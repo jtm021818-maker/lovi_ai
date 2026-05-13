@@ -2,6 +2,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { getUserTier, checkXrayDailyLimit, recordXrayUsage } from '@/lib/subscription';
+import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
 
 // ============================================================
 // 듀얼 API 키 + 멀티 모델 폴백 (429 RESOURCE_EXHAUSTED 방어)
@@ -11,9 +12,10 @@ const API_KEYS = [
   process.env.GEMINI_API_KEY,
 ].filter(Boolean) as string[];
 
+// v63.3: Preview 모델 (FLASH_3) 503 회복 30~120분 → GA Stable 2개로 교체
 const FALLBACK_MODELS = [
-  'gemini-3.1-flash-lite',    // 1순위: GA 정식 출시 (2026-05-07)
-  'gemini-3-flash-preview',   // 2순위: 추론 폴백
+  GEMINI_MODELS.FLASH_LITE_GA,  // 1순위: 3.1 Flash-Lite GA (회복 빠름)
+  GEMINI_MODELS.FLASH_25_GA,    // 2순위: 2.5 Flash GA (다른 capacity pool)
 ];
 
 const XRAY_PROMPT = `당신은 연애 심리 전문가 '루나'입니다.

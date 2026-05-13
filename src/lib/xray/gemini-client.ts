@@ -7,6 +7,7 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
+import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
 
 const API_KEYS = [
   process.env.GOOGLE_API_KEY,
@@ -14,15 +15,17 @@ const API_KEYS = [
 ].filter(Boolean) as string[];
 
 /**
- * 우선순위 (v63 — Gemini 3.1 통일, 2026-05-13):
- * 1. gemini-3.1-pro-preview   — bbox 정확도 최고 (3.1 Pro Preview)
- * 2. gemini-3.1-flash-lite    — GA 안정 폴백
- * 3. gemini-3-flash-preview   — 추론 폴백
+ * 우선순위 (v63.3 — 503 회복 시간 기반 재배치, 2026-05-13):
+ * 1. gemini-3.1-flash-lite    — GA Stable, 503 회복 5~15분 (메인)
+ * 2. gemini-2.5-flash         — GA Stable 폴백 (다른 capacity pool)
+ * 3. gemini-3.1-pro-preview   — bbox 정확도 최고이지만 Preview (503 회복 30~120분, 최후 시도)
+ *
+ * Preview 를 1순위로 두면 503 시 폴백 효과 없음 → GA Stable 우선.
  */
 const MODEL_CASCADE_V2 = [
-  'gemini-3.1-pro-preview',
-  'gemini-3.1-flash-lite',
-  'gemini-3-flash-preview',
+  GEMINI_MODELS.FLASH_LITE_GA,  // 1순위: GA Stable (회복 빠름)
+  GEMINI_MODELS.FLASH_25_GA,    // 2순위: GA Stable 폴백 (다른 capacity)
+  GEMINI_MODELS.PRO_31,         // 3순위: Preview bbox 최고 정확도 (최후)
 ];
 
 export interface VisionResult {

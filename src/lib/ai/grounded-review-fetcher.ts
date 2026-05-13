@@ -10,6 +10,7 @@
  */
 
 import { GoogleGenAI, type GroundingMetadata, type GroundingChunk } from '@google/genai';
+import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
 
 const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -90,7 +91,7 @@ ${context ? `맥락: ${context}` : ''}
 
   try {
     const response = await gemini.models.generateContent({
-      model: 'gemini-3.1-flash-lite',
+      model: GEMINI_MODELS.FLASH_LITE_GA,
       config: {
         tools: [{ googleSearch: {} } as any],
         maxOutputTokens: 900,

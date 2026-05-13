@@ -15,6 +15,7 @@ import { GoogleGenAI } from '@google/genai';
 import { braveWebSearch, formatBraveResultsForPrompt, type BraveWebResult } from './brave-search';
 import { LUNA_SYNTHESIS_PREAMBLE, scrubForbiddenPhrasing } from './luna-tone';
 import type { SongRecommendationData, SongCard } from '@/types/engine.types';
+import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
 
 const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -151,7 +152,7 @@ async function _runSongSearchImpl(params: SongSearchParams, key: string): Promis
     const prompt = buildSynthesisPrompt(params, snippets);
 
     const response = await gemini.models.generateContent({
-      model: 'gemini-3.1-flash-lite',
+      model: GEMINI_MODELS.FLASH_LITE_GA,
       config: {
         // tools 없음 — grounding 안 함 (비용 절감)
         maxOutputTokens: 800,
