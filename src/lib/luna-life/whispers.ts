@@ -430,3 +430,90 @@ export function pickSmartReplies(args: {
   // 중복 제거
   return Array.from(new Set(ordered)).slice(0, 5);
 }
+
+// ─── 🆕 v117.6: Idle Nudge — 사용자 10초+ 입력 없으면 루나가 한 줄 더 ───
+// 진짜 카톡 친구가 답장 안 오면 한 번 더 보내는 자연스러운 패턴.
+// 세션당 1회만 발동. 스토킹 X.
+// 톤: 부드러운 신호, 압박 X. "괜찮아?" / "왜 답 안 해" 류 직접 위로/추궁 금지.
+
+export const NUDGE_BY_MOOD: Record<LunaMood, readonly string[]> = {
+  bright: [
+    '오늘 뭐 좋았어?',
+    '한 줄로 던져봐 ✨',
+    '뭐가 너 망설이게 해 ㅎ',
+    '음, 좋은 일 있어 보였는데',
+  ],
+  warm: [
+    '있잖아, 무슨 일이야',
+    '편하게 다 풀어봐',
+    '한 글자라도 적어줘 ㅎ',
+    '천천히 와도 돼, 듣고있어',
+  ],
+  playful: [
+    'ㅎ 뭐 생각하고 있어?',
+    '야 말해봐 궁금해 ㅋㅋ',
+    '뭐가 그렇게 망설여져',
+    '입 좀 떼봐 ㅋㅋ',
+  ],
+  wistful: [
+    '음… 무거우면 한 단어부터',
+    '있잖아, 그냥 한 줄이면 돼',
+    '정리 안 돼도 적어도 돼',
+    '천천히, 옆에 있을게',
+  ],
+  sleepy: [
+    '잠 안 와서 그래?',
+    '천천히 적어도 돼 ㅎ',
+    '새벽이라 멍하지',
+    '한 단어부터 시작해봐',
+  ],
+  thoughtful: [
+    '천천히, 떠오르는 거부터',
+    '복잡하면 한 단어로',
+    '어디부터 시작할지 모르겠지',
+    '음… 한 줄만 적어줘',
+  ],
+  peaceful: [
+    '편하게, 한 줄이면 충분해',
+    '그냥 떠오르는 거 적어줘',
+    '여기 있어, 천천히',
+    '바로 시작 안 해도 돼',
+  ],
+};
+
+/** intimacy ≥4 친근 보강 — 시드 기반으로 가끔 등장 */
+const NUDGE_CLOSE_FRIEND: readonly string[] = [
+  '야, 무슨 일이야 진짜',
+  '말해봐, 듣고있어',
+  '뜸 들이지 말고 ㅎ',
+];
+
+/** 24h 내 자주 방문 (3+) — 걱정 톤 */
+const NUDGE_FREQUENT: readonly string[] = [
+  '오늘 자꾸 망설이네… 천천히 적어',
+  '괜찮아, 한 줄만 줘봐',
+  '오늘은 시작도 어렵지 ㅠ',
+];
+
+export function pickIdleNudge(args: {
+  mood: LunaMood;
+  recentSessionCount24h: number;
+  intimacyLevel: number;
+  /** 결정형 시드 (예: Date.now() / 1000) */
+  seed: number;
+}): string {
+  const seed = Math.abs(Math.floor(args.seed));
+
+  // 자주 방문 (3+) — 걱정 톤 우선
+  if (args.recentSessionCount24h >= 3) {
+    return NUDGE_FREQUENT[seed % NUDGE_FREQUENT.length];
+  }
+
+  // 절친 (intimacy ≥4) — 25% 확률로 친근 보강
+  if (args.intimacyLevel >= 4 && seed % 4 === 0) {
+    return NUDGE_CLOSE_FRIEND[(seed >> 2) % NUDGE_CLOSE_FRIEND.length];
+  }
+
+  const pool = NUDGE_BY_MOOD[args.mood];
+  return pool[seed % pool.length];
+}
