@@ -61,7 +61,12 @@ import IntimacyDeltaHint from '@/components/intimacy/IntimacyDeltaHint';
 //   는 사용 중단 (파일 보존, 롤백 가능). EntryRitualOrchestrator 만 시퀀스/사운드 용으로 유지.
 import EntryRitualOrchestrator from './EntryRitualOrchestrator';
 import LunaGreetingMessage from './LunaGreetingMessage';
-import SmartReplyBar from './SmartReplyBar';
+// 🆕 v117: 분홍 chip (SmartReplyBar) 제거 → "마음 한 컷" 폴라로이드 4컷 picker.
+//   사용자 피드백: 정적 chip 풀은 자유도/재미 모두 떨어짐. 픽은 무드 시드만 전달, 입력은 자유.
+//   기존 SmartReplyBar.tsx / whispers.ts SMART_REPLIES 는 파일 보존 — 다른 진입점 호환 위해.
+import MindPolaroidPicker from './MindPolaroidPicker';
+import MoodPinBadge from './MoodPinBadge';
+import type { MindPolaroidCard } from '@/lib/luna-life/mindPolaroidPool';
 import { useStreakDays } from '@/hooks/useStreakDays';
 import {
   computeLiveStateLocal,
@@ -270,11 +275,13 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
     });
   }, [lunaAgeDays, lifeStageInfo.stage, entry.recentSessionCount24h]);
 
-  // 🆕 v112-rev2: chip 클릭 → ChatInput 자동 채우기
-  const [inputDraft, setInputDraft] = useState<string | undefined>(undefined);
-
-  // 🆕 v112-rev2: LunaGreetingMessage 도착 완료 후 SmartReplyBar 등장
+  // 🆕 v112-rev2 / v117: LunaGreetingMessage 도착 완료 후 picker 등장 ready 플래그
+  // (v117 부터 picker 는 placeholder 만 변환 — input 자동 채우기 X, 자유도 최우선)
   const [readyForReply, setReadyForReply] = useState(false);
+
+  // 🆕 v117: "마음 한 컷" 폴라로이드 픽한 카드 (placeholder + 무드 시드)
+  const [mindCard, setMindCard] = useState<MindPolaroidCard | null>(null);
+  const [pickerDismissed, setPickerDismissed] = useState(false);
   const [xrayResult, setXrayResult] = useState<XRayResult | null>(null);
   const [xrayLoading, setXrayLoading] = useState(false);
   const [isInsightCollapsed, setIsInsightCollapsed] = useState(false);
@@ -1334,16 +1341,30 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
                   </span>
                 </div>
               )}
-              {/* 🆕 v112-rev2: ChatInput 바로 위 Smart Reply chip (가로) */}
+              {/* 🆕 v117: 분홍 chip 제거 → "마음 한 컷" 폴라로이드 4컷 picker.
+                  - 픽 → mindCard 세팅 → 입력창 위 핀 뱃지 + placeholder 변환 (입력은 자유)
+                  - "그냥 적을래" → pickerDismissed → picker 사라지고 자유 입력
+                  - 픽 후에도 mindCard X 클릭으로 시드 해제 가능 */}
               {activePersona !== 'tarot' && (
-                <SmartReplyBar
+                <MindPolaroidPicker
                   mood={liveState.mood}
+                  timeBand={liveState.timeBand}
                   ageDays={lunaAgeDays}
-                  intimacyLevel={intimacyDerived?.level ?? 0}
                   recentSessionCount24h={entry.recentSessionCount24h}
-                  visible={messages.length === 0 && readyForReply && !inputDraft}
-                  onChipSelect={(text) => setInputDraft(text)}
+                  visible={
+                    messages.length === 0
+                    && readyForReply
+                    && !mindCard
+                    && !pickerDismissed
+                  }
+                  onPick={(card) => setMindCard(card)}
+                  onDismiss={() => setPickerDismissed(true)}
                 />
+              )}
+
+              {/* 🆕 v117: 픽한 마음 시드를 입력창 위 핀 뱃지로 표시 */}
+              {activePersona !== 'tarot' && messages.length === 0 && (
+                <MoodPinBadge card={mindCard} onClear={() => setMindCard(null)} />
               )}
 
               <ChatInput
@@ -1354,13 +1375,17 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
                   pendingEventLock
                     ? '위 질문에 답해줘 ↑'
                     : (activePersona !== 'tarot' && openingVideoEnded && messages.length === 0)
-                      ? (liveState.mood === 'wistful'
-                          ? '한 줄이면 충분해…'
-                          : liveState.mood === 'playful'
-                            ? '오늘은 뭐 얘기할까 ✨'
-                            : liveState.mood === 'sleepy'
-                              ? '가만히 적어도 돼'
-                              : '한 줄만 적어봐 ✨')
+                      ? (
+                          // v117: 마음 카드 픽했으면 그 톤의 placeholder
+                          mindCard?.placeholderHint
+                          ?? (liveState.mood === 'wistful'
+                              ? '한 줄이면 충분해…'
+                              : liveState.mood === 'playful'
+                                ? '오늘은 뭐 얘기할까 ✨'
+                                : liveState.mood === 'sleepy'
+                                  ? '가만히 적어도 돼'
+                                  : '한 줄만 적어봐 ✨')
+                        )
                       : '마음 편하게 다 말해봐...'
                 }
                 typingPlaceholder={
@@ -1368,7 +1393,6 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
                     ? (activePersona === 'tarot' ? '타로냥이 카드를 읽고 있어' : '루나가 답장을 고민하고 있어')
                     : undefined
                 }
-                initialValue={inputDraft}
               />
             </div>
           )}
