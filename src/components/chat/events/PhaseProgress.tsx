@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, type ReactNode } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import type { ConversationPhaseV2 } from '@/types/engine.types';
 import type { PersonaMode } from '@/types/persona.types';
@@ -340,6 +340,296 @@ interface PhaseProgressProps {
   persona?: PersonaMode;
   lunaThinking?: string;
   understandingLevel?: number;
+}
+
+// ============================================================================
+// 🆕 v118 — 분기 트랜지션 시스템
+//   HOOK → (일상/상담) 점프 시점 감지 + 1.6초 셀러브레이션 오버레이 + 영구 배지
+// ============================================================================
+
+type BranchDirection = 'consult' | 'daily';
+
+const CASUAL_PHASE_IDS = ['GREET', 'CATCHUP', 'BANTER', 'LINGER', 'FAREWELL', 'DAILY_CHAT'] as const;
+
+function isCasualPhase(p: ConversationPhaseV2 | null): boolean {
+  return p !== null && (CASUAL_PHASE_IDS as readonly string[]).includes(p);
+}
+
+/** HOOK → 분기 점프 감지 훅. branchEvent 가 1.6초 동안 살아있다가 자동 소멸. */
+function usePhaseTransition(currentPhase: ConversationPhaseV2 | null) {
+  const [prevPhase, setPrevPhase] = useState<ConversationPhaseV2 | null>(currentPhase);
+  const [branchEvent, setBranchEvent] = useState<{ direction: BranchDirection; timestamp: number } | null>(null);
+  // 한 번이라도 분기됐는지 (배지 표시용)
+  const [branchedTo, setBranchedTo] = useState<BranchDirection | null>(() => {
+    if (currentPhase && currentPhase !== 'HOOK') {
+      return isCasualPhase(currentPhase) ? 'daily' : 'consult';
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (prevPhase === 'HOOK' && currentPhase && currentPhase !== 'HOOK') {
+      const direction: BranchDirection = isCasualPhase(currentPhase) ? 'daily' : 'consult';
+      const ts = Date.now();
+      setBranchEvent({ direction, timestamp: ts });
+      setBranchedTo(direction);
+      const timer = setTimeout(() => {
+        setBranchEvent((prev) => (prev && prev.timestamp === ts ? null : prev));
+      }, 1700);
+      setPrevPhase(currentPhase);
+      return () => clearTimeout(timer);
+    }
+    // HOOK 으로 되돌아가면 배지/이벤트 리셋
+    if (currentPhase === 'HOOK' && prevPhase !== 'HOOK') {
+      setBranchedTo(null);
+      setBranchEvent(null);
+    }
+    setPrevPhase(currentPhase);
+  }, [currentPhase, prevPhase]);
+
+  return { branchEvent, branchedTo };
+}
+
+// ── 분기 컬러 토큰 ──────────────────────────────────────────────
+const BRANCH_THEME: Record<BranchDirection, { primary: string; secondary: string; glow: string; label: string; emoji: string; particleFills: string[]; }> = {
+  consult: {
+    primary: '#ec4899',
+    secondary: '#fbcfe8',
+    glow: 'rgba(236,72,153,0.45)',
+    label: '상담 모드',
+    emoji: '💕',
+    particleFills: ['#fda4af', '#f472b6', '#fbbf24', '#fef08a', '#fff'],
+  },
+  daily: {
+    primary: '#22c55e',
+    secondary: '#bbf7d0',
+    glow: 'rgba(34,197,94,0.42)',
+    label: '일상 모드',
+    emoji: '🍃',
+    particleFills: ['#86efac', '#bbf7d0', '#fbbf24', '#fda4af', '#fff'],
+  },
+};
+
+// ── 입자 1개 SVG ───────────────────────────────────────────────
+function ConfettiParticle({ kind, color, delay, angle, distance, size }: {
+  kind: 'star' | 'heart' | 'petal' | 'dot';
+  color: string;
+  delay: number;
+  angle: number;
+  distance: number;
+  size: number;
+}) {
+  const rad = (angle * Math.PI) / 180;
+  const tx = Math.cos(rad) * distance;
+  const ty = Math.sin(rad) * distance;
+  return (
+    <motion.svg
+      viewBox="0 0 20 20"
+      width={size}
+      height={size}
+      className="absolute pointer-events-none"
+      style={{ left: '50%', top: '50%', marginLeft: -size / 2, marginTop: -size / 2 }}
+      initial={{ x: 0, y: 0, opacity: 0, rotate: 0, scale: 0.4 }}
+      animate={{ x: tx, y: ty, opacity: [0, 1, 1, 0], rotate: angle + 180, scale: [0.4, 1.1, 1, 0.6] }}
+      transition={{ duration: 1.5, delay, ease: [0.22, 1, 0.36, 1], times: [0, 0.18, 0.7, 1] }}
+    >
+      {kind === 'star' && (
+        <path
+          d="M10 1 L12 7 L18 7 L13.2 11 L15 17 L10 13.5 L5 17 L6.8 11 L2 7 L8 7 Z"
+          fill={color}
+        />
+      )}
+      {kind === 'heart' && (
+        <path
+          d="M10 17s-6-4-7.5-7.5C1.2 6.6 3.2 4 6 4c1.6 0 2.8 1 4 2.2C11.2 5 12.4 4 14 4c2.8 0 4.8 2.6 3.5 5.5C16 13 10 17 10 17z"
+          fill={color}
+        />
+      )}
+      {kind === 'petal' && (
+        <ellipse cx="10" cy="10" rx="3" ry="6" fill={color} />
+      )}
+      {kind === 'dot' && (
+        <circle cx="10" cy="10" r="3.5" fill={color} />
+      )}
+    </motion.svg>
+  );
+}
+
+// ── DivergenceCelebration : 1.6초 분기 셀러브레이션 오버레이 ──
+function DivergenceCelebration({ direction }: { direction: BranchDirection }) {
+  const theme = BRANCH_THEME[direction];
+  const reduceMotion = useReducedMotion() ?? false;
+
+  // 22개 입자 — 별/하트/꽃잎/도트 믹스
+  const particles = Array.from({ length: 22 }, (_, i) => {
+    const angleBase = (i / 22) * 360;
+    const angleJitter = (Math.random() - 0.5) * 24;
+    const angle = angleBase + angleJitter;
+    const distance = 70 + Math.random() * 80;
+    const size = 9 + Math.random() * 7;
+    const delay = Math.random() * 0.18;
+    const kinds: Array<'star' | 'heart' | 'petal' | 'dot'> = ['star', 'heart', 'petal', 'dot'];
+    const kind = kinds[i % kinds.length];
+    const color = theme.particleFills[i % theme.particleFills.length];
+    return { kind, color, delay, angle, distance, size };
+  });
+
+  if (reduceMotion) {
+    // 모션 줄이기 모드 — 정적 배너만 1.6초 표시
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.3 }}
+        className="absolute inset-0 z-30 pointer-events-none flex items-center justify-center"
+        style={{ background: `${theme.glow}` }}
+      >
+        <span
+          className="px-4 py-1.5 rounded-full text-white font-bold text-sm shadow-lg"
+          style={{ background: theme.primary, fontFamily: '"Gowun Dodum", system-ui' }}
+        >
+          {theme.emoji} {theme.label} 시작
+        </span>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
+      className="absolute inset-0 z-30 pointer-events-none overflow-hidden"
+    >
+      {/* 배경 컬러 flash (0.4초 강했다가 fade) */}
+      <motion.div
+        className="absolute inset-0"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: [0, 0.55, 0.15] }}
+        transition={{ duration: 1.4, times: [0, 0.18, 1], ease: 'easeOut' }}
+        style={{
+          background: `radial-gradient(ellipse at ${direction === 'consult' ? '15% 50%' : '85% 50%'}, ${theme.glow}, transparent 70%)`,
+        }}
+      />
+
+      {/* 분기 방향 sweep ray — 한쪽으로 빛이 흐르는 효과 */}
+      <motion.div
+        className="absolute top-1/2 -translate-y-1/2 h-1 rounded-full"
+        initial={{ x: direction === 'consult' ? '40%' : '40%', width: 8, opacity: 0 }}
+        animate={{
+          x: direction === 'consult' ? ['40%', '0%'] : ['40%', '85%'],
+          width: [8, 220],
+          opacity: [0, 0.9, 0],
+        }}
+        transition={{ duration: 0.85, ease: 'easeOut', times: [0, 0.4, 1] }}
+        style={{
+          left: 0,
+          background: `linear-gradient(${direction === 'consult' ? '270deg' : '90deg'}, transparent, ${theme.primary}, transparent)`,
+          filter: `blur(2px) drop-shadow(0 0 8px ${theme.primary})`,
+        }}
+      />
+
+      {/* 폭죽 입자 22개 — 중앙(메달리온 자리) 에서 방사 */}
+      <div className="absolute left-1/2 top-1/2">
+        {particles.map((p, i) => (
+          <ConfettiParticle key={i} {...p} />
+        ))}
+      </div>
+
+      {/* 손글씨 배너 — 위에서 떨어져 spring bounce */}
+      <motion.div
+        className="absolute left-1/2 -translate-x-1/2"
+        style={{ top: '38%' }}
+        initial={{ y: -40, opacity: 0, rotate: -8, scale: 0.7 }}
+        animate={{
+          y: [-40, 8, -2, 0, 0, 0, -10],
+          opacity: [0, 1, 1, 1, 1, 1, 0],
+          rotate: [-8, 3, -2, 1, -1, 0, 5],
+          scale: [0.7, 1.12, 0.96, 1.04, 1, 1, 0.92],
+        }}
+        transition={{ duration: 1.7, times: [0, 0.15, 0.28, 0.4, 0.5, 0.85, 1], ease: 'easeOut' }}
+      >
+        <div
+          className="px-4 py-1.5 rounded-2xl shadow-lg flex items-center gap-1.5"
+          style={{
+            background: `linear-gradient(135deg, ${theme.primary} 0%, ${theme.primary}dd 100%)`,
+            boxShadow: `0 8px 24px ${theme.glow}, 0 2px 6px ${theme.primary}66`,
+            border: '2px solid rgba(255,255,255,0.85)',
+          }}
+        >
+          <span className="text-base leading-none">{theme.emoji}</span>
+          <span
+            className="text-white whitespace-nowrap"
+            style={{
+              fontFamily: '"Gowun Dodum", system-ui',
+              fontSize: '13px',
+              fontWeight: 800,
+              letterSpacing: '-0.01em',
+              textShadow: '0 1px 2px rgba(0,0,0,0.15)',
+            }}
+          >
+            {theme.label} 시작!
+          </span>
+        </div>
+        {/* 배너 아래 sparkle 2개 */}
+        <motion.div
+          className="absolute -bottom-1 left-3"
+          animate={{ scale: [0, 1.2, 0], rotate: [0, 180, 360] }}
+          transition={{ duration: 0.9, delay: 0.3, repeat: 1 }}
+        >
+          <svg viewBox="0 0 12 12" width={10} height={10}>
+            <path d="M6 0 L7 5 L12 6 L7 7 L6 12 L5 7 L0 6 L5 5 Z" fill="#fef08a" />
+          </svg>
+        </motion.div>
+        <motion.div
+          className="absolute -bottom-2 right-2"
+          animate={{ scale: [0, 1, 0], rotate: [0, -180, -360] }}
+          transition={{ duration: 0.9, delay: 0.5, repeat: 1 }}
+        >
+          <svg viewBox="0 0 12 12" width={8} height={8}>
+            <path d="M6 0 L7 5 L12 6 L7 7 L6 12 L5 7 L0 6 L5 5 Z" fill="#fff" />
+          </svg>
+        </motion.div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ── BranchBadge : 분기 후 트랙 우상단 칩 (영구 표시) ─────────
+function BranchBadge({ direction, justArrived }: { direction: BranchDirection; justArrived: boolean }) {
+  const theme = BRANCH_THEME[direction];
+  return (
+    <motion.div
+      initial={justArrived ? { opacity: 0, scale: 0.6, y: -6 } : { opacity: 1, scale: 1, y: 0 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ type: 'spring', damping: 14, stiffness: 220, delay: justArrived ? 1.5 : 0 }}
+      className="absolute top-1.5 right-2 z-20 inline-flex items-center gap-1 pointer-events-none"
+      style={{
+        background: `linear-gradient(135deg, ${theme.primary}, ${theme.primary}d0)`,
+        borderRadius: 999,
+        padding: '2px 8px 2px 7px',
+        boxShadow: `0 2px 8px ${theme.glow}, inset 0 1px 0 rgba(255,255,255,0.45)`,
+        border: '1px solid rgba(255,255,255,0.7)',
+      }}
+    >
+      <span style={{ fontSize: 9, lineHeight: 1 }}>{theme.emoji}</span>
+      <span
+        style={{
+          fontFamily: '"Gowun Dodum", system-ui',
+          fontSize: '9.5px',
+          fontWeight: 800,
+          color: 'white',
+          letterSpacing: '-0.01em',
+          textShadow: '0 1px 1px rgba(0,0,0,0.12)',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {theme.label}
+      </span>
+    </motion.div>
+  );
 }
 
 // ============================================================================
@@ -760,6 +1050,7 @@ function ConsultStepperTrack({
   persona,
   lunaThinking,
   fallbackText,
+  branchOverlay,
 }: {
   currentPhase: ConversationPhaseV2;
   steps: PhaseStep[];
@@ -768,6 +1059,7 @@ function ConsultStepperTrack({
   persona: PersonaMode;
   lunaThinking?: string;
   fallbackText: string;
+  branchOverlay?: ReactNode;
 }) {
   const reduceMotion = useReducedMotion() ?? false;
   const isTarot = persona === 'tarot';
@@ -976,6 +1268,7 @@ function ConsultStepperTrack({
             />
           </motion.span>
         </div>
+        {branchOverlay}
       </motion.div>
     </div>
   );
@@ -1059,7 +1352,7 @@ const CASUAL_STEPS: ReadonlyArray<{
   { id: 'FAREWELL', label: '작별',  status: '또 봐~ ✨',         Icon: WaveHandIcon,   activeColor: 'text-orange-600' },
 ];
 
-function CasualPhaseTrack({ currentPhase, lunaThinking }: { currentPhase: CasualPhaseId; lunaThinking?: string }) {
+function CasualPhaseTrack({ currentPhase, lunaThinking, branchOverlay }: { currentPhase: CasualPhaseId; lunaThinking?: string; branchOverlay?: ReactNode }) {
   const currentIdx = CASUAL_STEPS.findIndex(s => s.id === currentPhase);
   const safeIdx = currentIdx < 0 ? 0 : currentIdx;
   const currentStep = CASUAL_STEPS[safeIdx];
@@ -1075,7 +1368,7 @@ function CasualPhaseTrack({ currentPhase, lunaThinking }: { currentPhase: Casual
   return (
     <div className="w-full sticky top-[60px] z-10">
       <div className="h-[1px] bg-gradient-to-r from-pink-200/60 via-rose-300/40 to-amber-200/60" />
-      <div className="bg-gradient-to-r from-pink-50/80 via-white/90 to-amber-50/80 border-b border-pink-100/40 shadow-[0_4px_20px_rgba(244,114,182,0.06)] backdrop-blur-xl px-2 py-3">
+      <div className="relative overflow-hidden bg-gradient-to-r from-pink-50/80 via-white/90 to-amber-50/80 border-b border-pink-100/40 shadow-[0_4px_20px_rgba(244,114,182,0.06)] backdrop-blur-xl px-2 py-3">
         <div className="flex justify-between items-start w-full px-1 mb-1.5 relative">
           {/* 진행선 배경 */}
           <div
@@ -1166,6 +1459,7 @@ function CasualPhaseTrack({ currentPhase, lunaThinking }: { currentPhase: Casual
             />
           </motion.span>
         </div>
+        {branchOverlay}
       </div>
     </div>
   );
@@ -1179,15 +1473,28 @@ function CasualPhaseTrack({ currentPhase, lunaThinking }: { currentPhase: Casual
 //  - DAILY_CHAT (legacy alias) → CasualPhaseTrack(BANTER)
 // ============================================================================
 export default function PhaseProgress({ currentPhase, progress, persona = 'luna', lunaThinking, understandingLevel }: PhaseProgressProps) {
+  // 🆕 v118 — 분기 트랜지션 훅 (HOOK 일 때도 호출 → React Hook 규칙)
+  const { branchEvent, branchedTo } = usePhaseTransition(currentPhase);
+
   if (!currentPhase) return null;
 
-  // 일상 5-Phase 트랙
+  // 🆕 v118 — 분기 후 트랙에 얹을 overlay (배지 + 셀러브레이션)
+  const branchOverlay: ReactNode = branchedTo ? (
+    <>
+      <BranchBadge direction={branchedTo} justArrived={!!branchEvent} />
+      <AnimatePresence>
+        {branchEvent && <DivergenceCelebration key={branchEvent.timestamp} direction={branchEvent.direction} />}
+      </AnimatePresence>
+    </>
+  ) : null;
+
+  // 일상 5-Phase 트랙 (분기 후)
   if (currentPhase === 'GREET' || currentPhase === 'CATCHUP' || currentPhase === 'BANTER'
       || currentPhase === 'LINGER' || currentPhase === 'FAREWELL') {
-    return <CasualPhaseTrack currentPhase={currentPhase} lunaThinking={lunaThinking} />;
+    return <CasualPhaseTrack currentPhase={currentPhase} lunaThinking={lunaThinking} branchOverlay={branchOverlay} />;
   }
   if (currentPhase === 'DAILY_CHAT') {
-    return <CasualPhaseTrack currentPhase="BANTER" lunaThinking={lunaThinking} />;
+    return <CasualPhaseTrack currentPhase="BANTER" lunaThinking={lunaThinking} branchOverlay={branchOverlay} />;
   }
 
   // 🆕 v118 — HOOK = 상담↔일상 분기 전 모먼트. 5단계 stepper 띄우지 않음
@@ -1224,6 +1531,7 @@ export default function PhaseProgress({ currentPhase, progress, persona = 'luna'
       persona={persona}
       lunaThinking={lunaThinking}
       fallbackText={currentStep.statusText}
+      branchOverlay={branchOverlay}
     />
   );
 }
