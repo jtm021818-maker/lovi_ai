@@ -43,7 +43,7 @@ import IdeaMode from '@/components/modes/idea/IdeaMode';
 import DraftMode from '@/components/modes/draft/DraftMode';
 import PanelMode from '@/components/modes/panel/PanelMode';
 import RoleplayMode from '@/components/modes/roleplay/RoleplayMode';
-import DraftsVault from '@/components/drafts/DraftsVault';
+import BagSheet from '@/components/luna-room/BagSheet';
 import { useModeStore } from '@/engines/bridge-modes/mode-store';
 import type { ModeId, ToneOption, DraftOption, PanelPersona, RoleplayState } from '@/engines/bridge-modes/types';
 import LunaThoughtHistory from './LunaThoughtHistory';
@@ -439,8 +439,8 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
   //   persist 된 modeSessionId 가 현재 세션과 일치할 때만 활성화된 것으로 간주.
   const activeMode = modeSessionId === sessionId ? activeModeRaw : null;
   const modeState = modeSessionId === sessionId ? modeStateRaw : null;
-  // 🆕 v81: 설정 / 초안함 토글
-  const [showDraftsVault, setShowDraftsVault] = useState(false);
+  // v119: 우상단 플로팅 — 가방(인벤토리) 토글
+  const [showBag, setShowBag] = useState(false);
 
   async function handleModeEnter(mode: ModeId | 'browse_together', strategyData: { opener?: string; situationSummary?: string }) {
     const context = strategyData.situationSummary ?? '';
@@ -823,21 +823,6 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
               </motion.div>
               <IntimacyDeltaHint delta={intimacyDelta} />
             </div>
-          )}
-
-          {/* 🆕 v90: "상담 마치기" — 메모리 즉시 추출 트리거 (자동 트리거 보완) */}
-          {sessionStatus !== 'completed' && userMsgCount >= 3 && (
-            <button
-              onClick={() => {
-                if (confirm('이번 상담을 마칠까? 루나가 추억을 정리해 둘게.')) {
-                  completeSessionNow();
-                }
-              }}
-              className="ml-2 px-2.5 py-1.5 rounded-2xl bg-white/60 hover:bg-white/90 border border-white/50 shadow-sm text-[10.5px] font-bold text-[#795548] transition-colors"
-              title="상담을 마치고 루나가 기억하게 하기"
-            >
-              마치기
-            </button>
           )}
 
         </div>
@@ -1383,18 +1368,19 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
           )}
         </div>
 
-        {/* 🆕 v81: 우상단 플로팅 — 설정 & 초안함 */}
+        {/* v119: 우상단 플로팅 — 가방(인벤토리) */}
         <div className="fixed top-3 right-3 z-[8000] flex flex-col gap-1.5 pointer-events-none">
           <button
-            onClick={() => setShowDraftsVault(true)}
+            onClick={() => setShowBag(true)}
             className="pointer-events-auto w-9 h-9 rounded-full bg-white/80 backdrop-blur-md border border-[#D5C2A5]/60 shadow-sm flex items-center justify-center active:scale-95 transition-transform"
-            title="내 초안함"
+            title="내 가방"
+            aria-label="가방 열기"
           >
-            <span className="text-base">📂</span>
+            <span className="text-base">🎒</span>
           </button>
         </div>
 
-        <DraftsVault open={showDraftsVault} onClose={() => setShowDraftsVault(false)} />
+        <BagSheet open={showBag} onClose={() => setShowBag(false)} />
     </div>
   );
 }
