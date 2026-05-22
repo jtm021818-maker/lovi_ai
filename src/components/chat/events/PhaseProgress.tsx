@@ -1,7 +1,30 @@
-import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+﻿import { useState, useEffect } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import type { ConversationPhaseV2 } from '@/types/engine.types';
 import type { PersonaMode } from '@/types/persona.types';
+import LunaSprite from '@/components/common/LunaSprite';
+
+// ============================================================================
+// 🦊 v118 — 단계별 컬러 토큰 (LUNA_PHASES & TAROT)
+// "한 화면 = 한 감정" 원칙. 활성 단계 컬러가 컴포넌트 전체 톤을 지배.
+// ============================================================================
+
+type PhaseColor = { primary: string; secondary: string; glow: string; soft: string };
+
+const LUNA_PHASE_COLORS: Record<string, PhaseColor> = {
+  HOOK:    { primary: '#fb7185', secondary: '#fbcfe8', glow: 'rgba(251,113,133,0.45)', soft: 'rgba(255,247,251,0.96)' },
+  MIRROR:  { primary: '#a855f7', secondary: '#e9d5ff', glow: 'rgba(168,85,247,0.42)',  soft: 'rgba(252,247,255,0.96)' },
+  BRIDGE:  { primary: '#f97316', secondary: '#fed7aa', glow: 'rgba(249,115,22,0.45)',  soft: 'rgba(255,250,243,0.96)' },
+  SOLVE:   { primary: '#22c55e', secondary: '#bbf7d0', glow: 'rgba(34,197,94,0.40)',   soft: 'rgba(245,253,247,0.96)' },
+  EMPOWER: { primary: '#eab308', secondary: '#fef08a', glow: 'rgba(234,179,8,0.45)',   soft: 'rgba(254,252,232,0.96)' },
+};
+
+const TAROT_PHASE_COLOR: PhaseColor = {
+  primary: '#7c3aed',
+  secondary: '#c4b5fd',
+  glow: 'rgba(124,58,237,0.40)',
+  soft: 'rgba(252,247,255,0.96)',
+};
 
 // ============================================================================
 // 🦊 루나 상담 여정 — 커스텀 SVG 아이콘 & 데이터
@@ -320,210 +343,400 @@ interface PhaseProgressProps {
 }
 
 // ============================================================================
-// 🆕 v105: BranchedTrack — HOOK 단계 Y자 분기 시각화
-// 위쪽 path = 💕 상담 흐름 / 아래쪽 path = 🍃 일상 수다
-// 두 갈래로 갈라지는 SVG 곡선 + 분기점 펄스 글로우
+// 🆕 v118 — LiveLunaMedallion : 살아있는 루나 메달리온
+// 7×7 luna_sprite_setting_1.webp 풀 루프 + 단계 컬러 글로우 + 우상단 둥둥 하트
+// 단계 전환 시 scale bump 으로 "넘어왔어!" 신호.
 // ============================================================================
-
-// ============================================================================
-// 🆕 v116.9: BranchedTrack — "조용히 듣고 있어" 모먼트
-// (분기 메커니즘 표시 제거. 루나가 가만히 듣는 모습 한 컷.
-//  손그림 꽃잎 + 두근거리는 하트 + 타이핑 도트 + 손글씨 카피)
-// ============================================================================
-function BranchedTrack({
-  lunaThinking,
+function LiveLunaMedallion({
   persona,
-}: { lunaThinking?: string; persona: PersonaMode }) {
-  const displayText = lunaThinking || (persona === 'tarot' ? '카드 펼치는 중 🐱' : '이야기 듣는 중 🦊');
-  const typedStatus = useTypewriter(displayText, 70);
+  color,
+  phaseKey,
+  reduceMotion,
+  size = 44,
+}: {
+  persona: PersonaMode;
+  color: PhaseColor;
+  phaseKey: string;
+  reduceMotion: boolean;
+  size?: number;
+}) {
   const isTarot = persona === 'tarot';
 
-  // 떠다니는 손그림 꽃잎 데이터
-  const petals = [
-    { l: '6%',  t: '12%', size: 16, rot: -22, delay: 0.0 },
-    { l: '24%', t: '70%', size: 12, rot: 30,  delay: 0.7 },
-    { l: '46%', t: '14%', size: 11, rot: -8,  delay: 1.1 },
-    { l: '64%', t: '74%', size: 13, rot: 18,  delay: 0.3 },
-    { l: '84%', t: '20%', size: 10, rot: -28, delay: 1.6 },
-    { l: '92%', t: '64%', size: 14, rot: 12,  delay: 0.9 },
-  ];
-
-  const petalFill = isTarot ? '#e9d5ff' : '#fbcfe8';
-  const petalStroke = isTarot ? '#c4b5fd' : '#f9a8d4';
-  const petalCore = isTarot ? '#fde68a' : '#fde68a';
-
   return (
-    <div className="w-full sticky top-[60px] z-10">
-      <div
-        className="h-[1px]"
-        style={{
-          background: isTarot
-            ? 'linear-gradient(to right, transparent, rgba(196,181,253,0.55), transparent)'
-            : 'linear-gradient(to right, transparent, rgba(244,114,182,0.55), transparent)',
-        }}
+    <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+      {/* 외곽 글로우 펄스 (호흡) */}
+      <motion.div
+        className="absolute inset-[-10px] rounded-full pointer-events-none"
+        style={{ background: `radial-gradient(circle, ${color.glow}, transparent 65%)` }}
+        animate={reduceMotion ? {} : { scale: [1, 1.22, 1], opacity: [0.5, 1, 0.5] }}
+        transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
       />
-      <div
-        className="relative overflow-hidden backdrop-blur-xl border-b py-3 px-4"
+
+      {/* 메달리온 본체 — 단계 변경 시 살짝 튕김 */}
+      <motion.div
+        key={phaseKey}
+        initial={reduceMotion ? false : { scale: 0.92, rotate: -3 }}
+        animate={{ scale: 1, rotate: 0 }}
+        transition={{ type: 'spring', damping: 14, stiffness: 200 }}
+        className="relative w-full h-full rounded-full flex items-center justify-center overflow-hidden"
         style={{
-          background: isTarot
-            ? 'linear-gradient(135deg, rgba(252,247,255,0.96) 0%, rgba(255,247,252,0.96) 100%)'
-            : 'linear-gradient(135deg, rgba(255,247,251,0.96) 0%, rgba(255,250,243,0.96) 100%)',
-          borderColor: 'rgba(244,114,182,0.10)',
-          boxShadow: '0 2px 18px rgba(244,114,182,0.07)',
+          background: 'rgba(255,255,255,0.92)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          boxShadow: `0 4px 16px ${color.glow}, inset 0 1px 2px rgba(255,255,255,0.95)`,
+          border: `1.6px solid ${color.secondary}`,
         }}
       >
-        {/* 떠다니는 손그림 꽃잎 (벚꽃 5장) */}
-        {petals.map((p, i) => (
-          <motion.svg
-            key={i}
-            viewBox="0 0 20 20"
-            width={p.size}
-            height={p.size}
-            className="absolute pointer-events-none"
-            style={{ left: p.l, top: p.t }}
-            animate={{
-              y: [0, -6, 0],
-              rotate: [p.rot, p.rot + 10, p.rot],
-              opacity: [0.4, 0.85, 0.4],
-            }}
-            transition={{ duration: 4 + i * 0.5, repeat: Infinity, delay: p.delay, ease: 'easeInOut' }}
+        {isTarot ? (
+          // 타로 페르소나: 전용 sprite 없어서 SVG 고양이 아이콘
+          <div className="w-[78%] h-[78%]">
+            <CatEarIcon active={true} past={false} />
+          </div>
+        ) : (
+          // 루나: 7×7 라이브 픽셀 sprite
+          <LunaSprite
+            preset="setting"
+            size={Math.round(size * 0.84)}
+            speed={reduceMotion ? 'slow' : 'normal'}
+            paused={reduceMotion}
+            circle={false}
+          />
+        )}
+      </motion.div>
+
+      {/* 우상단 둥둥 하트 — "누나가 보고 있어" 시그널 */}
+      <motion.svg
+        viewBox="0 0 24 24"
+        width={15}
+        height={15}
+        className="absolute -top-1 -right-1.5 pointer-events-none"
+        animate={reduceMotion ? {} : { y: [0, -2, 0], rotate: [-10, 5, -10] }}
+        transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+        style={{ filter: `drop-shadow(0 1.5px 2.5px ${color.glow})` }}
+      >
+        <path
+          d="M12 21s-7-4.5-9-9c-1.5-3.5 1-7 4.5-7 2 0 3.5 1.2 4.5 2.5C13 6.2 14.5 5 16.5 5 20 5 22.5 8.5 21 12c-2 4.5-9 9-9 9z"
+          fill={color.primary}
+          stroke="white"
+          strokeWidth="1.5"
+        />
+      </motion.svg>
+    </div>
+  );
+}
+
+// ============================================================================
+// 🆕 v118 — FloatingPetals : 떠다니는 손그림 꽃잎 6장
+// 모든 상담 단계에서 배경 무드로 항상 떠있음 (BranchedTrack 의 매력 보존)
+// ============================================================================
+function FloatingPetals({ color, reduceMotion }: { color: PhaseColor; reduceMotion: boolean }) {
+  const petals = [
+    { l: '5%',  t: '14%', size: 14, rot: -22, delay: 0.0 },
+    { l: '22%', t: '72%', size: 11, rot: 30,  delay: 0.7 },
+    { l: '44%', t: '12%', size: 10, rot: -8,  delay: 1.1 },
+    { l: '64%', t: '76%', size: 12, rot: 18,  delay: 0.3 },
+    { l: '82%', t: '18%', size: 9,  rot: -28, delay: 1.6 },
+    { l: '92%', t: '62%', size: 13, rot: 12,  delay: 0.9 },
+  ];
+
+  if (reduceMotion) return null;
+
+  return (
+    <>
+      {petals.map((p, i) => (
+        <motion.svg
+          key={i}
+          viewBox="0 0 20 20"
+          width={p.size}
+          height={p.size}
+          className="absolute pointer-events-none"
+          style={{ left: p.l, top: p.t }}
+          animate={{
+            y: [0, -6, 0],
+            rotate: [p.rot, p.rot + 10, p.rot],
+            opacity: [0.35, 0.85, 0.35],
+          }}
+          transition={{ duration: 4 + i * 0.5, repeat: Infinity, delay: p.delay, ease: 'easeInOut' }}
+        >
+          {[0, 72, 144, 216, 288].map((deg) => (
+            <ellipse
+              key={deg}
+              cx="10" cy="5.5" rx="2.3" ry="3.8"
+              fill={color.secondary}
+              stroke={color.primary}
+              strokeWidth="0.5"
+              opacity="0.7"
+              transform={`rotate(${deg} 10 10)`}
+            />
+          ))}
+          <circle cx="10" cy="10" r="1.6" fill="#fde68a" opacity="0.85" />
+        </motion.svg>
+      ))}
+    </>
+  );
+}
+
+// ============================================================================
+// 🆕 v118 — ListeningMoment : HOOK (상담↔일상 분기 전) 전용 트랙
+//  - "조용히 듣고 있어" 모먼트 + 좌우 양 갈래 path 시각화
+//  - 중앙 큰 라이브 루나 메달리온 (sprite 50×50) + 떠다니는 꽃잎 + 둥둥 하트 + 타이핑 도트
+//  - 좌측 path 끝: 💕 상담 / 우측 path 끝: 🍃 일상  (둘 다 옅게 — 아직 결정 안 됨)
+//  - 클릭 X — 어디로 갈지는 LLM/유저의 다음 메시지가 결정 (v117.5 anti-chip)
+// ============================================================================
+function ListeningMoment({
+  lunaThinking,
+  persona,
+}: {
+  lunaThinking?: string;
+  persona: PersonaMode;
+}) {
+  const reduceMotion = useReducedMotion() ?? false;
+  const isTarot = persona === 'tarot';
+  const color: PhaseColor = isTarot ? TAROT_PHASE_COLOR : LUNA_PHASE_COLORS.HOOK;
+
+  const fallback = isTarot ? '카드 펼치는 중 🐱' : '조용히 듣고 있어';
+  const displayText = (lunaThinking && lunaThinking.trim()) ? lunaThinking : fallback;
+  const typedStatus = useTypewriter(displayText, 70);
+
+  // 일상 경로 컬러 (분기 힌트용)
+  const dailyColor = isTarot ? color.primary : '#22c55e';
+  const dailyGlow = isTarot ? color.glow : 'rgba(34,197,94,0.22)';
+
+  return (
+    <div className="w-full sticky top-[60px] z-10"
+      role="status" aria-live="polite"
+      aria-label="이야기 듣는 중 — 다음 흐름 결정 전">
+      <div
+        className="h-[1px]"
+        style={{ background: `linear-gradient(to right, transparent, ${color.primary}55, transparent)` }}
+      />
+
+      <div
+        className="relative overflow-hidden backdrop-blur-xl border-b"
+        style={{
+          background: `linear-gradient(135deg, ${color.soft} 0%, rgba(255,255,255,0.94) 100%)`,
+          borderColor: `${color.primary}1a`,
+          boxShadow: `0 2px 18px ${color.primary}12`,
+          paddingTop: 12,
+          paddingBottom: 14,
+          paddingLeft: 14,
+          paddingRight: 14,
+        }}
+      >
+        <FloatingPetals color={color} reduceMotion={reduceMotion} />
+
+        {/* Y자 분기 path SVG */}
+        <svg
+          viewBox="0 0 400 60"
+          className="absolute left-0 right-0 mx-auto pointer-events-none"
+          style={{ top: 28, width: '100%', height: 60, opacity: 0.55 }}
+          preserveAspectRatio="none"
+        >
+          <motion.path
+            d="M200 22 Q140 22 100 12 Q70 6 40 10"
+            fill="none"
+            stroke={color.primary}
+            strokeWidth="1.4"
+            strokeDasharray="3 4"
+            strokeLinecap="round"
+            initial={reduceMotion ? false : { pathLength: 0, opacity: 0 }}
+            animate={{ pathLength: 1, opacity: 0.7 }}
+            transition={{ duration: 1.4, ease: 'easeOut' }}
+          />
+          <motion.path
+            d="M200 22 Q260 22 300 32 Q330 38 360 36"
+            fill="none"
+            stroke={dailyColor}
+            strokeWidth="1.4"
+            strokeDasharray="3 4"
+            strokeLinecap="round"
+            initial={reduceMotion ? false : { pathLength: 0, opacity: 0 }}
+            animate={{ pathLength: 1, opacity: 0.7 }}
+            transition={{ duration: 1.4, ease: 'easeOut', delay: 0.18 }}
+          />
+        </svg>
+
+        {/* 메인 행: 좌측 상담힌트 — 중앙 큰 메달리온 — 우측 일상힌트 */}
+        <div className="relative flex items-center justify-between gap-2 min-h-[64px]">
+          {/* 좌측: 상담 흐름 힌트 */}
+          <motion.div
+            className="flex flex-col items-center flex-shrink-0"
+            initial={reduceMotion ? false : { opacity: 0, x: -4 }}
+            animate={{ opacity: 0.8, x: 0 }}
+            transition={{ duration: 0.6, delay: 0.55 }}
           >
-            {[0, 72, 144, 216, 288].map((deg) => (
-              <ellipse
-                key={deg}
-                cx="10" cy="5.5" rx="2.3" ry="3.8"
-                fill={petalFill}
-                stroke={petalStroke}
-                strokeWidth="0.5"
-                transform={`rotate(${deg} 10 10)`}
-              />
-            ))}
-            <circle cx="10" cy="10" r="1.6" fill={petalCore} />
-          </motion.svg>
-        ))}
-
-        {/* 메인 행 — 루나 아바타 + 상태 문구 */}
-        <div className="relative flex items-center gap-3 min-h-[58px]">
-
-          {/* 루나 아바타 + 하트 펄스 */}
-          <div className="flex-shrink-0">
-            <div className="relative">
-              {/* 외곽 글로우 펄스 */}
-              <motion.div
-                className="absolute inset-[-8px] rounded-full pointer-events-none"
-                style={{
-                  background: isTarot
-                    ? 'radial-gradient(circle, rgba(196,181,253,0.42), transparent 65%)'
-                    : 'radial-gradient(circle, rgba(251,113,133,0.45), transparent 65%)',
-                }}
-                animate={{ scale: [1, 1.22, 1], opacity: [0.5, 1, 0.5] }}
-                transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-              />
-              {/* 글래스 오브 */}
-              <div
-                className="relative w-12 h-12 rounded-full flex items-center justify-center p-1.5"
-                style={{
-                  background: 'rgba(255,255,255,0.88)',
-                  backdropFilter: 'blur(10px)',
-                  WebkitBackdropFilter: 'blur(10px)',
-                  boxShadow: isTarot
-                    ? '0 4px 14px rgba(124,58,237,0.26), inset 0 1px 2px rgba(255,255,255,0.95)'
-                    : '0 4px 14px rgba(244,114,182,0.30), inset 0 1px 2px rgba(255,255,255,0.95)',
-                  border: '1.5px solid rgba(255,255,255,0.9)',
-                }}
-              >
-                {isTarot ? <CatEarIcon active={true} past={false} /> : <FoxEarIcon active={true} past={false} />}
-              </div>
-
-              {/* 우상단 작은 하트 (둥둥) */}
-              <motion.svg
-                viewBox="0 0 24 24" width={14} height={14}
-                className="absolute -top-1 -right-1.5 pointer-events-none"
-                animate={{ y: [0, -2, 0], rotate: [-10, 5, -10] }}
-                transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
-              >
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center p-1"
+              style={{
+                background: 'rgba(255,255,255,0.78)',
+                border: `1px dashed ${color.primary}66`,
+                boxShadow: `0 1px 6px ${color.primary}22`,
+              }}
+            >
+              <svg viewBox="0 0 24 24" className="w-5 h-5">
                 <path
                   d="M12 21s-7-4.5-9-9c-1.5-3.5 1-7 4.5-7 2 0 3.5 1.2 4.5 2.5C13 6.2 14.5 5 16.5 5 20 5 22.5 8.5 21 12c-2 4.5-9 9-9 9z"
-                  fill={isTarot ? '#c084fc' : '#fb7185'}
-                  stroke="white"
-                  strokeWidth="1.5"
+                  fill={color.primary}
+                  opacity="0.88"
                 />
-              </motion.svg>
+              </svg>
             </div>
-          </div>
+            <span
+              className="mt-1 whitespace-nowrap"
+              style={{
+                fontFamily: '"Gowun Dodum", system-ui',
+                fontSize: '10px',
+                fontWeight: 700,
+                letterSpacing: '-0.01em',
+                color: `${color.primary}d0`,
+                opacity: 0.9,
+              }}
+            >
+              상담
+            </span>
+          </motion.div>
 
-          {/* 중앙: "조용히 듣고 있어" + 타이핑 도트 + 두근거리는 하트 */}
-          <div className="flex-1 flex items-center gap-2 min-w-0">
+          {/* 중앙: 큰 라이브 루나 메달리온 */}
+          <div className="relative flex-shrink-0" style={{ width: 60, height: 60 }}>
+            <motion.div
+              className="absolute inset-[-12px] rounded-full pointer-events-none"
+              style={{ background: `radial-gradient(circle, ${color.glow}, transparent 65%)` }}
+              animate={reduceMotion ? {} : { scale: [1, 1.18, 1], opacity: [0.55, 1, 0.55] }}
+              transition={{ duration: 1.9, repeat: Infinity, ease: 'easeInOut' }}
+            />
+            <motion.div
+              initial={reduceMotion ? false : { scale: 0.9 }}
+              animate={{ scale: 1 }}
+              transition={{ type: 'spring', damping: 14, stiffness: 180 }}
+              className="relative w-full h-full rounded-full flex items-center justify-center overflow-hidden"
+              style={{
+                background: 'rgba(255,255,255,0.94)',
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
+                boxShadow: `0 6px 20px ${color.glow}, inset 0 1px 3px rgba(255,255,255,0.95)`,
+                border: `2px solid ${color.secondary}`,
+              }}
+            >
+              {isTarot ? (
+                <div className="w-[80%] h-[80%]">
+                  <CatEarIcon active={true} past={false} />
+                </div>
+              ) : (
+                <LunaSprite
+                  preset="setting"
+                  size={50}
+                  speed={reduceMotion ? 'slow' : 'normal'}
+                  paused={reduceMotion}
+                  circle={false}
+                />
+              )}
+            </motion.div>
+            {/* 우상단 둥둥 하트 */}
             <motion.svg
-              viewBox="0 0 24 24" width={18} height={18}
-              animate={{ scale: [1, 1.22, 1] }}
-              transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
-              style={{ filter: 'drop-shadow(0 1.5px 2.5px rgba(244,114,182,0.4))' }}
+              viewBox="0 0 24 24" width={17} height={17}
+              className="absolute -top-1.5 -right-2 pointer-events-none"
+              animate={reduceMotion ? {} : { y: [0, -3, 0], rotate: [-10, 8, -10], scale: [1, 1.08, 1] }}
+              transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+              style={{ filter: `drop-shadow(0 2px 3px ${color.glow})` }}
             >
               <path
                 d="M12 21s-7-4.5-9-9c-1.5-3.5 1-7 4.5-7 2 0 3.5 1.2 4.5 2.5C13 6.2 14.5 5 16.5 5 20 5 22.5 8.5 21 12c-2 4.5-9 9-9 9z"
-                fill={isTarot ? '#c084fc' : '#f472b6'}
-                stroke={isTarot ? '#9333ea' : '#ec4899'}
-                strokeWidth="1"
+                fill={color.primary}
+                stroke="white"
+                strokeWidth="1.5"
               />
             </motion.svg>
-
-            <span
-              className="text-[15px] font-bold leading-none whitespace-nowrap"
-              style={{
-                fontFamily: '"Gowun Dodum", "Nanum Pen Script", system-ui',
-                background: isTarot
-                  ? 'linear-gradient(90deg, #9333ea 0%, #c084fc 100%)'
-                  : 'linear-gradient(90deg, #ec4899 0%, #fb7185 100%)',
-                backgroundClip: 'text',
-                WebkitBackgroundClip: 'text',
-                color: 'transparent',
-                letterSpacing: '-0.005em',
-              }}
-            >
-              조용히 듣고 있어
-            </span>
-
-            {/* 타이핑 도트 (3개) */}
-            <div className="flex items-center gap-[3px] ml-0.5">
+            {/* 하단 타이핑 도트 3개 */}
+            <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-[3px]">
               {[0, 1, 2].map((i) => (
                 <motion.span
                   key={i}
                   className="block rounded-full"
                   style={{
-                    width: 5, height: 5,
-                    background: isTarot ? '#a78bfa' : '#f472b6',
-                    boxShadow: isTarot
-                      ? '0 0 4px rgba(167,139,250,0.6)'
-                      : '0 0 4px rgba(244,114,182,0.6)',
+                    width: 4, height: 4,
+                    background: color.primary,
+                    boxShadow: `0 0 4px ${color.glow}`,
                   }}
-                  animate={{ y: [0, -3, 0], opacity: [0.4, 1, 0.4] }}
+                  animate={reduceMotion ? {} : { y: [0, -2, 0], opacity: [0.4, 1, 0.4] }}
                   transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15, ease: 'easeInOut' }}
                 />
               ))}
             </div>
           </div>
+
+          {/* 우측: 일상 흐름 힌트 */}
+          <motion.div
+            className="flex flex-col items-center flex-shrink-0"
+            initial={reduceMotion ? false : { opacity: 0, x: 4 }}
+            animate={{ opacity: 0.8, x: 0 }}
+            transition={{ duration: 0.6, delay: 0.7 }}
+          >
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center p-1"
+              style={{
+                background: 'rgba(255,255,255,0.78)',
+                border: `1px dashed ${dailyColor}77`,
+                boxShadow: `0 1px 6px ${dailyGlow}`,
+              }}
+            >
+              <svg viewBox="0 0 24 24" className="w-5 h-5">
+                <path d="M12 20 Q12 14 12 12" fill="none" stroke={dailyColor} strokeWidth="1.5" strokeLinecap="round" />
+                <path
+                  d="M12 13 C8 12 5 8 7 5 C10 3 12 8 12 13 Z"
+                  fill={isTarot ? color.secondary : '#bbf7d0'}
+                  stroke={dailyColor}
+                  strokeWidth="1"
+                  opacity="0.9"
+                />
+                <path
+                  d="M12 11 C16 10 19 6 17 3 C14 1 12 6 12 11 Z"
+                  fill={isTarot ? color.secondary : '#86efac'}
+                  stroke={dailyColor}
+                  strokeWidth="1"
+                  opacity="0.9"
+                />
+              </svg>
+            </div>
+            <span
+              className="mt-1 whitespace-nowrap"
+              style={{
+                fontFamily: '"Gowun Dodum", system-ui',
+                fontSize: '10px',
+                fontWeight: 700,
+                letterSpacing: '-0.01em',
+                color: isTarot ? `${color.primary}d0` : '#15803dd0',
+                opacity: 0.9,
+              }}
+            >
+              일상
+            </span>
+          </motion.div>
         </div>
 
-        {/* 하단 상태 문구 (typewriter) */}
-        <div className="text-center pt-2">
+        {/* 상태 카피 (typewriter) */}
+        <div className="text-center mt-3">
           <motion.span
-            initial={{ opacity: 0, y: 3 }}
+            initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="text-[11px] font-bold tracking-tight"
+            className="inline-flex items-center gap-0.5"
             style={{
-              fontFamily: '"Gowun Dodum", system-ui',
-              color: isTarot ? '#9333ea' : '#ec4899',
-              opacity: 0.78,
+              fontFamily: '"Nanum Pen Script", "Gowun Dodum", system-ui',
+              fontSize: '14px',
+              fontWeight: 700,
+              letterSpacing: '-0.005em',
+              background: `linear-gradient(90deg, ${color.primary} 0%, ${color.primary}cc 100%)`,
+              backgroundClip: 'text',
+              WebkitBackgroundClip: 'text',
+              color: 'transparent',
             }}
           >
             {typedStatus}
             <motion.span
               animate={{ opacity: [1, 0, 1] }}
               transition={{ duration: 0.8, repeat: Infinity }}
-              className="inline-block ml-0.5 w-[1px] h-[10px] align-middle"
-              style={{ background: isTarot ? '#a78bfa' : '#f472b6' }}
+              className="inline-block ml-0.5 w-[1.5px] h-[13px] align-middle rounded-full"
+              style={{ background: color.primary }}
             />
           </motion.span>
         </div>
@@ -531,6 +744,243 @@ function BranchedTrack({
     </div>
   );
 }
+
+// ============================================================================
+// 🆕 v118 — ConsultStepperTrack : 분기 후 상담 4단계 통합 트랙
+//  - MIRROR → BRIDGE → SOLVE → EMPOWER (HOOK 는 ListeningMoment 가 담당)
+//  - 좌측: LiveLunaMedallion (단계 컬러 글로우)
+//  - 우측: 5단계 stepper (HOOK 도 dot 으로 포함 — 첫 단계는 ✓ 처리)
+//  - 하단: typewriter 상태 카피 + 떠다니는 꽃잎
+// ============================================================================
+function ConsultStepperTrack({
+  currentPhase,
+  steps,
+  currentIndex,
+  totalPercent,
+  persona,
+  lunaThinking,
+  fallbackText,
+}: {
+  currentPhase: ConversationPhaseV2;
+  steps: PhaseStep[];
+  currentIndex: number;
+  totalPercent: number;
+  persona: PersonaMode;
+  lunaThinking?: string;
+  fallbackText: string;
+}) {
+  const reduceMotion = useReducedMotion() ?? false;
+  const isTarot = persona === 'tarot';
+  const phaseColor: PhaseColor = isTarot
+    ? TAROT_PHASE_COLOR
+    : LUNA_PHASE_COLORS[currentPhase] ?? LUNA_PHASE_COLORS.HOOK;
+
+  const displayText = (lunaThinking && lunaThinking.trim()) ? lunaThinking : fallbackText;
+  const typedStatus = useTypewriter(displayText, 70);
+
+  // 진행바 슬롯 계산 (justify-between 대응)
+  const iconCount = steps.length;
+  const slotWidth = 100 / iconCount;
+  const startOffset = slotWidth / 2;
+  const barRange = 100 - slotWidth;
+
+  return (
+    <div className="w-full sticky top-[60px] z-10" role="progressbar"
+      aria-valuemin={0} aria-valuemax={steps.length} aria-valuenow={currentIndex + 1}
+      aria-label={`상담 단계 ${currentIndex + 1} / ${steps.length}: ${steps[currentIndex]?.label ?? ''}`}>
+      {/* 상단 얇은 그라데이션 라인 */}
+      <div
+        className="h-[1px]"
+        style={{
+          background: `linear-gradient(to right, transparent, ${phaseColor.primary}55, transparent)`,
+        }}
+      />
+
+      <motion.div
+        className="relative overflow-hidden backdrop-blur-xl border-b"
+        animate={{
+          background: `linear-gradient(135deg, ${phaseColor.soft} 0%, rgba(255,255,255,0.94) 100%)`,
+        }}
+        transition={{ duration: 0.6, ease: 'easeInOut' }}
+        style={{
+          borderColor: `${phaseColor.primary}1a`,
+          boxShadow: `0 2px 18px ${phaseColor.primary}12`,
+          paddingTop: 10,
+          paddingBottom: 10,
+          paddingLeft: 12,
+          paddingRight: 12,
+        }}
+      >
+        {/* 떠다니는 꽃잎 (배경) */}
+        <FloatingPetals color={phaseColor} reduceMotion={reduceMotion} />
+
+        {/* Row 1: 메달리온 + 스테퍼 */}
+        <div className="relative flex items-start gap-3">
+          <LiveLunaMedallion
+            persona={persona}
+            color={phaseColor}
+            phaseKey={currentPhase}
+            reduceMotion={reduceMotion}
+            size={44}
+          />
+
+          <div className="flex-1 min-w-0 pt-0.5">
+            <div className="flex justify-between items-start w-full relative">
+              {/* 진행선 배경 */}
+              <div
+                className="absolute top-[13px] h-[2.5px] rounded-full z-0"
+                style={{
+                  left: `${startOffset}%`,
+                  width: `${barRange}%`,
+                  background: `${phaseColor.secondary}66`,
+                }}
+              />
+              {/* 진행선 활성 + 끝 글로우 점 */}
+              <motion.div
+                className="absolute top-[13px] h-[2.5px] z-[1] rounded-full"
+                style={{
+                  left: `${startOffset}%`,
+                  background: `linear-gradient(to right, ${phaseColor.primary}, ${phaseColor.primary}dd)`,
+                }}
+                initial={{ width: 0 }}
+                animate={{ width: `${totalPercent * (barRange / 100)}%` }}
+                transition={{ type: 'spring', damping: 20, stiffness: 80 }}
+              >
+                <motion.div
+                  className="absolute right-0 top-1/2 -translate-y-1/2 w-[7px] h-[7px] rounded-full"
+                  style={{ background: phaseColor.primary }}
+                  animate={reduceMotion ? {} : {
+                    boxShadow: [`0 0 4px 2px ${phaseColor.glow}`, `0 0 8px 4px ${phaseColor.glow}`, `0 0 4px 2px ${phaseColor.glow}`],
+                    scale: [1, 1.3, 1],
+                  }}
+                  transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+                />
+              </motion.div>
+
+              {steps.map((step, idx) => {
+                const isPast = idx < currentIndex;
+                const isCurrent = idx === currentIndex;
+                const StepIcon = step.Icon;
+                const stepColor: PhaseColor = isTarot
+                  ? TAROT_PHASE_COLOR
+                  : LUNA_PHASE_COLORS[step.id] ?? phaseColor;
+
+                return (
+                  <div key={step.id} className="relative z-10 flex flex-col items-center flex-1">
+                    <div className="relative">
+                      {/* 현재 단계 드로잉 ring */}
+                      {isCurrent && (
+                        <motion.svg
+                          viewBox="0 0 44 44"
+                          className="absolute -inset-1 w-[calc(100%+8px)] h-[calc(100%+8px)] z-20"
+                        >
+                          <motion.circle
+                            cx="22" cy="22" r="20"
+                            fill="none"
+                            stroke={stepColor.primary}
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeDasharray="0 1"
+                            initial={{ pathLength: 0 }}
+                            animate={{ pathLength: 1 }}
+                            transition={{ duration: 1.2, ease: 'easeOut' }}
+                          />
+                        </motion.svg>
+                      )}
+
+                      <motion.div
+                        animate={isCurrent && !reduceMotion ? { y: [0, -2, 0] } : {}}
+                        transition={isCurrent ? { duration: 2, repeat: Infinity, ease: 'easeInOut' } : {}}
+                        className="w-7 h-7 rounded-full flex items-center justify-center p-0.5 transition-all duration-500"
+                        style={{
+                          background: isCurrent
+                            ? 'rgba(255,255,255,0.85)'
+                            : isPast
+                              ? `${stepColor.secondary}88`
+                              : 'rgba(248,250,252,0.65)',
+                          boxShadow: isCurrent
+                            ? `0 2px 12px ${stepColor.glow}`
+                            : isPast
+                              ? `0 1px 4px ${stepColor.glow.replace('0.4', '0.15')}`
+                              : 'none',
+                          transform: isCurrent ? 'scale(1.12)' : 'scale(1)',
+                          opacity: isCurrent ? 1 : isPast ? 0.95 : 0.4,
+                          backdropFilter: isCurrent ? 'blur(6px)' : undefined,
+                        }}
+                      >
+                        <StepIcon active={isCurrent} past={isPast} />
+                      </motion.div>
+
+                      {/* 완료 체크 스탬프 */}
+                      <AnimatePresence>
+                        {isPast && (
+                          <motion.div
+                            initial={{ scale: 0, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center z-30 shadow-sm"
+                            style={{ background: stepColor.primary }}
+                          >
+                            <svg viewBox="0 0 12 12" className="w-2 h-2">
+                              <path d="M2 6 L5 9 L10 3" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+
+                    {/* 라벨 (10.5px, Gowun Dodum) */}
+                    <div className="text-center mt-1.5 w-full">
+                      <span
+                        className="block transition-all duration-300 whitespace-nowrap"
+                        style={{
+                          fontFamily: '"Gowun Dodum", system-ui',
+                          fontSize: '10.5px',
+                          fontWeight: 700,
+                          letterSpacing: '-0.01em',
+                          color: isCurrent ? stepColor.primary : isPast ? `${stepColor.primary}cc` : '#cbd5e1',
+                        }}
+                      >
+                        {step.label}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Row 2: 손글씨 상태 카피 (typewriter) */}
+        <div className="text-center mt-1.5" aria-live="polite">
+          <motion.span
+            key={currentPhase + '-status'}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+            className="inline-flex items-center gap-0.5"
+            style={{
+              fontFamily: '"Nanum Pen Script", "Gowun Dodum", system-ui',
+              fontSize: '13px',
+              fontWeight: 700,
+              letterSpacing: '-0.005em',
+              color: phaseColor.primary,
+              opacity: 0.9,
+            }}
+          >
+            {typedStatus}
+            <motion.span
+              animate={{ opacity: [1, 0, 1] }}
+              transition={{ duration: 0.8, repeat: Infinity }}
+              className="inline-block ml-0.5 w-[1.5px] h-[12px] align-middle rounded-full"
+              style={{ background: phaseColor.primary }}
+            />
+          </motion.span>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 
 // ============================================================================
 // 🆕 v116: 일상 5-Phase 보조 아이콘 (LINGER 달 / FAREWELL 손 흔들기)
@@ -721,291 +1171,59 @@ function CasualPhaseTrack({ currentPhase, lunaThinking }: { currentPhase: Casual
   );
 }
 
+
 // ============================================================================
-// 🆕 v105: DailyChatTrack — 일상 대화 모드 호환 트랙 (DAILY_CHAT alias 표시용)
-// v116 이후로는 CasualPhaseTrack 이 주요 렌더링. 이건 fallback.
+// 🆕 v118 — PhaseProgress main entry (간결 라우터)
+//  - 상담 5단계 (HOOK/MIRROR/BRIDGE/SOLVE/EMPOWER) → ConsultStepperTrack (통합)
+//  - 일상 5단계 (GREET/CATCHUP/BANTER/LINGER/FAREWELL) → CasualPhaseTrack
+//  - DAILY_CHAT (legacy alias) → CasualPhaseTrack(BANTER)
 // ============================================================================
-
-function DailyChatTrack({ lunaThinking }: { lunaThinking?: string }) {
-  const displayText = lunaThinking || '가볍게 얘기 중 🍃';
-  const typedStatus = useTypewriter(displayText, 70);
-
-  return (
-    <div className="w-full sticky top-[60px] z-10">
-      <div className="h-[1px] bg-gradient-to-r from-pink-200/60 via-rose-300/40 to-amber-200/60" />
-      <div className="bg-gradient-to-r from-pink-50/80 via-white/90 to-amber-50/80 border-b border-pink-100/40 shadow-[0_4px_20px_rgba(244,114,182,0.06)] backdrop-blur-xl px-2 py-3">
-        <div className="flex items-start w-full px-1 mb-1.5 relative">
-          {/* 진행선 배경 */}
-          <div className="absolute top-[14px] h-[3px] bg-pink-50/80 z-0 rounded-full" style={{ left: '25%', width: '50%' }} />
-          {/* 진행선 활성 */}
-          <motion.div
-            className="absolute top-[14px] h-[3px] bg-gradient-to-r from-pink-300 via-rose-300 to-amber-300 z-[1] rounded-full"
-            initial={{ width: 0 }}
-            animate={{ width: '50%' }}
-            style={{ left: '25%' }}
-            transition={{ type: 'spring', damping: 20, stiffness: 100 }}
-          >
-            <motion.div
-              className="absolute right-0 top-1/2 -translate-y-1/2 w-[7px] h-[7px] rounded-full bg-rose-400"
-              animate={{
-                boxShadow: ['0 0 4px 2px rgba(244,114,182,0.4)', '0 0 8px 4px rgba(244,114,182,0.6)', '0 0 4px 2px rgba(244,114,182,0.4)'],
-                scale: [1, 1.3, 1],
-              }}
-              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-            />
-          </motion.div>
-
-          {/* 1단계: 이야기 듣기 (완료) */}
-          <div className="relative z-10 flex flex-col items-center" style={{ width: '50%' }}>
-            <div className="relative">
-              <motion.div className="w-8 h-8 rounded-full flex items-center justify-center p-1 bg-rose-50 shadow-sm">
-                <ChatBubbleIcon active={false} past={true} />
-              </motion.div>
-              <motion.div
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-rose-400 rounded-full flex items-center justify-center z-30 shadow-sm"
-              >
-                <svg viewBox="0 0 12 12" className="w-2 h-2">
-                  <path d="M2 6 L5 9 L10 3" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </motion.div>
-            </div>
-            <div className="text-center mt-1.5 w-full">
-              <span className="text-[9px] font-bold block whitespace-nowrap text-rose-400">이야기 듣기</span>
-            </div>
-          </div>
-
-          {/* 2단계: 수다 중 (현재) */}
-          <div className="relative z-10 flex flex-col items-center" style={{ width: '50%' }}>
-            <div className="relative">
-              <motion.svg viewBox="0 0 44 44" className="absolute -inset-1 w-[calc(100%+8px)] h-[calc(100%+8px)] z-20">
-                <motion.circle
-                  cx="22" cy="22" r="20"
-                  fill="none" stroke="#f472b6" strokeWidth="2" strokeLinecap="round" strokeDasharray="0 1"
-                  initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.2, ease: 'easeOut' }}
-                />
-              </motion.svg>
-              <motion.div
-                animate={{ y: [0, -2, 0] }}
-                transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                className="w-8 h-8 rounded-full flex items-center justify-center p-1 bg-white/70 backdrop-blur-sm shadow-[0_2px_12px_rgba(236,72,153,0.25)] scale-110"
-              >
-                <FlowerChatIcon active={true} past={false} />
-              </motion.div>
-            </div>
-            <div className="text-center mt-1.5 w-full">
-              <span className="text-[9px] font-bold block whitespace-nowrap text-pink-600">수다 중</span>
-            </div>
-          </div>
-
-          {/* 분기 힌트 */}
-          <div className="absolute right-[2%] top-[8px] flex flex-col items-center opacity-30 pointer-events-none">
-            <motion.div
-              animate={{ opacity: [0.2, 0.5, 0.2] }}
-              transition={{ duration: 2.4, repeat: Infinity }}
-              className="text-[8px] text-slate-400 italic"
-            >
-              ↗ 깊은 얘기?
-            </motion.div>
-          </div>
-        </div>
-
-        {/* 상태 문구 */}
-        <div className="text-center h-4">
-          <motion.span
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="text-[10px] font-semibold text-pink-400/80 tracking-tight"
-          >
-            {typedStatus}
-            <motion.span
-              animate={{ opacity: [1, 0, 1] }}
-              transition={{ duration: 0.8, repeat: Infinity }}
-              className="inline-block ml-0.5 w-[1px] h-[10px] bg-pink-300 align-middle"
-            />
-          </motion.span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function PhaseProgress({ currentPhase, progress, persona = 'luna', lunaThinking, understandingLevel }: PhaseProgressProps) {
   if (!currentPhase) return null;
 
-  // 🆕 v105: HOOK — Y자 분기 시각화 (두 갈래 path)
-  if (currentPhase === 'HOOK') {
-    return <BranchedTrack lunaThinking={lunaThinking} persona={persona} />;
-  }
-  // 🆕 v116: 일상 5-Phase 트랙 (GREET/CATCHUP/BANTER/LINGER/FAREWELL)
+  // 일상 5-Phase 트랙
   if (currentPhase === 'GREET' || currentPhase === 'CATCHUP' || currentPhase === 'BANTER'
       || currentPhase === 'LINGER' || currentPhase === 'FAREWELL') {
     return <CasualPhaseTrack currentPhase={currentPhase} lunaThinking={lunaThinking} />;
   }
-  // 🆕 v105: DAILY_CHAT — 호환 alias (BANTER 와 동일 취급)
   if (currentPhase === 'DAILY_CHAT') {
     return <CasualPhaseTrack currentPhase="BANTER" lunaThinking={lunaThinking} />;
   }
 
+  // 🆕 v118 — HOOK = 상담↔일상 분기 전 모먼트. 5단계 stepper 띄우지 않음
+  if (currentPhase === 'HOOK') {
+    return <ListeningMoment lunaThinking={lunaThinking} persona={persona} />;
+  }
+
+  // 분기 후 상담 4단계 (MIRROR/BRIDGE/SOLVE/EMPOWER) — 통합 stepper 트랙
   const steps = persona === 'tarot' ? TAROT_STEPS : LUNA_STEPS;
   const currentIndex = steps.findIndex(p => p.id === currentPhase);
-  // 타로냥: MIRROR phase → HOOK으로 매핑 (MIRROR 스킵하므로)
+  // 타로냥은 MIRROR 단계 스킵 → HOOK 인덱스로 매핑
   const adjustedIndex = currentIndex === -1 && persona === 'tarot' && currentPhase === 'MIRROR'
     ? steps.findIndex(p => p.id === 'HOOK')
     : currentIndex;
   const idx = adjustedIndex === -1 ? 0 : adjustedIndex;
 
   const currentStep = steps[idx];
-  // 🆕 ACE v4: lunaThinking이 있으면 AI 생각을 표시, 없으면 기존 statusText
-  const displayText = (persona !== 'tarot' && lunaThinking) ? lunaThinking : currentStep.statusText;
-  const typedStatus = useTypewriter(displayText, 70);
 
-  // 🆕 ACE v4.1: 아이콘 개수에 따라 유동적으로 시작 오프셋과 전체 너비 계산 (justify-between 대응)
+  // intra-step 진행률 (understandingLevel 우선, 없으면 progress)
   const iconCount = steps.length;
-  const slotWidth = 100 / iconCount; // 한 슬롯의 너비 (예: 5단계면 20%)
-  const startOffset = slotWidth / 2; // 첫 아이콘의 중심점 (예: 10%)
-  const barRange = 100 - slotWidth;  // 첫 아이콘 중심 ~ 마지막 아이콘 중심 거리 (예: 80%)
-
   const basePercent = (idx / (iconCount - 1)) * 100;
   const nextPercent = idx < iconCount - 1 ? ((idx + 1) / (iconCount - 1)) * 100 : basePercent;
-  
   const intraStepProgress = (persona !== 'tarot' && understandingLevel !== undefined)
     ? (understandingLevel / 100)
     : (progress / 100);
-
   const totalPercent = Math.min(100, Math.max(0, basePercent + (nextPercent - basePercent) * intraStepProgress));
 
   return (
-    <div className="w-full sticky top-[60px] z-10">
-      {/* 상단 프리미엄 그라디언트 라인 */}
-      <div className={`h-[1px] bg-gradient-to-r ${persona === 'tarot' ? 'from-violet-200/60 via-purple-300/40 to-indigo-200/60' : 'from-rose-200/60 via-pink-300/40 to-violet-200/60'}`} />
-
-      <div className={`bg-gradient-to-r ${persona === 'tarot' ? 'from-violet-50/80 via-white/90 to-indigo-50/80 border-b border-violet-100/40 shadow-[0_4px_20px_rgba(124,58,237,0.06)]' : 'from-rose-50/80 via-white/90 to-violet-50/80 border-b border-pink-100/40 shadow-[0_4px_20px_rgba(236,72,153,0.06)]'} backdrop-blur-xl px-2 py-3`}>
-        
-        {/* 5단계 스텝퍼 영역 */}
-        <div className="flex justify-between items-start w-full px-1 mb-1.5 relative">
-          
-          {/* 진행선 배경 (비활성) */}
-          <div 
-            className={`absolute top-[14px] h-[3px] ${persona === 'tarot' ? 'bg-violet-50/80' : 'bg-pink-50/80'} z-0 rounded-full`}
-            style={{ left: `${startOffset}%`, width: `${barRange}%` }}
-          />
-
-          {/* 진행선 활성 (파스텔 그라디언트 + 현재 위치 글로우 점) */}
-          <motion.div
-            className={`absolute top-[14px] h-[3px] bg-gradient-to-r ${persona === 'tarot' ? 'from-violet-300 via-purple-400 to-indigo-400' : 'from-rose-300 via-pink-400 to-violet-400'} z-[1] rounded-full`}
-            initial={{ width: 0 }}
-            animate={{ width: `${totalPercent * (barRange / 100)}%` }}
-            style={{ left: `${startOffset}%` }}
-            transition={{ type: 'spring', damping: 20, stiffness: 100 }}
-          >
-            {/* 진행 끝 글로우 dot */}
-            <motion.div
-              className={`absolute right-0 top-1/2 -translate-y-1/2 w-[7px] h-[7px] rounded-full ${persona === 'tarot' ? 'bg-violet-400' : 'bg-pink-400'}`}
-              animate={{
-                boxShadow: persona === 'tarot'
-                  ? ['0 0 4px 2px rgba(139,92,246,0.4)', '0 0 8px 4px rgba(139,92,246,0.6)', '0 0 4px 2px rgba(139,92,246,0.4)']
-                  : ['0 0 4px 2px rgba(244,114,182,0.4)', '0 0 8px 4px rgba(244,114,182,0.6)', '0 0 4px 2px rgba(244,114,182,0.4)'],
-                scale: [1, 1.3, 1]
-              }}
-              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-            />
-          </motion.div>
-
-          {steps.map((step, idx) => {
-            const isPast = idx < currentIndex;
-            const isCurrent = idx === currentIndex;
-            const isFuture = idx > currentIndex;
-            const StepIcon = step.Icon;
-
-            return (
-              <div key={step.id} className="relative z-10 flex flex-col items-center flex-1">
-                
-                {/* 아이콘 컨테이너 */}
-                <div className="relative">
-                  {/* 현재 단계: pathLength 드로잉 링 */}
-                  {isCurrent && (
-                    <motion.svg
-                      viewBox="0 0 44 44"
-                      className="absolute -inset-1 w-[calc(100%+8px)] h-[calc(100%+8px)] z-20"
-                    >
-                      <motion.circle
-                        cx="22" cy="22" r="20"
-                        fill="none"
-                        stroke={persona === 'tarot' ? '#a78bfa' : '#f472b6'}
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeDasharray="0 1"
-                        initial={{ pathLength: 0 }}
-                        animate={{ pathLength: 1 }}
-                        transition={{ duration: 1.2, ease: 'easeOut' }}
-                      />
-                    </motion.svg>
-                  )}
-
-                  <motion.div
-                    animate={isCurrent ? { y: [0, -2, 0] } : {}}
-                    transition={isCurrent ? { duration: 2, repeat: Infinity, ease: 'easeInOut' } : {}}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center p-1 transition-all duration-500 ${
-                      isPast
-                        ? (persona === 'tarot' ? 'bg-violet-50 shadow-sm' : 'bg-rose-50 shadow-sm')
-                        : isCurrent
-                          ? (persona === 'tarot' ? 'bg-white/70 backdrop-blur-sm shadow-[0_2px_12px_rgba(124,58,237,0.25)] scale-110' : 'bg-white/70 backdrop-blur-sm shadow-[0_2px_12px_rgba(236,72,153,0.25)] scale-110')
-                          : 'bg-slate-50/60 opacity-35'
-                    }`}
-                  >
-                    <StepIcon active={isCurrent} past={isPast} />
-                  </motion.div>
-
-                  {/* 완료 체크 오버레이 */}
-                  <AnimatePresence>
-                    {isPast && (
-                      <motion.div
-                        initial={{ scale: 0, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 ${persona === 'tarot' ? 'bg-violet-400' : 'bg-rose-400'} rounded-full flex items-center justify-center z-30 shadow-sm`}
-                      >
-                        <svg viewBox="0 0 12 12" className="w-2 h-2">
-                          <path d="M2 6 L5 9 L10 3" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-
-                {/* 라벨 */}
-                <div className="text-center mt-1.5 w-full relative">
-                  <span className={`text-[9px] font-bold block transition-all duration-300 whitespace-nowrap ${
-                    isCurrent ? (persona === 'tarot' ? 'text-violet-600' : 'text-pink-600') : isPast ? (persona === 'tarot' ? 'text-violet-400' : 'text-rose-400') : 'text-slate-300'
-                  }`}>
-                    {step.label}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* 현재 단계 캐릭터 상태 문구 (타이핑 효과) */}
-        <div className="text-center h-4">
-          <motion.span
-            key={currentPhase}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className={`text-[10px] font-semibold ${persona === 'tarot' ? 'text-violet-400/80' : 'text-pink-400/80'} tracking-tight`}
-          >
-            {typedStatus}
-            <motion.span
-              animate={{ opacity: [1, 0, 1] }}
-              transition={{ duration: 0.8, repeat: Infinity }}
-              className={`inline-block ml-0.5 w-[1px] h-[10px] ${persona === 'tarot' ? 'bg-violet-300' : 'bg-pink-300'} align-middle`}
-            />
-          </motion.span>
-        </div>
-      </div>
-    </div>
+    <ConsultStepperTrack
+      currentPhase={currentPhase}
+      steps={steps}
+      currentIndex={idx}
+      totalPercent={totalPercent}
+      persona={persona}
+      lunaThinking={lunaThinking}
+      fallbackText={currentStep.statusText}
+    />
   );
 }
