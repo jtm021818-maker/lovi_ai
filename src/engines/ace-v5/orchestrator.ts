@@ -180,6 +180,9 @@ export async function* executeAceV5(
     // 🆕 v115: 시공간 + 애칭 컨텍스트 (LLM이 자율 판단)
     temporalContext: input.temporalContext ?? null,
     nicknameSnapshot: input.nicknameSnapshot ?? null,
+    // 🆕 v115.7: 별명 게이트 + episode 화이트리스트
+    nicknameGate: input.nicknameGate ?? null,
+    availableEpisodesForNickname: input.availableEpisodesForNickname ?? [],
   };
 
   let buffer = '';
@@ -339,10 +342,18 @@ export async function* executeAceV5(
   finalText = hintExtraction.cleanText;
   const leftBrainHints = hintExtraction.hints;
 
-  // 🆕 v115: NICKNAME_PROPOSE 태그 추출 — 본문에서 제거 후 meta로 emit
-  const nicknameParse = parseNicknameTags(finalText);
+  // 🆕 v115.7: NICKNAME_PROPOSE 태그 추출 — 추억 앵커 + 화이트리스트 검증
+  // 게이트 통과 못한 상태에서 LLM 이 임의로 태그 만들었으면 anchor 없거나 episode 매칭 실패 → 폐기.
+  const allowedEpisodeIds = (input.availableEpisodesForNickname ?? []).map((e) => e.id);
+  const nicknameParse = parseNicknameTags(finalText, allowedEpisodeIds, input.intimacyLevel);
   finalText = nicknameParse.cleanedText;
   const proposedNicknames: ExtractedNickname[] = nicknameParse.proposed;
+  // 게이트 통과 못했으면 모든 제안 강제 폐기 — LLM 이 가이드 없이 박은 경우 안전망
+  if (!input.nicknameGate?.allowProposal) {
+    for (const p of proposedNicknames) {
+      if (!p.rejectedReason) p.rejectedReason = '게이트 미통과 (allowProposal=false)';
+    }
+  }
 
   // ────────────────────────────────────────
   // 6단계: 태그 첨부
@@ -385,7 +396,13 @@ export async function* executeAceV5(
     reanalysisReason,
     left_brain_hints_for_next_turn: leftBrainHints.length > 0 ? leftBrainHints : undefined,
     proposed_nicknames: proposedNicknames.length > 0
-      ? proposedNicknames.map((n) => ({ name: n.name, reason: n.reason }))
+      ? proposedNicknames.map((n) => ({
+          name: n.name,
+          reason: n.reason,
+          anchorEpisodeId: n.anchorEpisodeId,
+          anchorQuote: n.anchorQuote,
+          rejectedReason: n.rejectedReason,
+        }))
       : undefined,
     meta: {
       latencyMs: Date.now() - overallStart,
@@ -446,6 +463,10 @@ interface SingleCallParams {
   temporalContext?: import('../temporal/temporal-context').TemporalContext | null;
   /** 🆕 v115: 애칭 사용 이력 */
   nicknameSnapshot?: import('../relationship/nickname-state').NicknameSnapshot | null;
+  /** 🆕 v115.7: 별명 게이트 결과 */
+  nicknameGate?: import('../relationship/nickname-gate').NicknameGateContext | null;
+  /** 🆕 v115.7: anchorEpisodeId 화이트리스트 */
+  availableEpisodesForNickname?: Array<{ id: string; title: string; summary_short: string }>;
 }
 
 interface SingleCallResult {
@@ -488,6 +509,9 @@ async function* streamVoiceOnceGen(
     // 🆕 v115: 시공간 + 애칭 컨텍스트 (LLM이 자율 판단)
     temporalContext: params.temporalContext ?? null,
     nicknameSnapshot: params.nicknameSnapshot ?? null,
+    // 🆕 v115.7: 게이트 + 화이트리스트 episode 목록
+    nicknameGate: params.nicknameGate ?? null,
+    availableEpisodesForNickname: params.availableEpisodesForNickname ?? [],
   });
 
   // v63: Claude 완전 제거 — Gemini 3 Flash Preview 단일.

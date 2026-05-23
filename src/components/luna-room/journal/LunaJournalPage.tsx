@@ -25,6 +25,7 @@ import LevelStamp from './LevelStamp';
 import PetalFlower from './PetalFlower';
 import GateOpenMoment from './GateOpenMoment';
 import DailyLogHistory from './DailyLogHistory';
+import NicknameSection from './NicknameSection';
 import {
   SEED_LABEL,
   SEED_HINT,
@@ -206,6 +207,9 @@ export default function LunaJournalPage({ data, show, persona = 'luna' }: Props)
 
       {/* ── 4. 기억 앨범 ────────────────────────────────────── */}
       <MemoryAlbum show={show} memories={memories} currentLevel={data.level} />
+
+      {/* ── 4.5 별명 (v115.7) — 루나/타로 공통이지만 luna persona 일 때만 ── */}
+      {persona === 'luna' && <NicknameSection show={show} />}
 
       {/* ── 5. 해금 뱃지 ────────────────────────────────────── */}
       <UnlockBadges show={show} unlocked={unlocked} nextLocked={nextLocked} />

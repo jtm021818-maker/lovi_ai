@@ -606,6 +606,10 @@ export function parsePhaseSignal(response: string): {
   }
   cleaned = cleaned.replace(/\[BROWSE_READY[^\]]*\]/gi, '').trim();
 
+  // v119: Spirit Random Event 태그 — orchestrator 가 fullText/bufferSnippet 에서 파싱하므로
+  // 최종 표시/저장용 cleanResponse 에서는 제거. (parseBurstV89 와 동일한 처리.)
+  cleaned = cleaned.replace(/\[SPIRIT_[A-Z_]+(?::[^\]]*)?\]/gi, '').replace(/\n{3,}/g, '\n\n').trim();
+
   const match = cleaned.match(SIGNAL_REGEX);
   if (!match) return {
     cleanResponse: cleaned,

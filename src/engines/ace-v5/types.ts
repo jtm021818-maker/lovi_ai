@@ -208,6 +208,12 @@ export interface AceV5Input {
 
   /** 🆕 v115: 애칭 사용 이력 스냅샷. LLM이 새 애칭 만들지/기존 사용/안 부르기 자유 */
   nicknameSnapshot?: import('../relationship/nickname-state').NicknameSnapshot | null;
+
+  /** 🆕 v115.7: 별명 게이트 결과 — 통과 시에만 ACE 시스템 프롬프트에 [애칭 사용 가이드] 주입 */
+  nicknameGate?: import('../relationship/nickname-gate').NicknameGateContext | null;
+
+  /** 🆕 v115.7: anchorEpisodeId 화이트리스트용 — 컨텍스트에 노출된 episode 목록 */
+  availableEpisodesForNickname?: Array<{ id: string; title: string; summary_short: string }>;
 }
 
 // ============================================================
@@ -227,8 +233,14 @@ export interface AceV5Output {
   /** 🆕 v57: 우뇌가 다음 턴 좌뇌에 남기는 힌트 */
   left_brain_hints_for_next_turn?: string[];
 
-  /** 🆕 v115: LLM이 본문에 제안한 새 애칭 (DB 저장 대상) */
-  proposed_nicknames?: Array<{ name: string; reason?: string }>;
+  /** 🆕 v115: LLM이 본문에 제안한 새 애칭 (DB 저장 대상). v115.7: anchor 필드 추가 */
+  proposed_nicknames?: Array<{
+    name: string;
+    reason?: string;
+    anchorEpisodeId?: string;
+    anchorQuote?: string;
+    rejectedReason?: string;
+  }>;
 
   /** 메타 (로깅용) */
   meta: {

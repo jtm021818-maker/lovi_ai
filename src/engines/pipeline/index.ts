@@ -203,7 +203,7 @@ function computeLunaThinking(
 }
 
 // 🆕 v89: 메타 태그 패턴 (hlrePost가 파싱할 것들 — 표시용 burst 에서 제거)
-const METADATA_TAG_RE_V89 = /\[(?:SITUATION_READ|LUNA_THOUGHT|PHASE_SIGNAL|SITUATION_CLEAR|MIND_READ_READY|STORY_READY|STRATEGY_READY|ACTION_PLAN|WARM_WRAP|TAROT_READY|PATTERN_MIRROR_READY|THINKING_DEEP|TONE_SELECT|DRAFT_CARD|ROLEPLAY_FEEDBACK|PANEL_REPORT|IDEA_REFINE|REQUEST_REANALYSIS|LEFT_BRAIN_HINT|RP_IN|RP_OUT|OPERATION_COMPLETE|SONG_READY|DATE_SPOT_READY|GIFT_READY|ACTIVITY_READY|ANNIVERSARY_READY|MOVIE_READY|BROWSE_READY|CASUAL_BYE)(?::[^\]]*)?\]/gi;
+const METADATA_TAG_RE_V89 = /\[(?:SITUATION_READ|LUNA_THOUGHT|PHASE_SIGNAL|SITUATION_CLEAR|MIND_READ_READY|STORY_READY|STRATEGY_READY|ACTION_PLAN|WARM_WRAP|TAROT_READY|PATTERN_MIRROR_READY|THINKING_DEEP|TONE_SELECT|DRAFT_CARD|ROLEPLAY_FEEDBACK|PANEL_REPORT|IDEA_REFINE|REQUEST_REANALYSIS|LEFT_BRAIN_HINT|RP_IN|RP_OUT|OPERATION_COMPLETE|SONG_READY|DATE_SPOT_READY|GIFT_READY|ACTIVITY_READY|ANNIVERSARY_READY|MOVIE_READY|BROWSE_READY|CASUAL_BYE|SPIRIT_[A-Z_]+)(?::[^\]]*)?\]/gi;
 
 // 🆕 v89: FX 태그 → 클라이언트 target 매핑
 const FX_TARGETS_V89: Record<string, 'screen' | 'bubble' | 'text' | 'avatar' | 'particle' | 'bg'> = {
@@ -1915,6 +1915,8 @@ ${researchResult.insight}
     } else {
       // 상담사/친구 모드: 스트리밍 — 3사 캐스케이드
       let fullText = '';
+      // v119: HLRE 가 SPIRIT_* 태그를 벗기기 전 원본 보존 — spirit orchestrator 입력용
+      let spiritOrchestratorSource = '';
       // 🆕 v60: 좌뇌 analysis 캡쳐 (pacing_meta 추출용) — phase 재판단까지 필요
       let capturedLeftBrainAnalysis: any = null;
       // 🆕 v73: WM 캡쳐 (phase 재판단용 — filledCards/consecutive_ready_turns)
@@ -1951,21 +1953,83 @@ ${researchResult.insight}
 
         // 🆕 v104: 활성 정령 카드 가이드 빌드 (방 Lv3+ 정령) — fire-and-forget on fail
         // 🆕 v115: 애칭 스냅샷도 같이 병렬 로드 (LLM이 활용 여부 자율 결정)
+        // 🆕 v115.7: 게이트 평가 + episode 화이트리스트 — 별명 작명 자격 통과 시에만 ACE 가이드 주입
         let activeSpiritsHint: string | null = null;
         let v115NicknameSnapshot: import('@/engines/relationship/nickname-state').NicknameSnapshot | null = null;
+        let v115_7NicknameGate: import('@/engines/relationship/nickname-gate').NicknameGateContext | null = null;
+        let v115_7EpisodesForNickname: Array<{ id: string; title: string; summary_short: string }> = [];
         if (ragContext?.userId) {
           try {
-            const [hintRes, nickRes] = await Promise.allSettled([
+            const [hintRes, nickRes, episodesRes] = await Promise.allSettled([
               buildActiveSpiritsHint(ragContext.userId, newPhaseV2),
               import('@/engines/relationship/nickname-state').then((m) =>
                 m.loadNicknameSnapshot(ragContext.supabase, ragContext.userId)
               ),
+              ragContext.supabase
+                .from('luna_episodes')
+                .select('id, title, summary_short')
+                .eq('user_id', ragContext.userId)
+                .order('importance', { ascending: false })
+                .order('last_recalled_at', { ascending: false, nullsFirst: false })
+                .limit(8),
             ]);
             if (hintRes.status === 'fulfilled') activeSpiritsHint = hintRes.value;
             else console.warn('[Pipeline] 🧚 activeSpiritsHint build fail (silent)', (hintRes.reason as Error)?.message);
             if (nickRes.status === 'fulfilled') v115NicknameSnapshot = nickRes.value;
+            if (episodesRes.status === 'fulfilled' && Array.isArray(episodesRes.value?.data)) {
+              v115_7EpisodesForNickname = episodesRes.value.data as Array<{ id: string; title: string; summary_short: string }>;
+            }
+
+            // 게이트 평가 — intimacy + active count 조합
+            try {
+              const gateMod = await import('@/engines/relationship/nickname-gate');
+              const intimacyState = hlre.getIntimacyState('luna') ?? null;
+              const activeCount = v115NicknameSnapshot?.activeCount ?? 0;
+              v115_7NicknameGate = await gateMod.evaluateNicknameGate({
+                supabase: ragContext.supabase,
+                userId: ragContext.userId,
+                intimacyState: intimacyState as any,
+                currentPhase: String(newPhaseV2 ?? ''),
+                activeNicknameCount: activeCount,
+              });
+              if (v115_7NicknameGate.allowProposal) {
+                console.log('[Pipeline:v115.7] ✓ nickname gate PASS —', v115_7NicknameGate.reason);
+              }
+            } catch (gateErr) {
+              console.warn('[Pipeline:v115.7] gate evaluation fail (silent)', (gateErr as Error).message);
+            }
           } catch (err) {
             console.warn('[Pipeline] v104+v115 parallel load fail (silent)', (err as Error).message);
+          }
+        }
+
+        // 🆕 v115.7: 직전 턴 'trying' 상태인 별명 있으면 이번 유저 메시지로 반응 분석
+        if (ragContext?.userId && v115NicknameSnapshot && v115NicknameSnapshot.history.length > 0) {
+          const tryingRecord = v115NicknameSnapshot.history.find((h) => h.status === 'trying');
+          const lastLunaTurn = chatHistory.filter((m) => m.role === 'ai').slice(-1)[0]?.content ?? '';
+          if (tryingRecord && lastLunaTurn.includes(tryingRecord.nickname)) {
+            try {
+              const detectorMod = await import('@/engines/relationship/nickname-reaction-detector');
+              const stateMod = await import('@/engines/relationship/nickname-state');
+              const result = detectorMod.detectNicknameReaction({
+                lunaTurnText: lastLunaTurn,
+                userMessage,
+                nickname: tryingRecord.nickname,
+              });
+              if (result.reaction !== 'neutral') {
+                console.log(
+                  `[Pipeline:v115.7] nickname reaction "${tryingRecord.nickname}" → ${result.reaction} (rule=${result.matchedRule})`,
+                );
+                await stateMod.recordReaction(ragContext.supabase, {
+                  userId: ragContext.userId,
+                  nickname: tryingRecord.nickname,
+                  reaction: result.reaction!,
+                  status: result.nextStatus,
+                });
+              }
+            } catch (reactErr) {
+              console.warn('[Pipeline:v115.7] reaction detect fail (silent)', (reactErr as Error).message);
+            }
           }
         }
 
@@ -2010,6 +2074,9 @@ ${researchResult.insight}
             // 🆕 v115: 시공간 컨텍스트 (route.ts 가 ragContext.temporalContext 로 넘김) + 애칭 이력
             temporalContext: ragContext?.temporalContext ?? null,
             nicknameSnapshot: v115NicknameSnapshot,
+            // 🆕 v115.7: 별명 게이트 + episode 화이트리스트
+            nicknameGate: v115_7NicknameGate,
+            availableEpisodesForNickname: v115_7EpisodesForNickname,
             // 🆕 fast-path: 미리 받아둔 좌뇌 결과 → callGeminiBrain 스킵 (3.7초 절약)
             prefetchedBrainResult: prefetchedBrain ?? undefined,
           }, logCollector)) {
@@ -2356,6 +2423,8 @@ ${researchResult.insight}
             }
           }
 
+          // v119: HLRE 가 SPIRIT_* 를 벗기기 전 원본 캡쳐 (orchestrator 입력용)
+          spiritOrchestratorSource = fullText;
           const hlrePost = await hlre.postProcess(fullText, userMsgs);
           // 시그널 태그 제거된 클린 응답으로 교체
           if (hlrePost.finalResponse !== fullText) {
@@ -2842,7 +2911,8 @@ ${researchResult.insight}
           const spiritResult = await runSpiritOrchestrator({
             userId: ragContext.userId,
             sessionId: ragContext.sessionId,
-            responseText: fullText,
+            // v119: HLRE 가 SPIRIT_* 를 벗긴 뒤면 fullText 에 태그 없음 → 보존된 원본 사용
+            responseText: spiritOrchestratorSource || fullText,
             phase: newPhaseV2,
             turn: turnCount,
             riskLevel: stateResult.riskLevel,

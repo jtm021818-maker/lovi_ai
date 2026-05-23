@@ -469,6 +469,10 @@ export interface DualBrainInput {
   temporalContext?: import('@/engines/temporal/temporal-context').TemporalContext | null;
   /** 🆕 v115: 애칭 사용 이력 스냅샷 (route → pipeline → dual-brain 으로 전달) */
   nicknameSnapshot?: import('@/engines/relationship/nickname-state').NicknameSnapshot | null;
+  /** 🆕 v115.7: 별명 게이트 결과 — 통과 시에만 ACE 가이드 주입 */
+  nicknameGate?: import('@/engines/relationship/nickname-gate').NicknameGateContext | null;
+  /** 🆕 v115.7: anchorEpisodeId 화이트리스트 episode 목록 (컨텍스트 노출분만) */
+  availableEpisodesForNickname?: Array<{ id: string; title: string; summary_short: string }>;
   /** 🆕 v90 Perf: 파이프라인이 미리 로드한 장기 기억 번들 (Promise).
    *  좌뇌와 병렬 로드되어 좌→우 갭(~1.5~2초) 제거. */
   preloadedMemoryBundlePromise?: Promise<{
@@ -675,22 +679,36 @@ export async function* executeDualBrain(
           activeSpiritsHint: input.activeSpiritsHint ?? null,  // 🆕 v104: 활성 정령 카드 가이드
           temporalContext: input.temporalContext ?? null,       // 🆕 v115: 시공간 컨텍스트
           nicknameSnapshot: input.nicknameSnapshot ?? null,     // 🆕 v115: 애칭 이력
+          nicknameGate: input.nicknameGate ?? null,             // 🆕 v115.7: 게이트
+          availableEpisodesForNickname: input.availableEpisodesForNickname ?? [], // 🆕 v115.7: episode 화이트리스트
         }, logCollector)) {
           if (chunk.type === 'text') {
             aceChunkCount++;
             fullResponseText += chunk.data;
             yield { type: 'text', data: chunk.data };
           } else if (chunk.type === 'meta' && chunk.data?.proposed_nicknames?.length && input.supabase && input.userId) {
-            // 🆕 v115: 새 애칭 비동기 저장 (응답 지연 X)
-            const proposed = chunk.data.proposed_nicknames as Array<{ name: string; reason?: string }>;
-            void import('@/engines/relationship/nickname-state').then((m) =>
-              m.proposeNickname(input.supabase, {
-                userId: input.userId!,
-                sessionId: input.sessionId,
-                nickname: proposed[0].name,
-                originContext: proposed[0].reason,
-              }).catch((e) => console.warn('[v115] nickname persist fail (silent)', e?.message)),
-            );
+            // 🆕 v115.7: 새 애칭 비동기 저장 — anchor 필드 필수, rejectedReason 있으면 스킵
+            const proposed = chunk.data.proposed_nicknames as Array<{
+              name: string; reason?: string;
+              anchorEpisodeId?: string; anchorQuote?: string; rejectedReason?: string;
+            }>;
+            const first = proposed.find((p) => !p.rejectedReason && p.anchorEpisodeId && p.anchorQuote);
+            if (first) {
+              void import('@/engines/relationship/nickname-state').then((m) =>
+                m.proposeNickname(input.supabase, {
+                  userId: input.userId!,
+                  sessionId: input.sessionId,
+                  nickname: first.name,
+                  originContext: first.reason,
+                  anchorEpisodeId: first.anchorEpisodeId!,
+                  anchorQuote: first.anchorQuote!,
+                }).catch((e) => console.warn('[v115.7] nickname persist fail (silent)', e?.message)),
+              );
+            } else {
+              console.warn('[v115.7] nickname proposal rejected — anchor 누락 또는 게이트 미통과', {
+                reasons: proposed.map((p) => p.rejectedReason).filter(Boolean),
+              });
+            }
           }
         }
         voiceLatencyMs = Date.now() - voiceStart;
@@ -778,21 +796,35 @@ export async function* executeDualBrain(
           activeSpiritsHint: input.activeSpiritsHint ?? null,  // 🆕 v104: 활성 정령 카드 가이드
           temporalContext: input.temporalContext ?? null,       // 🆕 v115: 시공간 컨텍스트
           nicknameSnapshot: input.nicknameSnapshot ?? null,     // 🆕 v115: 애칭 이력
+          nicknameGate: input.nicknameGate ?? null,             // 🆕 v115.7
+          availableEpisodesForNickname: input.availableEpisodesForNickname ?? [], // 🆕 v115.7
         }, logCollector)) {
           if (chunk.type === 'text') {
             fullResponseText += chunk.data;
             yield { type: 'text', data: chunk.data };
           } else if (chunk.type === 'meta' && chunk.data?.proposed_nicknames?.length && input.supabase && input.userId) {
-            // 🆕 v115: 새 애칭 비동기 저장
-            const proposed = chunk.data.proposed_nicknames as Array<{ name: string; reason?: string }>;
-            void import('@/engines/relationship/nickname-state').then((m) =>
-              m.proposeNickname(input.supabase, {
-                userId: input.userId!,
-                sessionId: input.sessionId,
-                nickname: proposed[0].name,
-                originContext: proposed[0].reason,
-              }).catch((e) => console.warn('[v115] nickname persist fail (silent)', e?.message)),
-            );
+            // 🆕 v115.7: 새 애칭 비동기 저장 — anchor 필수
+            const proposed = chunk.data.proposed_nicknames as Array<{
+              name: string; reason?: string;
+              anchorEpisodeId?: string; anchorQuote?: string; rejectedReason?: string;
+            }>;
+            const first = proposed.find((p) => !p.rejectedReason && p.anchorEpisodeId && p.anchorQuote);
+            if (first) {
+              void import('@/engines/relationship/nickname-state').then((m) =>
+                m.proposeNickname(input.supabase, {
+                  userId: input.userId!,
+                  sessionId: input.sessionId,
+                  nickname: first.name,
+                  originContext: first.reason,
+                  anchorEpisodeId: first.anchorEpisodeId!,
+                  anchorQuote: first.anchorQuote!,
+                }).catch((e) => console.warn('[v115.7] nickname persist fail (silent)', e?.message)),
+              );
+            } else {
+              console.warn('[v115.7] nickname proposal rejected — anchor 누락 또는 게이트 미통과', {
+                reasons: proposed.map((p) => p.rejectedReason).filter(Boolean),
+              });
+            }
           }
         }
         voiceLatencyMs = Date.now() - voiceStart;

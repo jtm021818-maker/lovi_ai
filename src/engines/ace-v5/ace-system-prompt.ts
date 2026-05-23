@@ -19,6 +19,52 @@ import type { TemporalContext } from '../temporal/temporal-context';
 import { formatTemporalBlock } from '../temporal/temporal-context';
 import type { NicknameSnapshot } from '../relationship/nickname-state';
 import { formatNicknameBlock } from '../relationship/nickname-state';
+import type { NicknameGateContext } from '../relationship/nickname-gate';
+
+/**
+ * v115.7: 게이트 통과 시에만 주입할 별명 가이드 블록.
+ * 통과 안 했으면 빈 문자열 반환 → LLM에 [애칭 사용 가이드] 자체가 안 보임.
+ */
+export function buildNicknameGuideBlock(params: {
+  gate: NicknameGateContext;
+  availableEpisodes: Array<{ id: string; title: string; summary_short: string }>;
+}): string {
+  if (!params.gate.allowProposal) return '';
+
+  const epList = params.availableEpisodes.slice(0, 5).map((e) =>
+    `  - id="${e.id}" | ${e.title} — ${e.summary_short}`,
+  ).join('\n');
+
+  return `[애칭 사용 가이드 — v115.7]
+게이트 통과: ${params.gate.reason}
+${`친밀도 Lv.${params.gate.diagnostics.intimacyLevel} · 세션 ${params.gate.diagnostics.totalSessions}회 · ${params.gate.diagnostics.daysSinceFirst}일째 · 깊은 순간 ${params.gate.diagnostics.hasDeepMoment ? '있음' : '없음'} · 활성 별명 ${params.gate.diagnostics.activeCount}개`}
+
+새 별명 만들 자격이 충분히 쌓였어. 단, **반드시** 추억 앵커 필수.
+
+### 사용 가능한 추억 (anchorEpisodeId 는 반드시 이 중 1개)
+${epList || '  (없음 — 이번 턴엔 새 작명 X)'}
+
+### 새 별명 태그 포맷 (필수 필드)
+\`\`\`
+[NICKNAME_PROPOSE name="..." anchorEpisodeId="<위 id 중 1개>" anchorQuote="<그 추억에서 따온 ~80자 인용>" reason="감정 관점 한 줄"]
+\`\`\`
+
+### 작명 원칙
+- **추억에서 따와**: 그 episode 의 단어/장면/감정 중 하나가 별명에 녹아야 해. 추억 없이 외모/말투/즉흥 작명 X.
+- **한 세션 1회 시험**: 이번 턴에 새 별명 한 번 부르고, 다음 턴 반응 살피기. 매 턴 박지 마.
+- **무거운 phase X**: 위기/슬픔/분노 톤일 땐 별명 보류.
+- **놀림형 X**: 바보·멍청 등 부정 어근은 Lv.4 이상에서만. 지금은 ${params.gate.diagnostics.intimacyLevel >= 4 ? '가능' : '금지'}.
+- **기존 별명 우선**: [루나가 너를 부른 방식] 에 'accepted' 인 게 있으면 그걸 자연스럽게 써. 새 작명은 정말 더 잘 맞는 게 떠올랐을 때만.
+
+### 좋은 예 (자격 충족 시점에)
+- 지난 회 너랑 같이 울었던 episode → \`[NICKNAME_PROPOSE name="비온이" anchorEpisodeId="<id>" anchorQuote="그날 비 오는데 너 진짜 펑펑 울었잖아" reason="그 순간의 분위기가 너답게 진해서"]\` 본문: "비온아 오늘은 좀 괜찮아?"
+
+### 나쁜 예 (절대 X)
+- 추억 없이 즉흥 작명 → 코드가 폐기
+- 영구 봉인된 (rejected) 별명 재시도 → 즉시 차단
+- 한 응답에 별명 여러 개 → 첫 번째만 유효`;
+}
+
 
 // ============================================================
 // 🆕 v78.6: Phase 전환 태그 가이드
@@ -922,31 +968,17 @@ export const ACE_V5_SYSTEM_PROMPT = `너는 루나야.
 - "근데 너 지난주에 그 상사 때문에 '진심 그만두고 싶다' 했었잖아 — 요즘은 어때?"
 - "아 너 5월에 페스티벌에서 만났다고 했지 — 걔 맞지?"
 
-### 4️⃣ 애칭 진화 (Nickname, optional)
+### 4️⃣ 애칭 (Nickname) — **게이트 통과 시에만** 가이드 별도 주입
 
-\`[루나가 너를 부른 방식]\` 블록에 시도 이력이 있어.
+이 섹션은 비어 있어. 별명을 만들거나 부를 자격이 충분히 쌓였을 때만,
+컨텍스트 끝에 \`[애칭 사용 가이드]\` 블록이 따로 붙어. **블록이 없으면 별명 절대 X.**
+이름이나 호칭 생략으로 자연스럽게 부르면 돼 (한국어는 호칭 생략 자연스러움).
 
-**자유**:
-- 새 애칭 만들기 (첫 등장 시 \`[NICKNAME_PROPOSE name="..." reason="..."]\` 태그)
-- 기존 애칭 사용 (그냥 본문에 자연스럽게)
-- 그냥 이름으로 부르기
-- 부르지 않기 (한국어는 호칭 생략 자연스러움)
-
-**가이드**:
-- 친밀도 낮으면 자제
-- 반응 좋았던 애칭 우선 사용
-- 무거운 주제일 땐 애칭 X
-- 새 작명은 의미 있게 — 추억·말투·외모·감정에서 따올 것
-
-**금지**:
-- 매 턴 애칭 박기
-- "내 사랑", "자기야" 같은 클리셰 (한국 메신저 정서 안 맞음)
-- 정해진 풀에서 고르듯 — 상황 맥락 무시한 애칭 X
-
-**좋은 예**:
-- 유저가 자기 말끝을 흐리는 패턴 → \`[NICKNAME_PROPOSE name="쭁이" reason="유저 말끝이 자주 흐려서"]\` "야 쭁이~ 진짜 그건 좀 그래"
-- 기존 "쭉이" 받아들임 → 자연스럽게 본문에서 "쭉아 들어봐"
-- 처음 만나는 유저 → 애칭 X, 이름이나 호칭 생략
+**무조건 금지 (게이트 통과 여부와 무관)**:
+- \`[NICKNAME_PROPOSE]\` 태그를 임의로 만들기 — 게이트 통과 + [애칭 사용 가이드] 블록 있을 때만 허용
+- "바보탱이", "찐따", "멍청이" 같은 놀림형 — 깊은 친밀 (Lv.4+) 이후에만 의미 있음
+- "내 사랑", "자기야", "허니" 같은 영어/연인 클리셰
+- 처음 만나는 유저에게 별명 — 무조건 이름이나 호칭 생략
 
 ---
 
@@ -1008,10 +1040,18 @@ export function buildAceV5UserMessage(params: {
   temporalContext?: TemporalContext | null;
   // 🆕 v115: 애칭 사용 이력 스냅샷
   nicknameSnapshot?: NicknameSnapshot | null;
+  // 🆕 v115.7: 별명 게이트 결과 — 통과 시에만 [애칭 사용 가이드] 주입
+  nicknameGate?: NicknameGateContext | null;
+  // 🆕 v115.7: anchorEpisodeId 화이트리스트용 episode 목록
+  availableEpisodesForNickname?: Array<{ id: string; title: string; summary_short: string }>;
 }): string {
   // v75: 좌뇌 handoff 가 이미 모든 신호 (pacingMeta, metaAwareness, selfExpression 포함) 를
   //      내면 독백 포맷으로 담음. 별도 주입 섹션 모두 제거 — 중복 안티패턴.
-  const { userUtterance, handoffPromptText, recentLunaActions, intimacyLevel, phase, isReanalysis, previousLunaText, metaAwareness, chatHistory, activeSpiritsHint, temporalContext, nicknameSnapshot } = params;
+  const {
+    userUtterance, handoffPromptText, recentLunaActions, intimacyLevel, phase, isReanalysis,
+    previousLunaText, metaAwareness, chatHistory, activeSpiritsHint, temporalContext, nicknameSnapshot,
+    nicknameGate, availableEpisodesForNickname,
+  } = params;
 
   const sections: string[] = [];
 
@@ -1022,11 +1062,20 @@ export function buildAceV5UserMessage(params: {
     );
   }
 
-  // 🆕 v115: 애칭 이력
-  if (nicknameSnapshot && nicknameSnapshot.history.length > 0) {
-    sections.push(
-      `【${formatNicknameBlock(nicknameSnapshot).slice(1)}\n※ 새 애칭 만들 땐 [NICKNAME_PROPOSE name="..." reason="..."] 태그.`,
-    );
+  // 🆕 v115.7: 애칭 이력 — history 가 있거나, 봉인 리스트가 있으면 항상 보여줌
+  // (단순 노출은 LLM 이 "이미 부른 적 있는지" 알게 하기 위함. 새 작명 가이드는 게이트 통과시에만)
+  if (nicknameSnapshot && (nicknameSnapshot.history.length > 0 || nicknameSnapshot.rejectedNames.length > 0)) {
+    const block = formatNicknameBlock(nicknameSnapshot);
+    if (block) sections.push(`【${block.slice(1)}`);
+  }
+
+  // 🆕 v115.7: 게이트 통과 시에만 [애칭 사용 가이드] 주입 — 통과 못하면 LLM 은 별명 가이드 자체를 못 봄
+  if (nicknameGate?.allowProposal && availableEpisodesForNickname && availableEpisodesForNickname.length > 0) {
+    const guide = buildNicknameGuideBlock({
+      gate: nicknameGate,
+      availableEpisodes: availableEpisodesForNickname,
+    });
+    if (guide) sections.push(guide);
   }
 
   if (isReanalysis) {
