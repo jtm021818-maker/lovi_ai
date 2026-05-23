@@ -8,16 +8,25 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { getUserTier } from '@/lib/subscription';
 
 /**
- * Edge-TTS API Route — 보라 여우 캐릭터 전용
+ * Edge-TTS API Route — 루나 캐릭터 전용 (Microsoft Azure Neural Voices, 무료 무제한)
  *
- * Voice: ko-KR-SunHiNeural (단아하고 맑은 톤)
- * Pitch: +2Hz (신비롭고 영리한 느낌)
- * Rate: -10% (차분하고 여유 있는 상담가 톤)
+ * v118.4: 자유 pitch/rate 입력 폐지. 4개 캐릭터 프리셋 ID 만 받음.
+ *   - soft   : SunHi -10% +2Hz (기본 — 단아)
+ *   - bright : YuJin  +0% +3Hz (밝은 톤)
+ *   - calm   : JiMin -15% -1Hz (차분 새벽)
+ *   - clear  : SunHi  +0% +5Hz (또렷)
  */
 
-const DEFAULT_VOICE = 'ko-KR-SunHiNeural';
-const DEFAULT_PITCH = '+2Hz';
-const DEFAULT_RATE = '-10%';
+type PresetId = 'soft' | 'bright' | 'calm' | 'clear';
+
+const PRESETS: Record<PresetId, { voice: string; pitch: string; rate: string }> = {
+  soft:   { voice: 'ko-KR-SunHiNeural', pitch: '+2Hz', rate: '-10%' },
+  bright: { voice: 'ko-KR-YuJinNeural', pitch: '+3Hz', rate: '+0%' },
+  calm:   { voice: 'ko-KR-JiMinNeural', pitch: '-1Hz', rate: '-15%' },
+  clear:  { voice: 'ko-KR-SunHiNeural', pitch: '+5Hz', rate: '+0%' },
+};
+
+const DEFAULT_PRESET: PresetId = 'soft';
 const DEFAULT_VOLUME = '+0%';
 
 /** 텍스트 전처리: 이모지, [STICKER:xxx], 마크다운 제거 */
@@ -45,7 +54,7 @@ export async function POST(req: NextRequest) {
   const tmpPath = join(tmpdir(), `tts-${randomUUID()}.mp3`);
 
   try {
-    const { text, pitch, rate, volume } = await req.json();
+    const { text, preset, volume } = await req.json();
 
     if (!text || typeof text !== 'string') {
       return NextResponse.json({ error: 'text is required' }, { status: 400 });
@@ -56,10 +65,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'text is empty after cleaning' }, { status: 400 });
     }
 
+    const presetId: PresetId = (preset && PRESETS[preset as PresetId]) ? (preset as PresetId) : DEFAULT_PRESET;
+    const { voice, pitch, rate } = PRESETS[presetId];
+
     const tts = new EdgeTTS({
-      voice: DEFAULT_VOICE,
-      pitch: pitch || DEFAULT_PITCH,
-      rate: rate || DEFAULT_RATE,
+      voice,
+      pitch,
+      rate,
       volume: volume || DEFAULT_VOLUME,
     });
 

@@ -17,7 +17,7 @@
  */
 
 import { motion } from 'framer-motion';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { BOND_TOKENS, HANDWRITE_FONT, NUMERIC_FONT } from '@/lib/luna-life/relationship-tokens';
 import { triggerHaptic } from '@/lib/haptic';
 import { playSound } from '@/lib/audio';
@@ -28,11 +28,9 @@ import NicknameSection from './NicknameSection';
 import {
   SEED_LABEL,
   SEED_HINT,
-  MEMORY_SLOTS,
   FEATURE_UNLOCKS,
   partitionUnlocks,
   type FeatureUnlock,
-  type MemorySlot,
 } from './level-unlocks';
 
 export interface JournalData {
@@ -51,14 +49,6 @@ export interface JournalData {
   consecutiveDays: number;
 }
 
-interface MemoryRow {
-  slot_index: number;
-  level: number;
-  trigger_type: string;
-  llm_caption: string;
-  unlocked_at: string;
-}
-
 interface Props {
   data: JournalData;
   show: boolean;
@@ -68,7 +58,6 @@ interface Props {
 
 export default function LunaJournalPage({ data, show, persona = 'luna' }: Props) {
   const stampPlayedRef = useRef(false);
-  const [memories, setMemories] = useState<MemoryRow[]>([]);
 
   // 사운드/햅틱 인트로
   useEffect(() => {
@@ -89,22 +78,8 @@ export default function LunaJournalPage({ data, show, persona = 'luna' }: Props)
     }
   }, [show]);
 
-  // 기억 카드 fetch — 일일 일기는 루나 편지와 중복이라 v118.1 에서 제거
-  useEffect(() => {
-    if (!show) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const m = await fetch(`/api/relationship/memories?persona=${persona}`)
-          .then((r) => (r.ok ? r.json() : { memories: [] }));
-        if (cancelled) return;
-        setMemories(m.memories ?? []);
-      } catch {
-        /* silent */
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [show, persona]);
+  // v118.3: 우리의 기억(MemoryAlbum) + 일일 일기 둘 다 제거.
+  // 빈 슬롯이 시각적 노이즈였음. NicknameSection 이 새 시각 앵커로 격상.
 
   const isSeed = data.daysSinceFirst === 0 && data.totalSessions === 0;
   const isMax = data.level >= 5;
@@ -173,10 +148,7 @@ export default function LunaJournalPage({ data, show, persona = 'luna' }: Props)
         depthHint={depthHint}
       />
 
-      {/* ── 3. 기억 앨범 ────────────────────────────────────── */}
-      <MemoryAlbum show={show} memories={memories} currentLevel={data.level} />
-
-      {/* ── 4. 별명 (v115.7) — 루나/타로 공통이지만 luna persona 일 때만 ── */}
+      {/* ── 3. 별명 (v115.7→v118.3 메인 시각 앵커) ───────────── */}
       {persona === 'luna' && <NicknameSection show={show} />}
 
       {/* ── 5. 해금 뱃지 ────────────────────────────────────── */}
@@ -267,8 +239,8 @@ function Header({
 // ============================================================
 // 2-A. 화분 카드 (식물 성장 비주얼)
 // ============================================================
-// v118.1: 캐릭터 카드 — 풀폭으로 재배치 (화분/일지 카드 제거 후 메인 위젯 유일)
-//   4축 페탈을 키우고 스테이지 라벨/depthHint 를 좌우 정렬로 균형.
+// v118.3: 캐릭터 카드 임팩트 강화 — 헤드라인급 스테이지 라벨 + 장식 액센트.
+// "확 안 들어와" 피드백 반영: 큰 핵심 문장 / 4축 페탈 / 그라데이션 액센트 / 반짝 데코.
 function CharacterCard({
   show, data, stageLabel, depthHint,
 }: {
@@ -279,213 +251,183 @@ function CharacterCard({
 }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={show ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
-      transition={{ delay: 0.5, duration: 0.5 }}
+      initial={{ opacity: 0, y: 12 }}
+      animate={show ? { opacity: 1, y: 0 } : { opacity: 0, y: 12 }}
+      transition={{ delay: 0.5, duration: 0.55, ease: [0.22, 0.61, 0.36, 1] }}
       style={{
         position: 'relative',
-        padding: '16px 18px',
-        marginBottom: 16,
-        background: 'linear-gradient(180deg, #fdf6ec 0%, #f9e9d8 100%)',
-        border: '1px solid rgba(196,136,111,0.2)',
-        borderRadius: 14,
-        boxShadow: '0 3px 10px rgba(120,80,40,0.08)',
-        display: 'grid',
-        gridTemplateColumns: '120px 1fr',
-        gap: 14,
-        alignItems: 'center',
+        padding: '20px 18px 22px',
+        marginBottom: 18,
+        background:
+          'linear-gradient(150deg, #fff7ec 0%, #fdebd8 45%, #fbd6e2 100%)',
+        border: '1.5px solid rgba(225,168,170,0.35)',
+        borderRadius: 18,
+        boxShadow:
+          '0 6px 18px rgba(196,114,124,0.12), 0 2px 4px rgba(120,80,40,0.06), inset 0 0 0 1px rgba(255,255,255,0.5)',
+        overflow: 'hidden',
       }}
     >
-      {/* 좌측 — 4축 페탈 */}
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
-        <div style={{ width: 120, height: 120 }}>
-          <PetalFlower
-            trust={data.trust}
-            openness={data.openness}
-            bond={data.bond}
-            respect={data.respect}
-            show={show}
-            delay={760}
-          />
-        </div>
-      </div>
-
-      {/* 우측 — 스테이지 라벨 / depthHint */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
-        <div
-          style={{
-            fontFamily: HANDWRITE_FONT, fontSize: 11, color: BOND_TOKENS.inkSoft,
-            opacity: 0.7, letterSpacing: '0.02em',
-          }}
-        >
-          지금 우리는
-        </div>
-        <div
-          style={{
-            fontFamily: HANDWRITE_FONT, fontSize: 17, color: BOND_TOKENS.ink,
-            lineHeight: 1.25, fontWeight: 600,
-          }}
-        >
-          "{stageLabel}"
-        </div>
-        <div
-          style={{
-            fontFamily: HANDWRITE_FONT, fontSize: 11.5, color: BOND_TOKENS.inkSoft,
-            opacity: 0.85, lineHeight: 1.45, marginTop: 2,
-          }}
-        >
-          {depthHint}
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-// ============================================================
-// 4. 기억 앨범 (5슬롯 폴라로이드)
-// ============================================================
-function MemoryAlbum({
-  show, memories, currentLevel,
-}: {
-  show: boolean;
-  memories: MemoryRow[];
-  currentLevel: number;
-}) {
-  const bySlot = new Map(memories.map(m => [m.slot_index, m]));
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={show ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }}
-      transition={{ delay: 0.85, duration: 0.5 }}
-      style={{ marginBottom: 16 }}
-    >
-      <div
+      {/* 배경 데코 — 반짝 별 1 */}
+      <motion.div
+        aria-hidden
+        initial={{ opacity: 0, scale: 0.6 }}
+        animate={show ? { opacity: 0.7, scale: 1 } : { opacity: 0 }}
+        transition={{ delay: 0.9, duration: 0.6 }}
         style={{
-          fontFamily: HANDWRITE_FONT, fontSize: 13, color: BOND_TOKENS.ink,
-          marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6,
+          position: 'absolute',
+          top: 14, right: 24,
+          fontSize: 16,
+          color: '#e0a4ad',
+          filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.08))',
+          transform: 'rotate(-8deg)',
         }}
       >
-        📸 우리의 기억
-        <span style={{ fontSize: 10, color: BOND_TOKENS.inkSoft, opacity: 0.7, marginLeft: 4 }}>
-          {memories.length}/5
-        </span>
-      </div>
+        ✦
+      </motion.div>
+      <motion.div
+        aria-hidden
+        initial={{ opacity: 0, scale: 0.6 }}
+        animate={show ? { opacity: 0.55, scale: 1 } : { opacity: 0 }}
+        transition={{ delay: 1.05, duration: 0.6 }}
+        style={{
+          position: 'absolute',
+          bottom: 18, right: 18,
+          fontSize: 11,
+          color: '#d68694',
+          transform: 'rotate(14deg)',
+        }}
+      >
+        ✦
+      </motion.div>
 
+      {/* 작은 라벨 — "지금 우리는" */}
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(5, 1fr)',
+          display: 'inline-flex',
+          alignItems: 'center',
           gap: 6,
+          marginBottom: 8,
+          padding: '3px 10px 4px',
+          background: 'rgba(255,255,255,0.55)',
+          border: '1px solid rgba(225,168,170,0.4)',
+          borderRadius: 999,
+          fontFamily: HANDWRITE_FONT, fontSize: 11,
+          color: '#a85e6f', letterSpacing: '0.04em',
         }}
       >
-        {MEMORY_SLOTS.map(slot => {
-          const memory = bySlot.get(slot.index);
-          const unlocked = !!memory || slot.level <= currentLevel;
-          return (
-            <PolaroidSlot
-              key={slot.index}
-              slot={slot}
-              memory={memory}
-              unlocked={unlocked}
-              show={show}
-            />
-          );
-        })}
+        <span style={{ fontSize: 10 }}>🌷</span>
+        지금 우리는
       </div>
-    </motion.div>
-  );
-}
 
-function PolaroidSlot({
-  slot, memory, unlocked, show,
-}: {
-  slot: MemorySlot;
-  memory: MemoryRow | undefined;
-  unlocked: boolean;
-  show: boolean;
-}) {
-  const [imgOk, setImgOk] = useState(true);
-  const isLocked = !unlocked;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.9, rotate: slot.index % 2 ? -2 : 2 }}
-      animate={show ? { opacity: 1, scale: 1, rotate: slot.index % 2 ? -1.5 : 1.5 } : { opacity: 0 }}
-      transition={{ delay: 0.9 + slot.index * 0.06, duration: 0.4 }}
-      style={{
-        background: isLocked ? '#f0e6d6' : '#fdf6ec',
-        border: `1px solid ${isLocked ? 'rgba(124,87,56,0.18)' : 'rgba(124,87,56,0.28)'}`,
-        borderRadius: 3,
-        padding: '4px 4px 18px',
-        boxShadow: isLocked
-          ? '0 1px 3px rgba(120,80,40,0.08)'
-          : '0 3px 8px rgba(120,80,40,0.18)',
-        position: 'relative',
-        aspectRatio: '4 / 5',
-        filter: isLocked ? 'grayscale(0.5) opacity(0.55)' : 'none',
-      }}
-    >
-      {/* 사진 영역 */}
-      <div
-        style={{
-          width: '100%',
-          aspectRatio: '1 / 1',
-          background: isLocked
-            ? '#d4c2a8'
-            : 'linear-gradient(135deg, #f5d6c5, #e8c4ad)',
-          borderRadius: 2,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          overflow: 'hidden',
-          fontSize: 24,
-        }}
-      >
-        {isLocked ? (
-          <span style={{ opacity: 0.45 }}>🔒</span>
-        ) : imgOk ? (
-          <img
-            src={slot.imageSrc}
-            alt={slot.title}
-            onError={() => setImgOk(false)}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
-        ) : (
-          <span>{slot.fallbackEmoji}</span>
-        )}
-      </div>
-      {/* 캡션 */}
+      {/* 메인 헤드라인 — 스테이지 라벨 (큰 손글씨) */}
       <div
         style={{
           fontFamily: HANDWRITE_FONT,
-          fontSize: 8.5,
-          color: BOND_TOKENS.ink,
-          textAlign: 'center',
-          marginTop: 3,
-          lineHeight: 1.1,
-          opacity: isLocked ? 0.5 : 1,
+          fontSize: 26,
+          color: '#5a2a3a',
+          lineHeight: 1.18,
+          fontWeight: 700,
+          marginBottom: 6,
+          letterSpacing: '-0.01em',
+          textShadow: '0 1px 0 rgba(255,255,255,0.6)',
         }}
       >
-        {isLocked ? '???' : slot.title}
+        "{stageLabel}"
       </div>
-      {memory?.llm_caption && (
-        <div
-          title={memory.llm_caption}
-          style={{
-            position: 'absolute',
-            top: -2, right: -2,
-            width: 8, height: 8,
-            borderRadius: '50%',
-            background: '#c4886f',
-            boxShadow: '0 0 0 1.5px #fdf6ec',
-          }}
-        />
-      )}
+
+      {/* 부제 — depthHint */}
+      <div
+        style={{
+          fontFamily: HANDWRITE_FONT, fontSize: 12.5,
+          color: 'rgba(120,60,70,0.78)',
+          lineHeight: 1.5, marginBottom: 14,
+        }}
+      >
+        {depthHint}
+      </div>
+
+      {/* 페탈 + 4축 라벨 — 카드 하단 */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '110px 1fr',
+          gap: 12,
+          alignItems: 'center',
+          padding: '12px 10px 6px',
+          background: 'rgba(255,255,255,0.4)',
+          borderRadius: 14,
+          border: '1px dashed rgba(225,168,170,0.45)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <div style={{ width: 100, height: 100 }}>
+            <PetalFlower
+              trust={data.trust}
+              openness={data.openness}
+              bond={data.bond}
+              respect={data.respect}
+              show={show}
+              delay={760}
+            />
+          </div>
+        </div>
+
+        {/* 4축 미니 칩 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <AxisChip label="신뢰" value={data.trust} color="#e0938d" />
+          <AxisChip label="개방" value={data.openness} color="#c98ab8" />
+          <AxisChip label="유대" value={data.bond} color="#d6a26c" />
+          <AxisChip label="존경" value={data.respect} color="#7c9c8a" />
+        </div>
+      </div>
     </motion.div>
   );
 }
 
+function AxisChip({ label, value, color }: { label: string; value: number; color: string }) {
+  const pct = Math.max(0, Math.min(100, value));
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span
+        style={{
+          width: 26, fontFamily: HANDWRITE_FONT, fontSize: 10.5,
+          color: '#7a4a55', flexShrink: 0,
+        }}
+      >
+        {label}
+      </span>
+      <div
+        style={{
+          flex: 1, height: 6, borderRadius: 999,
+          background: 'rgba(160,90,100,0.10)',
+          overflow: 'hidden', position: 'relative',
+        }}
+      >
+        <div
+          style={{
+            width: `${pct}%`, height: '100%',
+            background: `linear-gradient(90deg, ${color}b3, ${color})`,
+            borderRadius: 999,
+            transition: 'width 600ms cubic-bezier(0.22,0.61,0.36,1)',
+          }}
+        />
+      </div>
+      <span
+        style={{
+          width: 24,
+          fontFamily: NUMERIC_FONT, fontSize: 10,
+          color: '#7a4a55', opacity: 0.7,
+          textAlign: 'right', fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {Math.round(pct)}
+      </span>
+    </div>
+  );
+}
+
 // ============================================================
-// 5. 해금 뱃지
+// 4. 해금 뱃지  (v118.3: MemoryAlbum/PolaroidSlot 제거)
 // ============================================================
 function UnlockBadges({
   show, unlocked, nextLocked,

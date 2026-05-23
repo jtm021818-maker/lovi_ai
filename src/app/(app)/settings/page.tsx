@@ -7,7 +7,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createClient } from '@/lib/supabase/client';
-import { useLunaVoice } from '@/hooks/useLunaVoice';
+import { useLunaVoice, LUNA_VOICE_PRESETS } from '@/hooks/useLunaVoice';
 import { isFxEnabled } from '@/lib/fx/effect-bus';
 import type { PersonaMode } from '@/types/persona.types';
 // 🆕 v41: 친밀도 카드
@@ -161,25 +161,7 @@ export default function SettingsPage() {
     localStorage.setItem('fx_enabled', next ? 'true' : 'false');
   };
 
-  // 속도/음높이를 0~100 슬라이더로 매핑
-  const rateMap: Record<string, number> = { '-20%': 20, '-10%': 40, '+0%': 60, '+10%': 80 };
-  const pitchMap: Record<string, number> = { '-2Hz': 20, '+0Hz': 50, '+2Hz': 70, '+5Hz': 90 };
-  const rateReverse: Record<number, string> = { 20: '-20%', 40: '-10%', 60: '+0%', 80: '+10%' };
-  const pitchReverse: Record<number, string> = { 20: '-2Hz', 50: '+0Hz', 70: '+2Hz', 90: '+5Hz' };
-
-  const rateValue = rateMap[voiceSettings.rate] ?? 60;
-  const pitchValue = pitchMap[voiceSettings.pitch] ?? 50;
-
-  const snapRate = (v: number) => {
-    const snaps = [20, 40, 60, 80];
-    const closest = snaps.reduce((a, b) => Math.abs(b - v) < Math.abs(a - v) ? b : a);
-    if (rateReverse[closest]) updateVoice({ rate: rateReverse[closest] });
-  };
-  const snapPitch = (v: number) => {
-    const snaps = [20, 50, 70, 90];
-    const closest = snaps.reduce((a, b) => Math.abs(b - v) < Math.abs(a - v) ? b : a);
-    if (pitchReverse[closest]) updateVoice({ pitch: pitchReverse[closest] });
-  };
+  // v118.4: 슬라이더(속도/음높이) 제거 — 캐릭터 프리셋만 노출
 
   const [latestScenario, setLatestScenario] = useState<string | null>(null);
 
@@ -295,8 +277,7 @@ export default function SettingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: '안녕, 나는 루나야! 오늘 기분은 어때?',
-          pitch: voiceSettings.pitch,
-          rate: voiceSettings.rate,
+          preset: voiceSettings.preset,
           volume: voiceSettings.volume,
         }),
       });
@@ -651,39 +632,51 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* ⑥ 자동 음성 읽기 + 음성 활성화 */}
+        {/* ⑥ 음성 활성화 + 자동 읽기 (v118.4: 슬라이더 제거 → 프리셋 선택으로 통합) */}
         <div className="settings-toggles-row">
-          <div className="settings-toggle-item">
-            <span className="settings-toggle-label">자동 음성 읽기</span>
-            <Toggle value={voiceSettings.autoSpeak} onChange={v => updateVoice({ autoSpeak: v })} disabled={!isPremium} />
-          </div>
           <div className="settings-toggle-item">
             <span className="settings-toggle-label">음성 활성화</span>
             <Toggle value={voiceSettings.enabled} onChange={v => updateVoice({ enabled: v })} disabled={!isPremium} />
           </div>
+          <div className="settings-toggle-item">
+            <span className="settings-toggle-label">자동 읽기</span>
+            <Toggle value={voiceSettings.autoSpeak} onChange={v => updateVoice({ autoSpeak: v })} disabled={!isPremium} />
+          </div>
         </div>
 
-        {/* ⑥ 말하기 속도 */}
-        <div className="settings-slider-row">
-          <span className="settings-slider-label">말하기 속도</span>
-          <PinkSlider value={rateValue} onChange={snapRate} />
-        </div>
-
-        {/* ⑦ 음높이 */}
-        <div className="settings-slider-row">
-          <span className="settings-slider-label">음높이</span>
-          <PinkSlider value={pitchValue} onChange={snapPitch} />
-        </div>
-
-        {/* 🔊 음성 테스트 */}
-        {isPremium && (
-          <motion.button
-            onClick={testTTS}
-            className="settings-tts-test"
-            whileTap={{ scale: 0.95 }}
-          >
-            🔊 음성 테스트
-          </motion.button>
+        {/* ⑦ 캐릭터 톤 프리셋 + 테스트 */}
+        {voiceSettings.enabled && (
+          <div className="voice-preset-section">
+            <div className="voice-preset-header">
+              <span className="voice-preset-title">루나 목소리</span>
+              <button
+                onClick={testTTS}
+                disabled={!isPremium}
+                className="voice-preset-test-btn"
+                aria-label="음성 테스트"
+              >
+                🔊 들어보기
+              </button>
+            </div>
+            <div className="voice-preset-grid">
+              {LUNA_VOICE_PRESETS.map((p) => {
+                const active = voiceSettings.preset === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    disabled={!isPremium}
+                    onClick={() => updateVoice({ preset: p.id })}
+                    className={`voice-preset-chip ${active ? 'active' : ''}`}
+                    aria-pressed={active}
+                  >
+                    <span className="voice-preset-emoji">{p.emoji}</span>
+                    <span className="voice-preset-label">{p.label}</span>
+                    <span className="voice-preset-caption">{p.caption}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         )}
 
         {/* ⑧ 상담 기록 초기화 / 계정 탈퇴 */}

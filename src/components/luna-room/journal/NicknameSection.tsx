@@ -1,24 +1,24 @@
 'use client';
 
 /**
- * v115.7: 별명 섹션 — 루나 관계 일지 안에 들어가는 UI.
+ * v118.3: 별명 섹션 — 풀 리디자인 (10-20대 K-감성).
  *
- * 표시 컨텐츠:
- *  - 현재 루나가 부르는 별명들 (active: candidate/trying/accepted)
- *  - 각 별명의 추억 앵커 (anchorQuote)
- *  - 봉인된 별명 (rejected) 토글로 열기
- *  - 게이트 진행도 (게이트 미통과 시 — "왜 아직 별명이 없는지" 설명)
+ * 디자인 원칙:
+ *  - "확 안 들어와" 피드백 반영 → 헤드라인급 큰 손글씨 + 그라데이션 카드
+ *  - 활성 별명: 네임태그 카드 (이름표 + 도트 액센트 + 인용 말풍선)
+ *  - 빈 상태: 진행 칩으로 시각화 (3개 조건 진행도)
+ *  - 봉인 별명: 별도 토글 카드, 취소선 + 복원 버튼
+ *  - 컬러: 라벤더/피치/코랄 그라데이션 + 글래스모피즘
+ *  - 손글씨 폰트(HANDWRITE_FONT) + 강조점은 더 굵게/크게
  *
  * 인터랙션:
- *  - 별명 옆 [✗ 거부] 버튼 → POST /api/relationship/nicknames { action:'reject' }
- *  - 봉인된 별명 옆 [↻ 복원] 버튼 → action:'restore'
- *
- * 톤: LunaJournalPage 의 종이/손글씨 디자인 시스템 (BOND_TOKENS, HANDWRITE_FONT) 사용.
+ *  - 별명 옆 [✗ 거부] → POST /api/relationship/nicknames { action:'reject' }
+ *  - 봉인된 별명 [↻ 복원] → action:'restore'
  */
 
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BOND_TOKENS, HANDWRITE_FONT } from '@/lib/luna-life/relationship-tokens';
+import { BOND_TOKENS, HANDWRITE_FONT, NUMERIC_FONT } from '@/lib/luna-life/relationship-tokens';
 import { triggerHaptic } from '@/lib/haptic';
 
 interface NicknameRecord {
@@ -54,6 +54,14 @@ interface NicknameApiData {
 interface Props {
   show: boolean;
 }
+
+// 별명 카드별 컬러 팔레트 (인덱스 기준 순환) — K-감성 파스텔
+const NAMETAG_PALETTES = [
+  { tag: '#fbe1eb', accent: '#d6789a', ink: '#7a2a4a', glow: '#f4b8cf' },     // 라벤더 핑크
+  { tag: '#fde8d1', accent: '#d68b50', ink: '#7a4520', glow: '#f5cba0' },     // 피치 코랄
+  { tag: '#e6e0f5', accent: '#8c75c4', ink: '#3f306d', glow: '#c4b8e6' },     // 라일락
+  { tag: '#d9efea', accent: '#5e9a86', ink: '#2a5747', glow: '#a6d6c5' },     // 민트
+];
 
 export default function NicknameSection({ show }: Props) {
   const [data, setData] = useState<NicknameApiData | null>(null);
@@ -96,42 +104,45 @@ export default function NicknameSection({ show }: Props) {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={show ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }}
-      transition={{ delay: 1.05, duration: 0.5 }}
-      style={{ marginBottom: 16 }}
+    <motion.section
+      initial={{ opacity: 0, y: 10 }}
+      animate={show ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
+      transition={{ delay: 0.75, duration: 0.55 }}
+      style={{ marginBottom: 18 }}
     >
-      {/* 헤더 */}
-      <div
-        style={{
-          fontFamily: HANDWRITE_FONT, fontSize: 13, color: BOND_TOKENS.ink,
-          marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6,
-        }}
-      >
-        🏷️ 루나가 너를 부르는 이름
-        {data && (
-          <span style={{ fontSize: 10, color: BOND_TOKENS.inkSoft, opacity: 0.7, marginLeft: 4 }}>
-            {data.active.length}개
-          </span>
-        )}
-      </div>
+      {/* 섹션 헤더 — 워시테이프 스타일 */}
+      <SectionHeader count={data?.active.length ?? 0} />
 
-      {/* 본문 카드 */}
+      {/* 본문 컨테이너 — 글래스모피즘 */}
       <div
         style={{
-          padding: '12px 14px',
-          background: 'linear-gradient(180deg, #fffaf2 0%, #fdf2e3 100%)',
-          border: '1px solid rgba(196,136,111,0.22)',
-          borderRadius: 10,
-          boxShadow: '0 2px 6px rgba(120,80,40,0.06)',
+          position: 'relative',
+          padding: '14px 12px 16px',
+          background:
+            'linear-gradient(160deg, rgba(255,236,242,0.85) 0%, rgba(255,245,229,0.78) 60%, rgba(243,230,251,0.82) 100%)',
+          borderRadius: 18,
+          border: '1.5px solid rgba(214,120,154,0.22)',
+          boxShadow:
+            '0 4px 16px rgba(196,114,148,0.10), inset 0 0 0 1px rgba(255,255,255,0.45)',
+          overflow: 'hidden',
         }}
       >
+        {/* 배경 데코 — 작은 별 */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute', top: 10, right: 14,
+            fontSize: 12, color: '#d68694', opacity: 0.6, transform: 'rotate(-10deg)',
+          }}
+        >
+          ✦
+        </div>
+
         {loading && (
           <div
             style={{
-              fontFamily: HANDWRITE_FONT, fontSize: 12, color: BOND_TOKENS.inkSoft,
-              opacity: 0.7, textAlign: 'center', padding: '12px 0',
+              padding: '24px 0', textAlign: 'center',
+              fontFamily: HANDWRITE_FONT, fontSize: 12, color: '#a07585', opacity: 0.75,
             }}
           >
             펼쳐보는 중...
@@ -140,314 +151,523 @@ export default function NicknameSection({ show }: Props) {
 
         {!loading && data && (
           <>
-            {/* 활성 별명 리스트 */}
-            {data.active.length === 0 && (
-              <NoNicknamesView gate={data.gate} />
-            )}
-
-            {data.active.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {data.active.map((rec) => (
-                  <ActiveNicknameRow
+            {/* 활성 별명 또는 빈 상태 */}
+            {data.active.length === 0 ? (
+              <EmptyState gate={data.gate} />
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {data.active.map((rec, i) => (
+                  <NameTagCard
                     key={rec.nickname}
                     record={rec}
+                    palette={NAMETAG_PALETTES[i % NAMETAG_PALETTES.length]}
                     busy={busyNick === rec.nickname}
                     onReject={() => handleAction(rec.nickname, 'reject')}
                   />
                 ))}
+                <GateProgressMini gate={data.gate} />
               </div>
             )}
 
-            {/* 게이트 진행도 — active 있어도 작게 보여줌 */}
-            {data.active.length > 0 && (
-              <GateProgressMini gate={data.gate} />
-            )}
-
-            {/* 봉인된 별명 토글 */}
+            {/* 봉인 토글 */}
             {data.rejected.length > 0 && (
-              <div style={{ marginTop: 10 }}>
-                <button
-                  onClick={() => setShowRejected((v) => !v)}
-                  style={{
-                    fontFamily: HANDWRITE_FONT, fontSize: 11,
-                    color: '#a87a5e', background: 'transparent',
-                    border: 'none', padding: 0, cursor: 'pointer',
-                    textDecoration: 'underline dashed',
-                    textUnderlineOffset: 2,
-                  }}
-                >
-                  🔒 봉인한 별명 {data.rejected.length}개 {showRejected ? '닫기' : '열기'}
-                </button>
-                <AnimatePresence>
-                  {showRejected && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.2 }}
-                      style={{
-                        marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6,
-                        overflow: 'hidden',
-                      }}
-                    >
-                      {data.rejected.map((name) => (
-                        <div
-                          key={name}
-                          style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            padding: '6px 10px',
-                            background: 'rgba(168,122,94,0.08)',
-                            border: '1px dashed rgba(168,122,94,0.3)',
-                            borderRadius: 6,
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontFamily: HANDWRITE_FONT, fontSize: 12,
-                              color: BOND_TOKENS.inkSoft, textDecoration: 'line-through',
-                              opacity: 0.75,
-                            }}
-                          >
-                            "{name}"
-                          </span>
-                          <button
-                            disabled={busyNick === name}
-                            onClick={() => handleAction(name, 'restore')}
-                            style={{
-                              fontFamily: HANDWRITE_FONT, fontSize: 10,
-                              color: '#7c5738', background: 'transparent',
-                              border: '1px solid rgba(124,87,56,0.25)',
-                              borderRadius: 4, padding: '3px 8px',
-                              cursor: busyNick === name ? 'wait' : 'pointer',
-                              opacity: busyNick === name ? 0.5 : 1,
-                            }}
-                          >
-                            ↻ 복원
-                          </button>
-                        </div>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+              <RejectedList
+                names={data.rejected}
+                show={showRejected}
+                onToggle={() => setShowRejected((v) => !v)}
+                busyNick={busyNick}
+                onRestore={(n) => handleAction(n, 'restore')}
+              />
             )}
           </>
         )}
       </div>
-    </motion.div>
+    </motion.section>
   );
 }
 
 // ============================================================
-// 별명 0개 — 게이트 진행도 표시
+// 섹션 헤더 — 워시테이프 + 큰 손글씨
 // ============================================================
-function NoNicknamesView({ gate }: { gate: NicknameApiData['gate'] }) {
+function SectionHeader({ count }: { count: number }) {
+  return (
+    <div
+      style={{
+        position: 'relative',
+        marginBottom: 10,
+        paddingLeft: 6,
+        display: 'flex', alignItems: 'flex-end', gap: 8,
+      }}
+    >
+      {/* 좌측 작은 데코 라벨 */}
+      <div
+        style={{
+          padding: '2px 8px 3px',
+          background: 'linear-gradient(135deg, #f4b8cf, #d68694)',
+          borderRadius: 4,
+          fontFamily: HANDWRITE_FONT, fontSize: 10,
+          color: '#fff', letterSpacing: '0.06em',
+          transform: 'rotate(-3deg)',
+          boxShadow: '0 2px 4px rgba(196,114,148,0.25)',
+        }}
+      >
+        🏷️ NAME
+      </div>
+      {/* 메인 타이틀 */}
+      <h3
+        style={{
+          margin: 0,
+          fontFamily: HANDWRITE_FONT, fontSize: 18,
+          color: '#5a2a3a', fontWeight: 700,
+          lineHeight: 1,
+        }}
+      >
+        루나가 부르는 너
+      </h3>
+      {count > 0 && (
+        <span
+          style={{
+            marginLeft: 'auto',
+            padding: '2px 9px',
+            background: 'rgba(214,120,154,0.15)',
+            border: '1px solid rgba(214,120,154,0.3)',
+            borderRadius: 999,
+            fontFamily: NUMERIC_FONT, fontSize: 11,
+            color: '#a85e6f', fontWeight: 600,
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {count}개
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// 빈 상태 — 게이트 진행 시각화
+// ============================================================
+function EmptyState({ gate }: { gate: NicknameApiData['gate'] }) {
   if (gate.allowProposal) {
     return (
       <div
         style={{
-          fontFamily: HANDWRITE_FONT, fontSize: 12.5, color: BOND_TOKENS.inkSoft,
-          lineHeight: 1.55, padding: '4px 2px',
+          padding: '10px 6px 4px',
+          fontFamily: HANDWRITE_FONT,
+          color: '#5a2a3a', lineHeight: 1.55,
         }}
       >
-        루나가 너에게 어울리는 별명을 떠올리는 중이야...
-        <br />
-        <span style={{ fontSize: 10.5, opacity: 0.7 }}>
-          깊은 순간을 함께 나눌 때 자연스럽게 생길 거야.
-        </span>
+        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
+          ✨ 별명, 곧 만들어줄게
+        </div>
+        <div style={{ fontSize: 12, color: '#8a5868', opacity: 0.85 }}>
+          너랑 함께 쌓인 추억 위에 어울리는 이름을 떠올리는 중
+        </div>
       </div>
     );
   }
 
   return (
-    <div
-      style={{
-        fontFamily: HANDWRITE_FONT, fontSize: 12.5, color: BOND_TOKENS.inkSoft,
-        lineHeight: 1.55, padding: '4px 2px',
-      }}
-    >
-      <div style={{ marginBottom: 8, color: BOND_TOKENS.ink }}>
-        🌱 아직 별명이 만들어지지 않았어
+    <div style={{ padding: '8px 4px 4px' }}>
+      {/* 큰 메인 카피 */}
+      <div
+        style={{
+          fontFamily: HANDWRITE_FONT, fontSize: 17, fontWeight: 700,
+          color: '#5a2a3a', lineHeight: 1.25, marginBottom: 6,
+        }}
+      >
+        🌱 아직 별명이 없어
       </div>
-      <div style={{ fontSize: 11, opacity: 0.85, marginBottom: 10 }}>
-        진짜 별명은 함께 쌓은 추억 위에 생겨나. 루나가 충분히 너를 알게 되면 자연스럽게 부를 거야.
+      <div
+        style={{
+          fontFamily: HANDWRITE_FONT, fontSize: 12,
+          color: '#8a5868', opacity: 0.85, lineHeight: 1.55, marginBottom: 14,
+        }}
+      >
+        진짜 별명은 함께 쌓은 추억 위에 자연스럽게 생겨나.
+        <br />
+        조금만 더 같이 시간 보내자
       </div>
+
       <GateChecklist diag={gate.diagnostics} />
     </div>
   );
 }
 
 // ============================================================
-// 게이트 체크리스트 — 4개 조건
+// 게이트 체크리스트 — 진행 바형
 // ============================================================
 function GateChecklist({ diag }: { diag: GateDiag }) {
   const items = [
     {
-      label: '친밀도 Lv.3 이상',
-      ok: (diag.intimacyLevel ?? 0) >= 3,
-      hint: `현재 Lv.${diag.intimacyLevel ?? 1}`,
+      icon: '💜',
+      label: '친밀도 Lv.3',
+      current: diag.intimacyLevel ?? 1,
+      target: 3,
+      progress: Math.min(1, (diag.intimacyLevel ?? 1) / 3),
+      hint: `Lv.${diag.intimacyLevel ?? 1}`,
+      color: '#c98ab8',
     },
     {
-      label: '세션 15회 또는 14일 이상 함께',
-      ok: (diag.totalSessions ?? 0) >= 15 || (diag.daysSinceFirst ?? 0) >= 14,
+      icon: '🌙',
+      label: '함께한 시간',
+      current: Math.max(diag.totalSessions ?? 0, diag.daysSinceFirst ?? 0),
+      target: 14,
+      progress: Math.min(
+        1,
+        Math.max(
+          (diag.totalSessions ?? 0) / 15,
+          (diag.daysSinceFirst ?? 0) / 14,
+        ),
+      ),
       hint: `${diag.totalSessions ?? 0}회 · ${diag.daysSinceFirst ?? 0}일`,
+      color: '#d68694',
     },
     {
-      label: '함께 깊은 순간 1회+',
-      ok: !!diag.hasDeepMoment,
-      hint: diag.hasDeepMoment ? '쌓임' : '아직 없음',
+      icon: '✨',
+      label: '깊은 순간',
+      current: diag.hasDeepMoment ? 1 : 0,
+      target: 1,
+      progress: diag.hasDeepMoment ? 1 : 0,
+      hint: diag.hasDeepMoment ? '쌓임' : '아직',
+      color: '#d6a26c',
     },
   ];
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {items.map((it) => (
-        <div
-          key={it.label}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            fontFamily: HANDWRITE_FONT, fontSize: 11,
-            color: it.ok ? '#3f7a4f' : BOND_TOKENS.inkSoft,
-            opacity: it.ok ? 1 : 0.75,
-          }}
-        >
-          <span style={{ width: 14, textAlign: 'center' }}>{it.ok ? '✓' : '·'}</span>
-          <span style={{ flex: 1 }}>{it.label}</span>
-          <span style={{ fontSize: 10, opacity: 0.7 }}>{it.hint}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ============================================================
-// 활성 별명 한 줄
-// ============================================================
-function ActiveNicknameRow({
-  record, busy, onReject,
-}: {
-  record: NicknameRecord;
-  busy: boolean;
-  onReject: () => void;
-}) {
-  const statusLabel = formatStatusLabel(record.status, record.userReaction);
-  const statusColor = record.status === 'accepted'
-    ? '#3f7a4f'
-    : record.status === 'rejected'
-    ? '#a05050'
-    : '#8a6a48';
 
   return (
     <div
       style={{
-        padding: '10px 12px',
-        background: '#fdf8ef',
-        border: '1px solid rgba(196,136,111,0.18)',
-        borderRadius: 8,
-        boxShadow: '0 1px 2px rgba(120,80,40,0.05)',
+        padding: '12px 14px',
+        background: 'rgba(255,255,255,0.45)',
+        borderRadius: 12,
+        border: '1px solid rgba(214,120,154,0.18)',
+        display: 'flex', flexDirection: 'column', gap: 10,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flex: 1, minWidth: 0 }}>
-          <span
-            style={{
-              fontFamily: HANDWRITE_FONT, fontSize: 16, color: BOND_TOKENS.ink,
-              fontWeight: 600,
-            }}
-          >
-            "{record.nickname}"
-          </span>
-          <span
-            style={{
-              fontFamily: HANDWRITE_FONT, fontSize: 10.5, color: statusColor,
-              opacity: 0.85,
-            }}
-          >
-            {statusLabel}
-          </span>
-        </div>
-        <button
-          disabled={busy}
-          onClick={onReject}
-          style={{
-            flexShrink: 0,
-            fontFamily: HANDWRITE_FONT, fontSize: 10.5,
-            color: '#a05050', background: 'transparent',
-            border: '1px solid rgba(160,80,80,0.3)',
-            borderRadius: 4, padding: '4px 8px',
-            cursor: busy ? 'wait' : 'pointer',
-            opacity: busy ? 0.5 : 1,
-          }}
-        >
-          ✗ 거부
-        </button>
-      </div>
-
-      {record.anchorQuote && (
-        <div
-          style={{
-            marginTop: 6, padding: '6px 8px',
-            background: 'rgba(196,136,111,0.06)',
-            borderLeft: '2px solid rgba(196,136,111,0.35)',
-            borderRadius: 3,
-            fontFamily: HANDWRITE_FONT, fontSize: 11,
-            color: BOND_TOKENS.inkSoft,
-            fontStyle: 'italic',
-            lineHeight: 1.4,
-          }}
-        >
-          📖 "{record.anchorQuote}"
-        </div>
-      )}
-
-      <div
-        style={{
-          marginTop: 6,
-          fontFamily: HANDWRITE_FONT, fontSize: 10, color: BOND_TOKENS.inkSoft,
-          opacity: 0.7, display: 'flex', gap: 10,
-        }}
-      >
-        <span>{record.useCount}회 부름</span>
-        <span>·</span>
-        <span>{formatAgo(record.lastUsedAt)}</span>
-      </div>
+      {items.map((it) => {
+        const done = it.progress >= 1;
+        return (
+          <div key={it.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span
+              style={{
+                width: 22, height: 22,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 13,
+                background: done ? `${it.color}33` : 'rgba(160,90,100,0.08)',
+                borderRadius: '50%',
+                flexShrink: 0,
+              }}
+            >
+              {done ? '✓' : it.icon}
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  display: 'flex', justifyContent: 'space-between',
+                  fontFamily: HANDWRITE_FONT, fontSize: 11,
+                  color: done ? it.color : '#7a4a55',
+                  marginBottom: 3,
+                }}
+              >
+                <span style={{ fontWeight: done ? 700 : 500 }}>{it.label}</span>
+                <span style={{ opacity: 0.75, fontVariantNumeric: 'tabular-nums' }}>{it.hint}</span>
+              </div>
+              <div
+                style={{
+                  height: 5, borderRadius: 999,
+                  background: 'rgba(160,90,100,0.10)',
+                  overflow: 'hidden',
+                }}
+              >
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${it.progress * 100}%` }}
+                  transition={{ duration: 0.8, ease: [0.22, 0.61, 0.36, 1] }}
+                  style={{
+                    height: '100%',
+                    background: `linear-gradient(90deg, ${it.color}99, ${it.color})`,
+                    borderRadius: 999,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 // ============================================================
-// 게이트 진행도 — 별명 있을 때 작게 표시
+// 네임태그 카드 — 핵심 컴포넌트
+// ============================================================
+function NameTagCard({
+  record, palette, busy, onReject,
+}: {
+  record: NicknameRecord;
+  palette: typeof NAMETAG_PALETTES[number];
+  busy: boolean;
+  onReject: () => void;
+}) {
+  const statusInfo = formatStatus(record.status, record.userReaction);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.45, ease: [0.22, 0.61, 0.36, 1] }}
+      style={{
+        position: 'relative',
+        padding: '14px 14px 14px 16px',
+        background: `linear-gradient(135deg, ${palette.tag} 0%, #ffffff 100%)`,
+        borderRadius: 14,
+        border: `1.5px solid ${palette.accent}44`,
+        boxShadow: `0 4px 12px ${palette.accent}1f, inset 0 0 0 1px rgba(255,255,255,0.5)`,
+      }}
+    >
+      {/* 좌측 끈 점 — 네임태그 느낌 */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute', top: 14, left: 0,
+          width: 4, height: 28,
+          background: palette.accent,
+          borderRadius: '0 4px 4px 0',
+          opacity: 0.55,
+        }}
+      />
+
+      {/* 헤더 — 이름 + 상태 + 거부 버튼 */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 6 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* 큰 손글씨 별명 */}
+          <div
+            style={{
+              fontFamily: HANDWRITE_FONT, fontSize: 24,
+              color: palette.ink, fontWeight: 700, lineHeight: 1.1,
+              letterSpacing: '-0.01em',
+              textShadow: `0 1px 0 ${palette.glow}55`,
+            }}
+          >
+            {record.nickname}
+          </div>
+          {/* 상태 칩 */}
+          <div
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              marginTop: 6,
+              padding: '2px 8px 3px',
+              background: 'rgba(255,255,255,0.6)',
+              border: `1px solid ${palette.accent}55`,
+              borderRadius: 999,
+              fontFamily: HANDWRITE_FONT, fontSize: 10.5,
+              color: palette.accent,
+            }}
+          >
+            <span style={{ fontSize: 9 }}>{statusInfo.dot}</span>
+            {statusInfo.label}
+          </div>
+        </div>
+
+        <button
+          disabled={busy}
+          onClick={onReject}
+          aria-label="이 별명 거부"
+          style={{
+            flexShrink: 0,
+            width: 28, height: 28,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(255,255,255,0.65)',
+            border: '1px solid rgba(160,80,80,0.25)',
+            borderRadius: 8,
+            color: '#a05050', fontSize: 13, fontWeight: 600,
+            cursor: busy ? 'wait' : 'pointer',
+            opacity: busy ? 0.5 : 0.85,
+            transition: 'all 0.15s',
+          }}
+        >
+          ✗
+        </button>
+      </div>
+
+      {/* 추억 앵커 — 인용 말풍선 */}
+      {record.anchorQuote && (
+        <div
+          style={{
+            marginTop: 8, padding: '10px 12px',
+            background: 'rgba(255,255,255,0.7)',
+            borderRadius: 10,
+            border: `1px dashed ${palette.accent}55`,
+            fontFamily: HANDWRITE_FONT, fontSize: 11.5,
+            color: palette.ink, opacity: 0.92,
+            fontStyle: 'italic', lineHeight: 1.5,
+            position: 'relative',
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              position: 'absolute', top: -7, left: 14,
+              fontSize: 14, color: palette.accent,
+            }}
+          >
+            ❝
+          </span>
+          {record.anchorQuote}
+        </div>
+      )}
+
+      {/* 푸터 — 사용 횟수 / 시간 */}
+      <div
+        style={{
+          marginTop: 10,
+          display: 'flex', alignItems: 'center', gap: 10,
+          fontFamily: HANDWRITE_FONT, fontSize: 10,
+          color: palette.ink, opacity: 0.6,
+        }}
+      >
+        <span
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 3,
+            padding: '2px 7px',
+            background: 'rgba(255,255,255,0.5)',
+            borderRadius: 999,
+          }}
+        >
+          💌 <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{record.useCount}</strong>회
+        </span>
+        <span>·</span>
+        <span>{formatAgo(record.lastUsedAt)}</span>
+      </div>
+    </motion.div>
+  );
+}
+
+// ============================================================
+// 활성 별명 있을 때 게이트 진행도 — 작은 푸터
 // ============================================================
 function GateProgressMini({ gate }: { gate: NicknameApiData['gate'] }) {
   return (
     <div
       style={{
-        marginTop: 10, paddingTop: 10,
-        borderTop: '1px dashed rgba(124,87,56,0.18)',
-        fontFamily: HANDWRITE_FONT, fontSize: 10, color: BOND_TOKENS.inkSoft,
-        opacity: 0.75, lineHeight: 1.4,
+        padding: '8px 12px',
+        background: 'rgba(255,255,255,0.4)',
+        borderRadius: 10,
+        border: '1px dashed rgba(214,120,154,0.25)',
+        fontFamily: HANDWRITE_FONT, fontSize: 11,
+        color: '#7a4a55', opacity: 0.78, lineHeight: 1.45,
       }}
     >
       {gate.allowProposal ? (
-        <span>✓ 새 별명이 떠오르면 자연스럽게 더 불러줄 거야</span>
+        <>✓ 새 별명이 떠오르면 자연스럽게 더 불러줄게</>
       ) : (
-        <span>· 새 별명은 함께 더 쌓이면 — {gate.reason}</span>
+        <>· 새 별명은 조금 더 쌓이면 — {gate.reason}</>
       )}
     </div>
   );
 }
 
-function formatStatusLabel(
+// ============================================================
+// 봉인된 별명 리스트 — 토글
+// ============================================================
+function RejectedList({
+  names, show, onToggle, busyNick, onRestore,
+}: {
+  names: string[];
+  show: boolean;
+  onToggle: () => void;
+  busyNick: string | null;
+  onRestore: (n: string) => void;
+}) {
+  return (
+    <div style={{ marginTop: 14 }}>
+      <button
+        onClick={onToggle}
+        style={{
+          width: '100%',
+          padding: '8px 12px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: 'rgba(124,87,56,0.07)',
+          border: '1px dashed rgba(124,87,56,0.3)',
+          borderRadius: 10,
+          fontFamily: HANDWRITE_FONT, fontSize: 11.5,
+          color: '#8a5e48', cursor: 'pointer',
+        }}
+      >
+        <span>🔒 봉인한 별명 <strong>{names.length}개</strong></span>
+        <span style={{ fontSize: 10, opacity: 0.7 }}>{show ? '접기 ▴' : '펼치기 ▾'}</span>
+      </button>
+
+      <AnimatePresence>
+        {show && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25 }}
+            style={{ overflow: 'hidden', marginTop: 6 }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 4 }}>
+              {names.map((name) => (
+                <div
+                  key={name}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '8px 12px',
+                    background: 'rgba(255,255,255,0.5)',
+                    border: '1px dashed rgba(160,90,100,0.28)',
+                    borderRadius: 8,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: HANDWRITE_FONT, fontSize: 13,
+                      color: '#a07585', textDecoration: 'line-through',
+                      opacity: 0.78,
+                    }}
+                  >
+                    {name}
+                  </span>
+                  <button
+                    disabled={busyNick === name}
+                    onClick={() => onRestore(name)}
+                    style={{
+                      fontFamily: HANDWRITE_FONT, fontSize: 10.5,
+                      color: '#7a4a55',
+                      background: 'rgba(255,255,255,0.7)',
+                      border: '1px solid rgba(124,87,56,0.3)',
+                      borderRadius: 6, padding: '4px 10px',
+                      cursor: busyNick === name ? 'wait' : 'pointer',
+                      opacity: busyNick === name ? 0.5 : 1,
+                    }}
+                  >
+                    ↻ 복원
+                  </button>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ============================================================
+// 헬퍼
+// ============================================================
+function formatStatus(
   status: NicknameRecord['status'],
   reaction: NicknameRecord['userReaction'],
-): string {
-  if (status === 'accepted') return '받아들임 ✓';
-  if (status === 'rejected') return '봉인됨 ✗';
+): { label: string; dot: string } {
+  if (status === 'accepted') return { label: '받아들임', dot: '💗' };
+  if (status === 'rejected') return { label: '봉인됨', dot: '✗' };
   if (status === 'trying') {
-    if (reaction === 'accepted') return '시험 → 긍정';
-    if (reaction === 'rejected') return '시험 → 거부 분위기';
-    return '시험 중 (반응 관찰)';
+    if (reaction === 'accepted') return { label: '시험 → 긍정', dot: '✨' };
+    if (reaction === 'rejected') return { label: '시험 → 거부', dot: '·' };
+    return { label: '반응 살피는 중', dot: '👀' };
   }
-  return '막 떠올린 이름';
+  return { label: '막 떠올린 이름', dot: '💭' };
 }
 
 function formatAgo(iso: string): string {
@@ -462,3 +682,6 @@ function formatAgo(iso: string): string {
   if (day < 30) return `${Math.round(day / 7)}주 전`;
   return `${Math.round(day / 30)}달 전`;
 }
+
+// 미사용 import 차단용 ref (BOND_TOKENS — 다른 곳에서 색깔 일관성 위해 보존)
+export const __NICKNAME_SECTION_TOKENS_KEEP = BOND_TOKENS;

@@ -377,6 +377,109 @@
   z-index: 1;
 }
 
+/* ⑦ v118.4: 캐릭터 톤 프리셋 — 2x2 그리드 칩 */
+.voice-preset-section {
+  padding: 14px 14px 16px;
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(255, 230, 240, 0.6) 0%, rgba(245, 232, 255, 0.55) 100%);
+  border: 1px solid rgba(206, 147, 216, 0.25);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+  z-index: 1;
+}
+.voice-preset-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.voice-preset-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #6a2a76;
+  letter-spacing: -0.01em;
+}
+.voice-preset-test-btn {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #7b1fa2;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(206, 147, 216, 0.35);
+  cursor: pointer;
+  transition: transform 0.15s, background 0.15s;
+}
+.voice-preset-test-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.95);
+}
+.voice-preset-test-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.voice-preset-test-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.voice-preset-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.voice-preset-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1.5px solid rgba(206, 147, 216, 0.25);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.18s ease;
+  position: relative;
+}
+.voice-preset-chip:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.85);
+  transform: translateY(-1px);
+}
+.voice-preset-chip.active {
+  background: linear-gradient(135deg, #fbe1eb 0%, #f4d8f0 100%);
+  border-color: #d6789a;
+  box-shadow: 0 4px 12px rgba(214, 120, 154, 0.2),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+.voice-preset-chip.active::after {
+  content: '✓';
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #a85e6f;
+}
+.voice-preset-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.voice-preset-emoji {
+  font-size: 18px;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+.voice-preset-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #5a2a3a;
+  letter-spacing: -0.01em;
+}
+.voice-preset-caption {
+  font-size: 10.5px;
+  font-weight: 500;
+  color: #8a5868;
+  opacity: 0.85;
+  line-height: 1.3;
+}
+
 /* ⑧ 위험 버튼 행 */
 .settings-danger-row {
   display: flex;
