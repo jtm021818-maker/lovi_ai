@@ -24,16 +24,13 @@ import { playSound } from '@/lib/audio';
 import LevelStamp from './LevelStamp';
 import PetalFlower from './PetalFlower';
 import GateOpenMoment from './GateOpenMoment';
-import DailyLogHistory from './DailyLogHistory';
 import NicknameSection from './NicknameSection';
 import {
   SEED_LABEL,
   SEED_HINT,
-  PLANT_STAGES,
   MEMORY_SLOTS,
   FEATURE_UNLOCKS,
   partitionUnlocks,
-  getPlantStage,
   type FeatureUnlock,
   type MemorySlot,
 } from './level-unlocks';
@@ -62,11 +59,6 @@ interface MemoryRow {
   unlocked_at: string;
 }
 
-interface DailyLog {
-  log_date: string;
-  content: string;
-}
-
 interface Props {
   data: JournalData;
   show: boolean;
@@ -77,8 +69,6 @@ interface Props {
 export default function LunaJournalPage({ data, show, persona = 'luna' }: Props) {
   const stampPlayedRef = useRef(false);
   const [memories, setMemories] = useState<MemoryRow[]>([]);
-  const [dailyLog, setDailyLog] = useState<DailyLog | null>(null);
-  const [historyOpen, setHistoryOpen] = useState(false);
 
   // 사운드/햅틱 인트로
   useEffect(() => {
@@ -99,19 +89,16 @@ export default function LunaJournalPage({ data, show, persona = 'luna' }: Props)
     }
   }, [show]);
 
-  // 기억 카드 + 데일리 일기 fetch
+  // 기억 카드 fetch — 일일 일기는 루나 편지와 중복이라 v118.1 에서 제거
   useEffect(() => {
     if (!show) return;
     let cancelled = false;
     (async () => {
       try {
-        const [m, d] = await Promise.all([
-          fetch(`/api/relationship/memories?persona=${persona}`).then(r => r.ok ? r.json() : { memories: [] }),
-          fetch(`/api/relationship/daily-log/latest?persona=${persona}`).then(r => r.ok ? r.json() : { log: null }),
-        ]);
+        const m = await fetch(`/api/relationship/memories?persona=${persona}`)
+          .then((r) => (r.ok ? r.json() : { memories: [] }));
         if (cancelled) return;
         setMemories(m.memories ?? []);
-        setDailyLog(d.log ?? null);
       } catch {
         /* silent */
       }
@@ -123,7 +110,6 @@ export default function LunaJournalPage({ data, show, persona = 'luna' }: Props)
   const isMax = data.level >= 5;
   const stageLabel = isSeed ? SEED_LABEL : data.levelLabel;
   const depthHint = isSeed ? SEED_HINT : data.depthHint;
-  const plant = getPlantStage(data.level);
   const { unlocked, nextLocked } = partitionUnlocks(data.level);
 
   return (
@@ -179,55 +165,30 @@ export default function LunaJournalPage({ data, show, persona = 'luna' }: Props)
         consecutiveDays={data.consecutiveDays}
       />
 
-      {/* ── 2. 메인 위젯 (식물 + 캐릭터 카드) ────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-        <PlantPotCard
-          show={show}
-          level={data.level}
-          imageSrc={plant.imageSrc}
-          fallbackEmoji={plant.fallbackEmoji}
-          stageKorean={plant.stageKorean}
-          caption={plant.caption}
-        />
-        <CharacterCard
-          show={show}
-          data={data}
-          stageLabel={stageLabel}
-          depthHint={depthHint}
-        />
-      </div>
-
-      {/* ── 3. 데일리 일기 ──────────────────────────────────── */}
-      <DailyLogCard
+      {/* ── 2. 메인 위젯 (캐릭터 카드 — 풀폭, v118.1 화분/일지 제거) ────── */}
+      <CharacterCard
         show={show}
-        log={dailyLog}
-        isSeed={isSeed}
-        onOpenHistory={() => setHistoryOpen(true)}
+        data={data}
+        stageLabel={stageLabel}
+        depthHint={depthHint}
       />
 
-      {/* ── 4. 기억 앨범 ────────────────────────────────────── */}
+      {/* ── 3. 기억 앨범 ────────────────────────────────────── */}
       <MemoryAlbum show={show} memories={memories} currentLevel={data.level} />
 
-      {/* ── 4.5 별명 (v115.7) — 루나/타로 공통이지만 luna persona 일 때만 ── */}
+      {/* ── 4. 별명 (v115.7) — 루나/타로 공통이지만 luna persona 일 때만 ── */}
       {persona === 'luna' && <NicknameSection show={show} />}
 
       {/* ── 5. 해금 뱃지 ────────────────────────────────────── */}
       <UnlockBadges show={show} unlocked={unlocked} nextLocked={nextLocked} />
 
-      {/* ── 6. 진행도 (식물 옆 마이크로 정보 — 작게 유지) ──── */}
+      {/* ── 6. 진행도 ───────────────────────────────────────── */}
       <ProgressFootnote show={show} percent={data.progressPercent} />
 
-      {/* 🆕 v117: 소프트 게이트 — Lv 3 진입 시 "마음 더 열기" 모먼트 (Stardew bouquet) */}
+      {/* 🆕 v117: 소프트 게이트 — Lv 3 진입 시 "마음 더 열기" 모먼트 */}
       <GateOpenMoment
         avgScore={data.avgScore}
         level={data.level}
-        persona={persona}
-      />
-
-      {/* 🆕 v117 D1: 과거 일기 히스토리 드로어 */}
-      <DailyLogHistory
-        open={historyOpen}
-        onClose={() => setHistoryOpen(false)}
         persona={persona}
       />
     </div>
@@ -306,93 +267,8 @@ function Header({
 // ============================================================
 // 2-A. 화분 카드 (식물 성장 비주얼)
 // ============================================================
-function PlantPotCard({
-  show, level, imageSrc, fallbackEmoji, stageKorean, caption,
-}: {
-  show: boolean;
-  level: number;
-  imageSrc: string;
-  fallbackEmoji: string;
-  stageKorean: string;
-  caption: string;
-}) {
-  const [imgOk, setImgOk] = useState(true);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={show ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
-      transition={{ delay: 0.45, duration: 0.5 }}
-      style={{
-        position: 'relative',
-        padding: '12px 10px 10px',
-        background: 'linear-gradient(180deg, #fffaf2 0%, #fef0e0 100%)',
-        border: '1px solid rgba(196,136,111,0.18)',
-        borderRadius: 12,
-        boxShadow: '0 2px 6px rgba(120,80,40,0.06)',
-        textAlign: 'center',
-        minHeight: 168,
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-      }}
-    >
-      {/* 상단 작은 라벨 */}
-      <div
-        style={{
-          fontFamily: HANDWRITE_FONT, fontSize: 11, color: BOND_TOKENS.inkSoft, opacity: 0.7,
-        }}
-      >
-        우리의 화분
-      </div>
-
-      {/* 식물 이미지 (없으면 큰 이모지) */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {imgOk ? (
-          <img
-            src={imageSrc}
-            alt={`Lv${level} ${stageKorean}`}
-            onError={() => setImgOk(false)}
-            style={{ width: 86, height: 86, objectFit: 'contain', filter: 'drop-shadow(0 4px 6px rgba(120,80,40,0.15))' }}
-          />
-        ) : (
-          <motion.div
-            animate={{ y: [0, -3, 0] }}
-            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-            style={{ fontSize: 64, lineHeight: 1, filter: 'drop-shadow(0 4px 6px rgba(120,80,40,0.18))' }}
-          >
-            {fallbackEmoji}
-          </motion.div>
-        )}
-      </div>
-
-      <div style={{ fontFamily: HANDWRITE_FONT, fontSize: 14, color: BOND_TOKENS.ink, lineHeight: 1.1 }}>
-        {stageKorean}
-      </div>
-      <div style={{ fontFamily: HANDWRITE_FONT, fontSize: 11, color: BOND_TOKENS.inkSoft, opacity: 0.8, lineHeight: 1.2 }}>
-        {caption}
-      </div>
-
-      {/* 5단계 dot indicator */}
-      <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-        {PLANT_STAGES.map((s, i) => (
-          <span
-            key={s.level}
-            style={{
-              width: i + 1 === level ? 14 : 6,
-              height: 6,
-              borderRadius: 3,
-              background: i + 1 <= level ? '#c4886f' : '#e8d5c0',
-              transition: 'all 240ms ease',
-            }}
-          />
-        ))}
-      </div>
-    </motion.div>
-  );
-}
-
-// ============================================================
-// 2-B. 캐릭터 카드 (4축 + 스테이지 라벨)
-// ============================================================
+// v118.1: 캐릭터 카드 — 풀폭으로 재배치 (화분/일지 카드 제거 후 메인 위젯 유일)
+//   4축 페탈을 키우고 스테이지 라벨/depthHint 를 좌우 정렬로 균형.
 function CharacterCard({
   show, data, stageLabel, depthHint,
 }: {
@@ -405,147 +281,61 @@ function CharacterCard({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={show ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
-      transition={{ delay: 0.55, duration: 0.5 }}
+      transition={{ delay: 0.5, duration: 0.5 }}
       style={{
         position: 'relative',
-        padding: '12px 10px',
+        padding: '16px 18px',
+        marginBottom: 16,
         background: 'linear-gradient(180deg, #fdf6ec 0%, #f9e9d8 100%)',
-        border: '1px solid rgba(196,136,111,0.18)',
-        borderRadius: 12,
-        boxShadow: '0 2px 6px rgba(120,80,40,0.06)',
-        minHeight: 168,
-        display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+        border: '1px solid rgba(196,136,111,0.2)',
+        borderRadius: 14,
+        boxShadow: '0 3px 10px rgba(120,80,40,0.08)',
+        display: 'grid',
+        gridTemplateColumns: '120px 1fr',
+        gap: 14,
+        alignItems: 'center',
       }}
     >
-      <div style={{ fontFamily: HANDWRITE_FONT, fontSize: 11, color: BOND_TOKENS.inkSoft, opacity: 0.7, textAlign: 'center' }}>
-        루나의 카드
-      </div>
-
-      {/* 4축 페탈 (축소판) */}
-      <div style={{ display: 'flex', justifyContent: 'center', margin: '2px 0' }}>
-        <div style={{ width: 100, height: 100 }}>
+      {/* 좌측 — 4축 페탈 */}
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <div style={{ width: 120, height: 120 }}>
           <PetalFlower
             trust={data.trust}
             openness={data.openness}
             bond={data.bond}
             respect={data.respect}
             show={show}
-            delay={920}
+            delay={760}
           />
         </div>
       </div>
 
-      {/* 스테이지 손글씨 라벨 */}
-      <div style={{ textAlign: 'center', minHeight: 30 }}>
+      {/* 우측 — 스테이지 라벨 / depthHint */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
         <div
           style={{
-            fontFamily: HANDWRITE_FONT, fontSize: 13, color: BOND_TOKENS.ink,
-            lineHeight: 1.1, fontWeight: 600,
+            fontFamily: HANDWRITE_FONT, fontSize: 11, color: BOND_TOKENS.inkSoft,
+            opacity: 0.7, letterSpacing: '0.02em',
+          }}
+        >
+          지금 우리는
+        </div>
+        <div
+          style={{
+            fontFamily: HANDWRITE_FONT, fontSize: 17, color: BOND_TOKENS.ink,
+            lineHeight: 1.25, fontWeight: 600,
           }}
         >
           "{stageLabel}"
         </div>
         <div
           style={{
-            fontFamily: HANDWRITE_FONT, fontSize: 10, color: BOND_TOKENS.inkSoft,
-            opacity: 0.75, marginTop: 2, lineHeight: 1.25,
+            fontFamily: HANDWRITE_FONT, fontSize: 11.5, color: BOND_TOKENS.inkSoft,
+            opacity: 0.85, lineHeight: 1.45, marginTop: 2,
           }}
         >
           {depthHint}
         </div>
-      </div>
-    </motion.div>
-  );
-}
-
-// ============================================================
-// 3. 데일리 일기
-// ============================================================
-function DailyLogCard({
-  show, log, isSeed, onOpenHistory,
-}: {
-  show: boolean;
-  log: DailyLog | null;
-  isSeed: boolean;
-  onOpenHistory?: () => void;
-}) {
-  const placeholderContent = isSeed
-    ? '오늘 처음 만났어. 너 어떤 사람인지 궁금해.'
-    : '오늘도 와 줘서 고마워. 내일도 같이 얘기하자.';
-
-  const content = log?.content ?? placeholderContent;
-  const dateStr = log?.log_date
-    ? new Date(log.log_date).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
-    : new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={show ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }}
-      transition={{ delay: 0.7, duration: 0.5 }}
-      style={{
-        position: 'relative',
-        padding: '12px 14px 14px',
-        background: 'linear-gradient(180deg, #fffbef 0%, #fff5d8 100%)',
-        border: '1px dashed rgba(124,87,56,0.32)',
-        borderRadius: 6,
-        marginBottom: 16,
-        boxShadow: '0 4px 10px rgba(120,80,40,0.08)',
-        transform: 'rotate(-0.4deg)',
-      }}
-    >
-      {/* 핀 */}
-      <div
-        style={{
-          position: 'absolute', top: -5, left: 18,
-          width: 10, height: 10, borderRadius: '50%',
-          background: 'radial-gradient(circle at 30% 30%, #f2b8a8, #c4886f)',
-          boxShadow: '0 1.5px 3px rgba(0,0,0,0.3)',
-        }}
-      />
-      <div
-        style={{
-          fontFamily: HANDWRITE_FONT, fontSize: 11, color: BOND_TOKENS.inkSoft,
-          opacity: 0.8, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6,
-        }}
-      >
-        📓 오늘의 루나 일지
-      </div>
-      <div
-        style={{
-          fontFamily: HANDWRITE_FONT, fontSize: 15, color: BOND_TOKENS.ink,
-          lineHeight: 1.5, fontStyle: 'italic',
-        }}
-      >
-        "{content}"
-      </div>
-      <div
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          marginTop: 6,
-        }}
-      >
-        {onOpenHistory ? (
-          <button
-            onClick={onOpenHistory}
-            style={{
-              background: 'transparent', border: 'none', padding: 0,
-              fontFamily: HANDWRITE_FONT, fontSize: 10.5, color: '#9d643a',
-              opacity: 0.8, cursor: 'pointer', textDecoration: 'underline dashed',
-              textUnderlineOffset: 2,
-            }}
-          >
-            📅 일지 전체 보기
-          </button>
-        ) : <span />}
-        <span
-          style={{
-            fontFamily: HANDWRITE_FONT, fontSize: 10, color: BOND_TOKENS.inkSoft,
-            opacity: 0.7,
-          }}
-        >
-          — {dateStr}
-        </span>
       </div>
     </motion.div>
   );

@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue } from 'framer-motion';
 import { getSpirit } from '@/data/spirits';
 import type { RoomState } from '@/types/room.types';
 import type { UserSpirit, SpiritId } from '@/types/spirit.types';
@@ -192,40 +192,17 @@ export default function RoomPage() {
                 const sp = getSpirit(p.spiritId);
                 if (!sp) return null;
                 return (
-                  <motion.div
+                  <PlacedSpirit
                     key={p.spiritId}
-                    drag={editMode}
-                    dragMomentum={false}
-                    dragElastic={0}
-                    dragConstraints={roomInnerRef}
-                    onDragEnd={(_e, info) => {
-                      const nx = Math.max(0, Math.min(1, (p.x * ROOM_W + info.offset.x) / ROOM_W));
-                      const ny = Math.max(0, Math.min(1, (p.y * ROOM_H + info.offset.y) / ROOM_H));
-                      moveSpirit(p.spiritId, nx, ny);
-                    }}
-                    initial={{ scale: 0, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0, opacity: 0 }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-                    onClick={() => editMode && removeSpirit(p.spiritId)}
-                    className="absolute select-none z-30 flex items-center justify-center"
-                    style={{
-                      left: p.x * ROOM_W - 36,
-                      top: p.y * ROOM_H - 48,
-                      width: 72,
-                      height: 96,
-                      filter: `drop-shadow(0 3px 6px ${sp.themeColor}aa)`,
-                      cursor: editMode ? 'pointer' : 'default',
-                    }}
-                  >
-                    <SpiritSprite spirit={sp} state="idle" size={72} emojiSize={56} />
-
-                    {editMode && (
-                      <div className="absolute -top-1 -right-2 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center font-black shadow-md">
-                        ×
-                      </div>
-                    )}
-                  </motion.div>
+                    placement={p}
+                    spirit={sp}
+                    editMode={editMode}
+                    roomW={ROOM_W}
+                    roomH={ROOM_H}
+                    constraintsRef={roomInnerRef}
+                    onMove={(nx, ny) => moveSpirit(p.spiritId, nx, ny)}
+                    onRemove={() => removeSpirit(p.spiritId)}
+                  />
                 );
               })}
           </AnimatePresence>
@@ -298,5 +275,99 @@ export default function RoomPage() {
         ageDays={ageDaysForDex}
       />
     </div>
+  );
+}
+
+// ============================================================
+// PlacedSpirit — 개별 정령 컴포넌트 (드래그 정밀도 fix, v118.2)
+// ============================================================
+//
+// 🐛 이전 버그: motion.div 에 style.left/top 으로 위치 + drag={true} 같이 쓰면,
+// 드래그 종료 후 Framer 가 transform translate(offset.x, offset.y) 를 유지함.
+// React state 가 left/top 만 새로 쓰면, 시각적으로 "드래그 거리만큼 더 이동" 한 위치에 떠있음.
+// (Framer Motion GitHub issue #1052, #2128 의 클래식 케이스)
+//
+// ✅ 수정: useMotionValue 로 x/y motion value 를 직접 들고, style 에 left/top 대신 x/y 사용.
+//   - 드래그 중: motion value 가 실시간 업데이트
+//   - 드래그 종료: motion value 의 현재 값이 곧 최종 시각 위치. 잔여 transform offset 0.
+//   - 외부 state(p.x/p.y) 변경 시: useEffect 로 motion value 동기화.
+function PlacedSpirit({
+  placement,
+  spirit,
+  editMode,
+  roomW,
+  roomH,
+  constraintsRef,
+  onMove,
+  onRemove,
+}: {
+  placement: { spiritId: SpiritId; x: number; y: number };
+  spirit: ReturnType<typeof getSpirit>;
+  editMode: boolean;
+  roomW: number;
+  roomH: number;
+  constraintsRef: React.RefObject<HTMLDivElement | null>;
+  onMove: (nx: number, ny: number) => void;
+  onRemove: () => void;
+}) {
+  // 앵커 보정: 스프라이트 중심을 percent 위치에 맞추기 위해 width/2=36, height/2=48 빼줌
+  const ANCHOR_X = 36;
+  const ANCHOR_Y = 48;
+
+  // motion value 초기값 — placement 의 첫 위치 (anchor 보정 포함)
+  const mx = useMotionValue(placement.x * roomW - ANCHOR_X);
+  const my = useMotionValue(placement.y * roomH - ANCHOR_Y);
+
+  // 외부에서 placement.x/y 가 변경되면(예: 다른 트리거로 이동) motion value 동기화.
+  // 단, 본인이 드래그해서 onMove 호출한 직후에도 React state 가 업데이트되며 이 effect 가 한 번 더
+  // 돌 수 있는데, 그 시점 새 값과 motion value 가 이미 일치하므로 .set 호출은 no-op (시각적 변화 없음).
+  useEffect(() => {
+    mx.set(placement.x * roomW - ANCHOR_X);
+    my.set(placement.y * roomH - ANCHOR_Y);
+  }, [placement.x, placement.y, roomW, roomH, mx, my]);
+
+  if (!spirit) return null;
+
+  return (
+    <motion.div
+      drag={editMode}
+      dragMomentum={false}
+      dragElastic={0}
+      dragConstraints={constraintsRef}
+      onDragEnd={() => {
+        // motion value 가 곧 최종 위치 — info.offset 안 써도 됨, 잔여 transform 없음
+        const left = mx.get() + ANCHOR_X;
+        const top = my.get() + ANCHOR_Y;
+        const nx = Math.max(0, Math.min(1, left / roomW));
+        const ny = Math.max(0, Math.min(1, top / roomH));
+        onMove(nx, ny);
+      }}
+      initial={{ scale: 0, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      exit={{ scale: 0, opacity: 0 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+      onClick={() => editMode && onRemove()}
+      className="absolute select-none z-30 flex items-center justify-center"
+      style={{
+        // ⚠️ left/top 대신 x/y motion value 로 위치 — 드래그 종료 후 transform 잔존 X
+        left: 0,
+        top: 0,
+        x: mx,
+        y: my,
+        width: 72,
+        height: 96,
+        filter: `drop-shadow(0 3px 6px ${spirit.themeColor}aa)`,
+        cursor: editMode ? 'pointer' : 'default',
+        touchAction: editMode ? 'none' : 'auto',
+      }}
+    >
+      <SpiritSprite spirit={spirit} state="idle" size={72} emojiSize={56} />
+
+      {editMode && (
+        <div className="absolute -top-1 -right-2 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center font-black shadow-md">
+          ×
+        </div>
+      )}
+    </motion.div>
   );
 }
