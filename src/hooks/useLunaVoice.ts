@@ -10,7 +10,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
  *   유저가 수치 조절할 필요 없도록 4개 캐릭터 프리셋만 노출.
  */
 
-export type LunaVoicePresetId = 'soft' | 'bright' | 'calm' | 'clear';
+export type LunaVoicePresetId = 'soft' | 'calm' | 'lively';
 
 export interface LunaVoicePreset {
   id: LunaVoicePresetId;
@@ -22,41 +22,36 @@ export interface LunaVoicePreset {
   rate: string;
 }
 
+// v118.6 (2026-05): 착한 언니 루나 톤 극한 커스텀.
+//   Edge TTS 무료 ko 보이스는 SunHi/InJoon 2개뿐 — 전부 SunHi base.
+//   유저 추천 세팅(rate -10%, pitch +5Hz)을 'soft' 기본으로 채택.
+//   프리셋 4개 → 3개로 축소 (정체성 명확화).
 export const LUNA_VOICE_PRESETS: LunaVoicePreset[] = [
   {
     id: 'soft',
-    label: '루나 기본',
-    caption: '단아하고 잔잔한 언니 톤',
+    label: '착한 언니',
+    caption: '잔잔하고 다정한 기본 톤',
     emoji: '🌷',
     voice: 'ko-KR-SunHiNeural',
-    pitch: '+2Hz',
+    pitch: '+5Hz',
     rate: '-10%',
   },
   {
-    id: 'bright',
-    label: '밝은 루나',
-    caption: '들떠있고 살짝 빠른',
-    emoji: '✨',
-    voice: 'ko-KR-YuJinNeural',
-    pitch: '+3Hz',
-    rate: '+0%',
-  },
-  {
     id: 'calm',
-    label: '차분 루나',
-    caption: '깊고 느린 새벽톤',
+    label: '새벽 톤',
+    caption: '깊고 느린 진지한 톤',
     emoji: '🌙',
-    voice: 'ko-KR-JiMinNeural',
+    voice: 'ko-KR-SunHiNeural',
     pitch: '-1Hz',
     rate: '-15%',
   },
   {
-    id: 'clear',
-    label: '또렷 루나',
-    caption: '명료한 발음 강조',
-    emoji: '💎',
+    id: 'lively',
+    label: '들뜬 톤',
+    caption: '신나고 재밌는 톤',
+    emoji: '✨',
     voice: 'ko-KR-SunHiNeural',
-    pitch: '+5Hz',
+    pitch: '+8Hz',
     rate: '+0%',
   },
 ];
@@ -81,15 +76,20 @@ const DEFAULT_SETTINGS: LunaVoiceSettings = {
 
 const STORAGE_KEY = 'luna-voice-settings';
 
+const VALID_PRESET_IDS: ReadonlySet<LunaVoicePresetId> = new Set(['soft', 'calm', 'lively']);
+
 function loadSettings(): LunaVoiceSettings {
   if (typeof window === 'undefined') return DEFAULT_SETTINGS;
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      // v118.4 마이그레이션: 이전 pitch/rate 키 무시, preset 만 살림 (있으면)
+      // v118.6 마이그레이션: 이전 preset(bright/clear) → soft 폴백
+      const rawPreset = parsed.preset;
+      const preset: LunaVoicePresetId =
+        VALID_PRESET_IDS.has(rawPreset) ? rawPreset : DEFAULT_SETTINGS.preset;
       return {
-        preset: (parsed.preset as LunaVoicePresetId) ?? DEFAULT_SETTINGS.preset,
+        preset,
         volume: parsed.volume ?? DEFAULT_SETTINGS.volume,
         enabled: parsed.enabled ?? DEFAULT_SETTINGS.enabled,
         autoSpeak: parsed.autoSpeak ?? DEFAULT_SETTINGS.autoSpeak,

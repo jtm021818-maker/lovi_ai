@@ -276,7 +276,7 @@ export default function SettingsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text: '안녕, 나는 루나야! 오늘 기분은 어때?',
+          text: '어... 왔어?|||오늘따라 왜 이렇게 피곤해 보여?|||이리 와서 잠깐 앉아봐|||언니가 맛있는 거 해줄게.',
           preset: voiceSettings.preset,
           volume: voiceSettings.volume,
         }),
