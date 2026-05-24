@@ -300,6 +300,35 @@ export default function SettingsPage() {
     }
   }, [voiceSettings, showToast]);
 
+  // v118.9: Supertonic 들어보기 — 선택된 F1-F5 voice 로 즉시 발화 테스트
+  const [supertonicTesting, setSupertonicTesting] = useState(false);
+  const testSupertonic = useCallback(async () => {
+    if (supertonicState.status !== 'ready') {
+      showToast('먼저 모델을 다운로드해줘');
+      return;
+    }
+    setSupertonicTesting(true);
+    try {
+      const mod = await import('@/lib/tts/supertonic-client');
+      const client = mod.SupertonicClient.getInstance();
+      const blob = await client.synthesize(
+        '어... 왔어? 오늘따라 왜 이렇게 피곤해 보여? 이리 와서 잠깐 앉아봐, 언니가 맛있는 거 해줄게.',
+        voiceSettings.supertonicVoice,
+        'ko',
+      );
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.onended = () => URL.revokeObjectURL(url);
+      audio.onerror = () => URL.revokeObjectURL(url);
+      await audio.play();
+    } catch (e) {
+      console.error('[Supertonic test]', e);
+      showToast('고음질 음성 테스트 실패');
+    } finally {
+      setSupertonicTesting(false);
+    }
+  }, [supertonicState.status, voiceSettings.supertonicVoice, showToast]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full" style={{ background: 'linear-gradient(180deg, #fce4ec 0%, #fff5f0 50%, #fdf0e8 100%)' }}>
@@ -696,6 +725,16 @@ export default function SettingsPage() {
                   · 145MB 1회 다운로드 후 오프라인 작동 · 평생 무료
                 </p>
               </div>
+              {supertonicState.status === 'ready' && (
+                <button
+                  onClick={testSupertonic}
+                  disabled={supertonicTesting}
+                  className="voice-preset-test-btn"
+                  aria-label="고음질 음성 들어보기"
+                >
+                  {supertonicTesting ? '재생중…' : '🔊 들어보기'}
+                </button>
+              )}
             </div>
 
             {/* 상태별 UI */}
