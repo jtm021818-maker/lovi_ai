@@ -74,16 +74,22 @@ interface LunaVoiceSettings {
 }
 
 const DEFAULT_SETTINGS: LunaVoiceSettings = {
-  preset: 'soft',
+  preset: 'lively',
   volume: '+0%',
   enabled: true,
   engine: 'edge',
   supertonicVoice: 'F3',
 };
 
+// v118.10: Supertonic 비활성화 (품질/속도/안정성 이슈로 Edge TTS 전용 운영)
+const SUPERTONIC_DISABLED = true;
+
+// v118.11: 캐릭터 톤 프리셋 고정 — '들뜬 톤(lively)' 만 사용 (다른 톤 품질 이슈)
+const FORCE_PRESET: LunaVoicePresetId = 'lively';
+
 const STORAGE_KEY = 'luna-voice-settings';
 
-const VALID_PRESET_IDS: ReadonlySet<LunaVoicePresetId> = new Set(['soft', 'calm', 'lively']);
+// v118.11: VALID_PRESET_IDS 제거 — 항상 FORCE_PRESET 강제
 const VALID_VOICES: ReadonlySet<VoiceId> = new Set(['F1', 'F2', 'F3', 'F4', 'F5']);
 const VALID_ENGINES: ReadonlySet<TtsEngine> = new Set(['edge', 'supertonic']);
 
@@ -93,8 +99,11 @@ function loadSettings(): LunaVoiceSettings {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      const preset: LunaVoicePresetId = VALID_PRESET_IDS.has(parsed.preset) ? parsed.preset : DEFAULT_SETTINGS.preset;
-      const engine: TtsEngine = VALID_ENGINES.has(parsed.engine) ? parsed.engine : DEFAULT_SETTINGS.engine;
+      // v118.11: 저장된 preset 무시 — 항상 FORCE_PRESET ('lively') 사용
+      const preset: LunaVoicePresetId = FORCE_PRESET;
+      let engine: TtsEngine = VALID_ENGINES.has(parsed.engine) ? parsed.engine : DEFAULT_SETTINGS.engine;
+      // v118.10: Supertonic 비활성화 — 저장된 값이 supertonic 이어도 edge 로 강제
+      if (SUPERTONIC_DISABLED && engine === 'supertonic') engine = 'edge';
       const supertonicVoice: VoiceId = VALID_VOICES.has(parsed.supertonicVoice) ? parsed.supertonicVoice : DEFAULT_SETTINGS.supertonicVoice;
       return {
         preset,
@@ -147,36 +156,7 @@ export function useLunaVoice() {
 
   useEffect(() => {
     setSettings(loadSettings());
-
-    // Supertonic 캐시 자동 감지 — 이미 다운로드되어 있으면 ready 로 빠르게 전환
-    (async () => {
-      try {
-        const mod = await import('@/lib/tts/supertonic-client');
-        const cached = await mod.SupertonicClient.isCached();
-        if (cached) {
-          setSupertonic((s) => ({ ...s, status: 'loading', label: '캐시에서 불러오는 중' }));
-          const client = mod.SupertonicClient.getInstance();
-          await client.ensureReady((p) => {
-            setSupertonic({
-              status: client.getStatus(),
-              percent: p.percent,
-              label: p.label,
-              error: null,
-              backend: client.getBackend(),
-            });
-          });
-          setSupertonic({
-            status: 'ready',
-            percent: 100,
-            label: '준비 완료',
-            error: null,
-            backend: client.getBackend(),
-          });
-        }
-      } catch (e) {
-        console.warn('[LunaVoice] Supertonic 캐시 자동 로드 실패 (무시)', (e as Error).message);
-      }
-    })();
+    // v118.10: Supertonic 비활성화 — 캐시 자동 로드 스킵
   }, []);
 
   useEffect(() => {
@@ -246,16 +226,7 @@ export function useLunaVoice() {
       setIsSpeaking(true);
 
       try {
-        // Supertonic 우선 (활성 + ready 상태일 때만)
-        if (settings.engine === 'supertonic' && supertonic.status === 'ready') {
-          try {
-            await speakViaSupertonic(text);
-            return;
-          } catch (e) {
-            console.warn('[LunaVoice] Supertonic 실패 → Edge 폴백', (e as Error).message);
-            // 폴백
-          }
-        }
+        // v118.10: Supertonic 비활성화 — 항상 Edge TTS 사용
         await speakViaEdge(text, controller.signal);
       } catch (err: any) {
         if (err?.name !== 'AbortError') {

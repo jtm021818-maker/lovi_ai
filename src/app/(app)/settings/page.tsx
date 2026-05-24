@@ -7,7 +7,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createClient } from '@/lib/supabase/client';
-import { useLunaVoice, LUNA_VOICE_PRESETS, SUPERTONIC_VOICES } from '@/hooks/useLunaVoice';
+import { useLunaVoice } from '@/hooks/useLunaVoice';
 import { isFxEnabled } from '@/lib/fx/effect-bus';
 import type { PersonaMode } from '@/types/persona.types';
 // 🆕 v41: 친밀도 카드
@@ -135,11 +135,7 @@ export default function SettingsPage() {
   const {
     settings: voiceSettings,
     updateSettings: updateVoice,
-    supertonic: supertonicState,
-    downloadSupertonic,
-    clearSupertonicCache,
   } = useLunaVoice();
-  const [showSupertonicConfirm, setShowSupertonicConfirm] = useState(false);
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   // 🆕 v41.1: 페르소나별 친밀도 상태 (루나 + 타로냥 독립)
@@ -300,34 +296,7 @@ export default function SettingsPage() {
     }
   }, [voiceSettings, showToast]);
 
-  // v118.9: Supertonic 들어보기 — 선택된 F1-F5 voice 로 즉시 발화 테스트
-  const [supertonicTesting, setSupertonicTesting] = useState(false);
-  const testSupertonic = useCallback(async () => {
-    if (supertonicState.status !== 'ready') {
-      showToast('먼저 모델을 다운로드해줘');
-      return;
-    }
-    setSupertonicTesting(true);
-    try {
-      const mod = await import('@/lib/tts/supertonic-client');
-      const client = mod.SupertonicClient.getInstance();
-      const blob = await client.synthesize(
-        '어... 왔어? 오늘따라 왜 이렇게 피곤해 보여? 이리 와서 잠깐 앉아봐, 언니가 맛있는 거 해줄게.',
-        voiceSettings.supertonicVoice,
-        'ko',
-      );
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.onended = () => URL.revokeObjectURL(url);
-      audio.onerror = () => URL.revokeObjectURL(url);
-      await audio.play();
-    } catch (e) {
-      console.error('[Supertonic test]', e);
-      showToast('고음질 음성 테스트 실패');
-    } finally {
-      setSupertonicTesting(false);
-    }
-  }, [supertonicState.status, voiceSettings.supertonicVoice, showToast]);
+  // v118.10: Supertonic 비활성화 (UI/콜백 제거)
 
   if (loading) {
     return (
@@ -679,7 +648,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* ⑦ 캐릭터 톤 프리셋 + 테스트 */}
+        {/* ⑦ v118.11: 루나 목소리 — 들뜬 톤 고정, 들어보기 버튼만 노출 */}
         {voiceSettings.enabled && (
           <div className="voice-preset-section">
             <div className="voice-preset-header">
@@ -693,175 +662,13 @@ export default function SettingsPage() {
                 🔊 들어보기
               </button>
             </div>
-            <div className="voice-preset-grid">
-              {LUNA_VOICE_PRESETS.map((p) => {
-                const active = voiceSettings.preset === p.id && voiceSettings.engine === 'edge';
-                return (
-                  <button
-                    key={p.id}
-                    disabled={!isPremium}
-                    onClick={() => updateVoice({ preset: p.id, engine: 'edge' })}
-                    className={`voice-preset-chip ${active ? 'active' : ''}`}
-                    aria-pressed={active}
-                  >
-                    <span className="voice-preset-emoji">{p.emoji}</span>
-                    <span className="voice-preset-label">{p.label}</span>
-                    <span className="voice-preset-caption">{p.caption}</span>
-                  </button>
-                );
-              })}
-            </div>
+            <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 6, lineHeight: 1.5 }}>
+              ✨ <b>들뜬 톤</b> — 신나고 재밌는 톤으로 고정되어 있어
+            </p>
           </div>
         )}
 
-        {/* ⑦.5 v118.8: Supertonic v3 온디바이스 — 145MB 1회 다운로드, 캐릭터급 한국어 */}
-        {voiceSettings.enabled && isPremium && (
-          <div className="supertonic-section">
-            <div className="supertonic-header">
-              <div>
-                <span className="supertonic-title">🎙️ 고음질 캐릭터 음성 <span className="supertonic-beta">베타</span></span>
-                <p className="supertonic-subtitle">
-                  한국 회사 Supertonic v3 캐릭터급 한국어 음성
-                  · 145MB 1회 다운로드 후 오프라인 작동 · 평생 무료
-                </p>
-              </div>
-              {supertonicState.status === 'ready' && (
-                <button
-                  onClick={testSupertonic}
-                  disabled={supertonicTesting}
-                  className="voice-preset-test-btn"
-                  aria-label="고음질 음성 들어보기"
-                >
-                  {supertonicTesting ? '재생중…' : '🔊 들어보기'}
-                </button>
-              )}
-            </div>
-
-            {/* 상태별 UI */}
-            {supertonicState.status === 'idle' && (
-              <button
-                onClick={() => setShowSupertonicConfirm(true)}
-                className="supertonic-start-btn"
-              >
-                ✨ 고음질 음성 켜기 (145MB 다운로드)
-              </button>
-            )}
-
-            {(supertonicState.status === 'downloading' || supertonicState.status === 'loading') && (
-              <div className="supertonic-progress-card">
-                <div className="supertonic-progress-label">
-                  {supertonicState.status === 'downloading' ? '다운로드 중' : '초기화 중'} — {supertonicState.label}
-                </div>
-                <div className="supertonic-progress-bar">
-                  <div
-                    className="supertonic-progress-fill"
-                    style={{ width: `${supertonicState.percent}%` }}
-                  />
-                </div>
-                <div className="supertonic-progress-percent">{supertonicState.percent}%</div>
-              </div>
-            )}
-
-            {supertonicState.status === 'ready' && (
-              <>
-                {/* 엔진 활성화 토글 */}
-                <div className="supertonic-engine-toggle">
-                  <div>
-                    <div className="supertonic-toggle-label">고음질 음성 사용</div>
-                    <div className="supertonic-toggle-sub">
-                      {voiceSettings.engine === 'supertonic'
-                        ? `Supertonic ${supertonicState.backend === 'webgpu' ? 'WebGPU' : 'WASM'} 사용 중`
-                        : '꺼짐 — 일반 Edge TTS 사용 중'}
-                    </div>
-                  </div>
-                  <Toggle
-                    value={voiceSettings.engine === 'supertonic'}
-                    onChange={(v) => updateVoice({ engine: v ? 'supertonic' : 'edge' })}
-                  />
-                </div>
-
-                {/* F1-F5 voice 선택 */}
-                {voiceSettings.engine === 'supertonic' && (
-                  <div className="voice-preset-grid" style={{ marginTop: 10 }}>
-                    {SUPERTONIC_VOICES.map((v) => {
-                      const active = voiceSettings.supertonicVoice === v.id;
-                      return (
-                        <button
-                          key={v.id}
-                          onClick={() => updateVoice({ supertonicVoice: v.id })}
-                          className={`voice-preset-chip ${active ? 'active' : ''}`}
-                          aria-pressed={active}
-                        >
-                          <span className="voice-preset-emoji">{v.emoji}</span>
-                          <span className="voice-preset-label">{v.label}</span>
-                          <span className="voice-preset-caption">{v.caption}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* 캐시 삭제 */}
-                <button
-                  onClick={async () => {
-                    if (confirm('고음질 음성 모델(145MB) 을 폰에서 삭제할까? 다시 사용하려면 재다운로드 필요.')) {
-                      await clearSupertonicCache();
-                      showToast('고음질 음성 모델을 삭제했어');
-                    }
-                  }}
-                  className="supertonic-clear-btn"
-                >
-                  🗑️ 모델 삭제 (저장공간 145MB 회수)
-                </button>
-              </>
-            )}
-
-            {supertonicState.status === 'error' && (
-              <div className="supertonic-error-card">
-                <div className="supertonic-error-msg">
-                  ❌ 다운로드 실패: {supertonicState.error}
-                </div>
-                <button onClick={() => downloadSupertonic()} className="supertonic-retry-btn">
-                  다시 시도
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Supertonic 다운로드 확인 모달 */}
-        {showSupertonicConfirm && (
-          <div className="supertonic-confirm-backdrop" onClick={() => setShowSupertonicConfirm(false)}>
-            <div className="supertonic-confirm-card" onClick={(e) => e.stopPropagation()}>
-              <h3>📲 고음질 음성 다운로드</h3>
-              <ul className="supertonic-confirm-list">
-                <li>📦 약 <strong>145MB</strong> 모델을 폰에 한 번 받아.</li>
-                <li>📶 <strong>Wi-Fi 환경 권장</strong> (모바일 데이터 절약).</li>
-                <li>🔒 받은 후엔 <strong>오프라인 작동</strong>, 평생 무료.</li>
-                <li>🎙️ Supertonic v3 — 한국 회사 캐릭터급 한국어 TTS.</li>
-                <li>🗑️ 언제든 모델 삭제 가능 (저장공간 회수).</li>
-              </ul>
-              <div className="supertonic-confirm-actions">
-                <button onClick={() => setShowSupertonicConfirm(false)} className="supertonic-confirm-cancel">
-                  나중에
-                </button>
-                <button
-                  onClick={async () => {
-                    setShowSupertonicConfirm(false);
-                    const ok = await downloadSupertonic();
-                    if (ok) {
-                      updateVoice({ engine: 'supertonic' });
-                      showToast('고음질 음성 준비 완료!');
-                    }
-                  }}
-                  className="supertonic-confirm-go"
-                >
-                  지금 다운로드
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* v118.10: Supertonic 섹션 제거 — 품질/속도/안정성 이슈로 Edge TTS 전용 운영 */}
 
         {/* ⑧ 상담 기록 초기화 / 계정 탈퇴 */}
         <div className="settings-danger-row">
