@@ -1337,8 +1337,9 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
                 </div>
               )}
               {/* 🆕 v117.5: chip/카드 진입 UI 전부 제거 — 빈 입력창 + mood placeholder 만 */}
+              {/* 🆕 v118: ChatInput 의 (text, boosters) → sendMessage(content, undefined meta, boosters) 매핑 */}
               <ChatInput
-                onSend={sendMessage}
+                onSend={(text, boosters) => sendMessage(text, undefined, boosters)}
                 onImageAttach={activePersona !== 'tarot' ? handleImageAttach : undefined}
                 disabled={isLoading || pendingEventLock}
                 placeholder={

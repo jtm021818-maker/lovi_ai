@@ -30,7 +30,8 @@ interface UseChatReturn {
   stateResult: StateResult | null;
   suggestions: SuggestionItem[];
   panelData: PanelResponse | null;
-  sendMessage: (content: string, meta?: SuggestionMeta) => Promise<void>;
+  // v118: 옵셔널 세 번째 인자 — ⚡버튼 부스터 (chat/stream STAGE A consume)
+  sendMessage: (content: string, meta?: SuggestionMeta, consumableUsed?: Array<{ inventoryId: string; itemId: string }>) => Promise<void>;
   axesProgress: { filledCount: number; totalCount: number; isComplete: boolean } | null;
   phaseEvents: PhaseEvent[];
   currentPhase: ConversationPhaseV2 | null;
@@ -315,7 +316,8 @@ export function useChat(sessionId: string): UseChatReturn {
   // 친밀도 초기 로드
   useEffect(() => { fetchIntimacy(); }, [fetchIntimacy]);
 
-  const sendMessage = useCallback(async (content: string, meta?: SuggestionMeta) => {
+  // v118: 옵셔널 세 번째 인자 — ⚡버튼으로 선택한 부스터 소모품 (chat/stream STAGE A consume)
+  const sendMessage = useCallback(async (content: string, meta?: SuggestionMeta, consumableUsed?: Array<{ inventoryId: string; itemId: string }>) => {
     // 🆕 ACE v4: 이벤트 선택으로 호출된 경우 잠금 해제
     if (pendingEventLock && meta?.source) {
       setPendingEventLock(false);
@@ -377,6 +379,8 @@ export function useChat(sessionId: string): UseChatReturn {
           // 🆕 v115: 시공간 동기화 — 유저 기기 시간/timezone (날씨는 서버 fetch)
           clientNowISO: new Date().toISOString(),
           clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          // 🆕 v118: ⚡ 부스터 — chat/stream 이 RPC consume_consumables 호출
+          ...(consumableUsed && consumableUsed.length > 0 && { consumableUsed }),
         }),
         signal: abortRef.current.signal,
       });

@@ -4,8 +4,15 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 
+// v118: ⚡ 부스터 선택 정보
+interface BoosterSelection {
+  inventoryId: string;
+  itemId: string;
+}
+
 interface ChatInputProps {
-  onSend: (message: string) => void;
+  // v118: 옵셔널 두 번째 인자로 boosters 전달
+  onSend: (message: string, consumableUsed?: BoosterSelection[]) => void;
   disabled?: boolean;
   placeholder?: string;
   typingPlaceholder?: string;
@@ -14,13 +21,85 @@ interface ChatInputProps {
   initialValue?: string;
 }
 
+// v118: 부스터 사용 가능한 use_effect 화이트리스트 (1턴 한정 / pre-message-modifier 류)
+const BOOSTER_EFFECTS = new Set([
+  'model_upgrade_smart',
+  'tone_blunt_oneturn',
+  'right_brain_boost',
+]);
+
+// 상호배제 — 톤 충돌
+const TONE_EFFECTS = new Set(['tone_blunt_oneturn', 'tone_soothing_session']);
+
+interface AvailableBooster {
+  id: string;       // inventoryId
+  itemId: string;
+  name: string;
+  emoji: string;
+  useEffect: string;
+  rarity: string;
+  quantity: number;
+  description: string;
+}
+
 export default function ChatInput({ onSend, disabled, placeholder, typingPlaceholder, onImageAttach, initialValue }: ChatInputProps) {
   const [text, setText] = useState(initialValue ?? '');
   const [showExtras, setShowExtras] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const showCustomPlaceholder = typingPlaceholder && text.length === 0;
   const hasText = text.trim().length > 0;
+
+  // v118: ⚡ 부스터 상태
+  const [boosterModalOpen, setBoosterModalOpen] = useState(false);
+  const [selectedBoosters, setSelectedBoosters] = useState<BoosterSelection[]>([]);
+  const [availableBoosters, setAvailableBoosters] = useState<AvailableBooster[]>([]);
+
+  // 부스터 사용 가능한 인벤토리 로드 (모달 열 때)
+  const loadAvailableBoosters = useCallback(async () => {
+    try {
+      const r = await fetch('/api/luna-room/inventory');
+      const d = await r.json();
+      const filtered = (d.items ?? [])
+        .filter((i: any) => !i.used && i.isConsumable && BOOSTER_EFFECTS.has(i.useEffect))
+        .map((i: any) => ({
+          id: i.id,
+          itemId: i.itemId,
+          name: i.name,
+          emoji: i.emoji,
+          useEffect: i.useEffect,
+          rarity: i.rarity,
+          quantity: i.quantity ?? 1,
+          description: i.description ?? '',
+        }));
+      setAvailableBoosters(filtered);
+    } catch { /* silent */ }
+  }, []);
+
+  const openBoosterModal = useCallback(async () => {
+    await loadAvailableBoosters();
+    setBoosterModalOpen(true);
+  }, [loadAvailableBoosters]);
+
+  // 부스터 토글 — 최대 2개, 톤 상호배제
+  const toggleBooster = useCallback((b: AvailableBooster) => {
+    setSelectedBoosters((prev) => {
+      const already = prev.find((x) => x.inventoryId === b.id);
+      if (already) return prev.filter((x) => x.inventoryId !== b.id);
+
+      // 톤 충돌 검증
+      if (TONE_EFFECTS.has(b.useEffect)) {
+        const conflict = prev.find((x) => {
+          const sel = availableBoosters.find((a) => a.id === x.inventoryId);
+          return sel && TONE_EFFECTS.has(sel.useEffect);
+        });
+        if (conflict) return prev; // 무시
+      }
+
+      if (prev.length >= 2) return prev; // 최대 2개
+
+      return [...prev, { inventoryId: b.id, itemId: b.itemId }];
+    });
+  }, [availableBoosters]);
 
   const {
     transcript,
@@ -88,10 +167,12 @@ export default function ChatInput({ onSend, disabled, placeholder, typingPlaceho
 
   const handleSend = useCallback(() => {
     if (!text.trim() || disabled) return;
-    onSend(text.trim());
+    // v118: 선택된 부스터 함께 전달
+    onSend(text.trim(), selectedBoosters.length > 0 ? selectedBoosters : undefined);
     setText('');
+    setSelectedBoosters([]); // 전송 후 부스터 선택 초기화
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
-  }, [text, disabled, onSend]);
+  }, [text, disabled, onSend, selectedBoosters]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -160,6 +241,30 @@ export default function ChatInput({ onSend, disabled, placeholder, typingPlaceho
             </svg>
           </motion.button>
         )}
+
+        {/* v118: ⚡ 부스터 버튼 — 다음 메시지에 적용할 소모품 선택 */}
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          onClick={openBoosterModal}
+          disabled={disabled}
+          className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-200 mb-0.5 relative ${
+            selectedBoosters.length > 0
+              ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-md shadow-amber-200/50'
+              : 'text-gray-400 hover:text-amber-500 hover:bg-amber-50'
+          }`}
+          title="다음 메시지 부스터"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill={selectedBoosters.length > 0 ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg>
+          {selectedBoosters.length > 0 && (
+            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-pink-500 text-white text-[9px] font-black flex items-center justify-center"
+              style={{ boxShadow: '0 0 6px rgba(236,72,153,0.6)' }}
+            >
+              {selectedBoosters.length}
+            </span>
+          )}
+        </motion.button>
 
         {/* 텍스트 입력 */}
         <div className={`flex-1 bg-gray-50/80 rounded-[22px] border transition-all duration-300 overflow-hidden relative min-h-[42px] ${disabled ? 'border-purple-300/50 bg-gradient-to-r from-purple-50/50 via-pink-50/50 to-purple-50/50' : 'border-gray-100 focus-within:border-purple-200 focus-within:bg-purple-50/20'}`}>
@@ -291,6 +396,172 @@ export default function ChatInput({ onSend, disabled, placeholder, typingPlaceho
           )}
         </AnimatePresence>
       </div>
+
+      {/* v118: ⚡ 부스터 선택 모달 */}
+      <BoosterModal
+        open={boosterModalOpen}
+        onClose={() => setBoosterModalOpen(false)}
+        availableBoosters={availableBoosters}
+        selectedBoosters={selectedBoosters}
+        toggleBooster={toggleBooster}
+      />
     </div>
   );
 }
+
+// ============================================================
+// v118: BoosterModal
+// ============================================================
+function BoosterModal({
+  open, onClose, availableBoosters, selectedBoosters, toggleBooster,
+}: {
+  open: boolean;
+  onClose: () => void;
+  availableBoosters: AvailableBooster[];
+  selectedBoosters: BoosterSelection[];
+  toggleBooster: (b: AvailableBooster) => void;
+}) {
+  const isSelected = (id: string) => selectedBoosters.some((s) => s.inventoryId === id);
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[290] bg-black/55 backdrop-blur-sm"
+            onClick={onClose}
+          />
+          <motion.div
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 26, stiffness: 320 }}
+            className="fixed bottom-0 left-0 right-0 z-[291] rounded-t-[28px] overflow-hidden"
+            style={{ background: 'linear-gradient(180deg, #fefce8 0%, #fef3c7 100%)' }}
+          >
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-9 h-[3px] rounded-full bg-amber-900/25" />
+            </div>
+
+            <div className="px-5 pt-2 pb-3">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[18px]">⚡</span>
+                <span className="text-[14px] font-black text-[#7c5738]">이번 메시지 부스터</span>
+              </div>
+              <div className="text-[10.5px] text-[#a1887f] leading-relaxed">
+                선택하면 다음 메시지 1회에만 적용돼. 최대 2개까지 동시 선택 가능 (톤 충돌은 자동 차단)
+              </div>
+            </div>
+
+            <div className="px-4 pb-2 max-h-[60vh] overflow-y-auto">
+              {availableBoosters.length === 0 ? (
+                <div className="text-center py-10">
+                  <div className="text-2xl mb-2">🌫️</div>
+                  <div className="text-[11.5px] text-[#7c5738] font-semibold mb-1">부스터가 없어</div>
+                  <div className="text-[10px] text-[#a1887f] leading-relaxed">
+                    가챠나 마일스톤 보상에서 얻을 수 있어
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2 pb-2">
+                  {availableBoosters.map((b) => {
+                    const selected = isSelected(b.id);
+                    return (
+                      <button
+                        key={b.id}
+                        onClick={() => toggleBooster(b)}
+                        className="w-full p-3 rounded-2xl text-left flex items-center gap-3 active:scale-[0.99] transition-all"
+                        style={{
+                          background: selected
+                            ? 'linear-gradient(135deg, rgba(245,158,11,0.18), rgba(236,72,153,0.10))'
+                            : 'rgba(255,255,255,0.85)',
+                          border: `1.5px solid ${selected ? '#f59e0b' : 'rgba(212,175,55,0.30)'}`,
+                          boxShadow: selected ? '0 4px 14px rgba(245,158,11,0.25)' : 'none',
+                        }}
+                      >
+                        <div
+                          className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                          style={{
+                            background: 'rgba(255,255,255,0.85)',
+                            border: `1.5px solid ${RARITY_BORDER_LIGHT[b.rarity] ?? RARITY_BORDER_LIGHT.N}`,
+                          }}
+                        >
+                          <span className="text-[26px] leading-none">{b.emoji}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-baseline gap-1.5 mb-0.5">
+                            <span
+                              className="px-1 py-px rounded text-[8px] font-black leading-none"
+                              style={{ background: RARITY_BG_LIGHT[b.rarity] ?? '#9ca3af', color: 'white' }}
+                            >
+                              {b.rarity}
+                            </span>
+                            <span className="text-[12px] font-bold text-[#3a2418]">{b.name}</span>
+                            {b.quantity >= 2 && (
+                              <span className="text-[9px] font-bold text-[#a1887f] tabular-nums">×{b.quantity}</span>
+                            )}
+                          </div>
+                          <div className="text-[10.5px] text-[#7c5738] leading-relaxed line-clamp-2">
+                            {b.description}
+                          </div>
+                        </div>
+                        <div
+                          className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
+                          style={{
+                            background: selected ? 'linear-gradient(135deg, #f59e0b, #ec4899)' : 'rgba(0,0,0,0.06)',
+                            color: selected ? 'white' : '#a1887f',
+                          }}
+                        >
+                          {selected ? '✓' : ''}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="px-4 pt-2 pb-safe" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)' }}>
+              <button
+                onClick={onClose}
+                className="w-full py-3 rounded-2xl font-bold text-[12.5px] text-white active:scale-[0.98]"
+                style={{
+                  background: selectedBoosters.length > 0
+                    ? 'linear-gradient(135deg, #f59e0b, #ec4899)'
+                    : 'rgba(0,0,0,0.06)',
+                  color: selectedBoosters.length > 0 ? 'white' : '#7c5738',
+                  boxShadow: selectedBoosters.length > 0 ? '0 4px 14px rgba(245,158,11,0.3)' : 'none',
+                }}
+              >
+                {selectedBoosters.length > 0
+                  ? `✓ ${selectedBoosters.length}개 선택하고 메시지에 적용`
+                  : '닫기'}
+              </button>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// ============================================================
+// rarity 표시용 컬러 (BoosterModal 한정 — BagSheet 와 동기)
+// ============================================================
+const RARITY_BORDER_LIGHT: Record<string, string> = {
+  N:  'rgba(156,163,175,0.5)',
+  R:  'rgba(96,165,250,0.6)',
+  SR: 'rgba(192,132,252,0.7)',
+  UR: 'rgba(251,191,36,0.85)',
+  L:  'rgba(6,182,212,0.85)',
+};
+const RARITY_BG_LIGHT: Record<string, string> = {
+  N:  '#9ca3af',
+  R:  '#3b82f6',
+  SR: '#a855f7',
+  UR: '#f59e0b',
+  L:  '#06b6d4',
+};

@@ -101,10 +101,12 @@ export async function POST(req: NextRequest) {
       clientNowISO?: string;
       clientTimezone?: string;
       clientWeather?: { condition: string; description?: string; tempC?: number; feelsLikeC?: number };
+      // 🆕 v118: ⚡버튼 부스터 — 이번 메시지에 적용할 소모품
+      consumableUsed?: Array<{ inventoryId: string; itemId: string }>;
     }>,
   ]);
   const profile = profileResult.data;
-  const { sessionId, message, suggestionMeta, activeMode, clientNowISO, clientTimezone, clientWeather } = body;
+  const { sessionId, message, suggestionMeta, activeMode, clientNowISO, clientTimezone, clientWeather, consumableUsed } = body;
 
   const tier = (process.env.NODE_ENV === 'development' || profile?.is_premium) ? 'premium' as const : 'free' as const;
 
@@ -151,12 +153,80 @@ export async function POST(req: NextRequest) {
   // 레이트 리밋 결과 대기 (3개 SELECT는 이미 실행 중)
   const rateLimit = await rateLimitPromise;
   console.log(`[RateLimit] tier=${tier}, is_premium=${profile?.is_premium}, allowed=${rateLimit.allowed}, remaining=${rateLimit.remaining}`);
+
+  // 🆕 v118: unlimited_chat_pass 활성 시 rate limit bypass
+  let unlimitedActive = false;
   if (!rateLimit.allowed) {
+    const { data: bypassRow } = await supabase
+      .from('user_consumable_active')
+      .select('id, expires_at')
+      .eq('user_id', user.id)
+      .eq('use_effect', 'rate_limit_bypass_24h')
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle();
+    unlimitedActive = !!bypassRow;
+  }
+  if (!rateLimit.allowed && !unlimitedActive) {
     return new Response(
       JSON.stringify({ error: '오늘 이용 가능한 횟수를 초과했어요. 내일 다시 이야기해요 💜' }),
       { status: 429, headers: { 'Content-Type': 'application/json' } }
     );
   }
+
+  // 🆕 v118: ⚡버튼 부스터 — STAGE A consume RPC
+  //   - 클라이언트가 consumableUsed[] 보내면 RPC 가 quantity 차감 + active row 생성
+  //   - 실패 시 400 응답, pipeline 진입 거부 (어뷰즈 방지)
+  let consumableApplied: Array<{ inventory_id: string; item_id: string; effect: string; duration_kind: string; remaining_turns: number | null; expires_at: string | null }> = [];
+  if (consumableUsed && consumableUsed.length > 0) {
+    const invIds = consumableUsed.map(c => c.inventoryId);
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('consume_consumables', {
+      p_user_id: user.id,
+      p_inv_ids: invIds,
+      p_session_id: sessionId,
+    });
+    if (rpcErr || !rpcData) {
+      console.error('[Chat v118] consume_consumables 실패', rpcErr);
+      return new Response(
+        JSON.stringify({ error: '소모품 사용 실패. 다시 시도해줘.', detail: rpcErr?.message }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    consumableApplied = ((rpcData as any).applied ?? []) as typeof consumableApplied;
+    console.log(`[Chat v118] 소모품 적용: ${consumableApplied.length}개`, consumableApplied.map(a => a.effect).join(','));
+  }
+
+  // 🆕 v118: 세션에 이미 활성화된 session/turn 류 buff 도 함께 적용 (가방에서 직접 사용한 케이스)
+  const { data: existingActive } = await supabase
+    .from('user_consumable_active')
+    .select('id, item_id, use_effect, duration_kind, remaining_turns, session_id, expires_at')
+    .eq('user_id', user.id)
+    .or(`session_id.eq.${sessionId},duration_kind.eq.turns,duration_kind.eq.time`);
+
+  const allActiveEffects = new Set<string>([
+    ...consumableApplied.map(a => a.effect),
+    ...((existingActive ?? []).filter(a => {
+      // session 류: session_id 일치
+      if (a.duration_kind === 'session') return a.session_id === sessionId;
+      // turns 류: remaining_turns > 0
+      if (a.duration_kind === 'turns') return (a.remaining_turns ?? 0) > 0;
+      // time 류: expires_at 미래
+      if (a.duration_kind === 'time') return a.expires_at && new Date(a.expires_at) > new Date();
+      return false;
+    }).map(a => a.use_effect)),
+  ]);
+
+  const consumableBoost = {
+    activeEffects: Array.from(allActiveEffects),
+    modelTier: allActiveEffects.has('model_upgrade_smart') ? 'smart' as const : undefined,
+    toneOverride: allActiveEffects.has('honest_luna_chip') || allActiveEffects.has('tone_blunt_oneturn')
+      ? 'veteran_blunt' as const
+      : allActiveEffects.has('comfort_mode_token') || allActiveEffects.has('tone_soothing_session')
+        ? 'soothing' as const
+        : undefined,
+    rightBrainBoost: allActiveEffects.has('right_brain_boost'),
+    fullDiagnostic: allActiveEffects.has('pipeline_full_diagnostic'),
+    diagnosisReport: allActiveEffects.has('diagnosis_full_report'),
+  };
 
   // SSE 스트리밍 — rate limit 통과 즉시 응답 시작 (TTFB 최적화)
   // DB await를 스트림 내부로 이동: TTFB ≈ auth+rateLimit (~200ms) vs 기존 5110ms
@@ -535,6 +605,8 @@ export async function POST(req: NextRequest) {
           (profile?.onboarding_situation
             ? `\n[사용자 성별: ${profile.onboarding_situation === 'male' ? '남성' : profile.onboarding_situation === 'female' ? '여성' : '선택하지 않음'}] (참고만 하되 호칭이나 말투에 반영하지 마. 루나는 성별 관계없이 동일한 말투를 사용해.)`
             : '\n[사용자 성별: 선택하지 않음]') + previousSessionContext,
+          // 🆕 v118: 소모품 부스터 추가. ctx 타입은 pipeline 쪽에서 확장 예정 (후속 PR).
+          //   임시 type assertion 으로 consumableBoost 필드 통과.
           {
             supabase,
             userId: user.id,
@@ -542,7 +614,8 @@ export async function POST(req: NextRequest) {
             activeMode: activeMode ?? null,
             // 🆕 v115.1: 시공간 컨텍스트 (날씨는 weather_cache, 위에서 미리 빌드됨)
             temporalContext: v115_1TemporalContext,
-          },
+            consumableBoost,
+          } as any,
           persona,
           turnCount,
           suggestionMeta,
@@ -926,6 +999,52 @@ export async function POST(req: NextRequest) {
                     },
                   })}\n\n`)
                 );
+              }
+
+              // 🆕 v118 STAGE C — 활성 buff 의 turns 카운터 감소 / 만료된 row 삭제 (fire-and-forget)
+              if (consumableApplied.length > 0 || (existingActive?.length ?? 0) > 0) {
+                // 비동기로 처리 — done 응답에 영향 안 가도록
+                (async () => {
+                  try {
+                    // turns 류: remaining_turns -= 1, 0 되면 DELETE
+                    const turnRows = (existingActive ?? []).filter(a => a.duration_kind === 'turns' && (a.remaining_turns ?? 0) > 0);
+                    for (const r of turnRows) {
+                      const newRem = (r.remaining_turns ?? 1) - 1;
+                      if (newRem <= 0) {
+                        await supabase.from('user_consumable_active').delete().eq('id', r.id);
+                      } else {
+                        await supabase.from('user_consumable_active').update({ remaining_turns: newRem }).eq('id', r.id);
+                      }
+                    }
+                    // 방금 consume_consumables 로 생성된 turns 류 (remaining_turns=1) 도 1턴 소비 → 삭제
+                    const justAppliedSingleTurn = consumableApplied.filter(a => a.duration_kind === 'turns' && (a.remaining_turns ?? 0) === 1);
+                    if (justAppliedSingleTurn.length > 0) {
+                      const effects = justAppliedSingleTurn.map(a => a.effect);
+                      await supabase
+                        .from('user_consumable_active')
+                        .delete()
+                        .eq('user_id', user.id)
+                        .in('use_effect', effects)
+                        .eq('duration_kind', 'turns')
+                        .eq('remaining_turns', 1);
+                    }
+                  } catch (e) {
+                    console.warn('[Chat v118] STAGE C cleanup 실패 (무시)', (e as Error).message);
+                  }
+                })();
+
+                // 클라이언트에 적용 사실 알림 (⚡뱃지 해제)
+                try {
+                  controller.enqueue(
+                    encoder.encode(`data: ${JSON.stringify({
+                      type: 'consumable_consumed',
+                      data: {
+                        applied: consumableApplied,
+                        activeEffects: Array.from(allActiveEffects),
+                      },
+                    })}\n\n`)
+                  );
+                } catch (_) { /* enqueue 실패 무시 */ }
               }
 
               controller.enqueue(

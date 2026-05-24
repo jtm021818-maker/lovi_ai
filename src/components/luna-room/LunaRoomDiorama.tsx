@@ -38,6 +38,8 @@ import LunaReturnCeremony from './LunaReturnCeremony';
 import CapsuleUnlockCeremony from './CapsuleUnlockCeremony';
 // v104 M5
 import LunaReturnBoxCeremony from './LunaReturnBoxCeremony';
+// v118
+import DustPurgeNoticeModal from './DustPurgeNoticeModal';
 
 interface Props {
   ageDays: number;
@@ -686,6 +688,9 @@ export default function LunaRoomDiorama({
           ☀ 솔과 함께
         </div>
       )}
+
+      {/* v118: 잔물결 정리 안내 모달 (룸 진입 시 1회) */}
+      <DustPurgeNoticeModal />
 
     </div>
   );
