@@ -300,16 +300,16 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
     }
   }, [isPersonaOpen]);
 
-  // 🆕 v22: AI 응답 완료 시 자동 읽기 (autoSpeak 활성화된 경우)
+  // v118.7: 음성 활성화 = 자동 더빙. 별도 autoSpeak 토글 폐지.
   useEffect(() => {
-    if (!ttsSupported || !voiceSettings.autoSpeak || isLoading) return;
+    if (!ttsSupported || !voiceSettings.enabled || isLoading) return;
     const aiMessages = messages.filter(m => m.senderType === 'ai' && m.content);
     if (aiMessages.length > prevMsgCountRef.current) {
       const lastAi = aiMessages[aiMessages.length - 1];
       if (lastAi?.content) speak(lastAi.content);
     }
     prevMsgCountRef.current = aiMessages.length;
-  }, [messages, isLoading, ttsSupported, voiceSettings.autoSpeak, speak]);
+  }, [messages, isLoading, ttsSupported, voiceSettings.enabled, speak]);
 
   // 페르소나 모드는 설정에서 선택한 값을 그대로 사용 (강제 변경 없음)
 
