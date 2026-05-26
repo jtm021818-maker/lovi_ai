@@ -16,24 +16,32 @@
  * 이미지 미배포 시: emoji fallback 으로 동작. 이미지 swap-in only 으로 완성.
  */
 
-import { motion } from 'framer-motion';
-import { useEffect, useRef } from 'react';
-import { BOND_TOKENS, HANDWRITE_FONT, NUMERIC_FONT } from '@/lib/luna-life/relationship-tokens';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useEffect, useRef, useState } from 'react';
+import {
+  Flame, Coffee, Tag, Lock, Plant, PaperPlaneTilt,
+  Notebook, HandHeart, Envelope, DiamondsFour,
+  CaretDown, type IconProps,
+} from '@phosphor-icons/react';
+import { BOND_TOKENS, HANDWRITE_FONT, NUMERIC_FONT, getStageColor } from '@/lib/luna-life/relationship-tokens';
 import { triggerHaptic } from '@/lib/haptic';
 import { playSound } from '@/lib/audio';
 import LevelStamp from './LevelStamp';
 import PetalFlower from './PetalFlower';
 import GateOpenMoment from './GateOpenMoment';
 import NicknameSection from './NicknameSection';
+import StageCard from './StageCard';
+import StageIcon from './StageIcon';
+import RelationshipDex from './RelationshipDex';
+import StageTransitionMoment from './StageTransitionMoment';
+import { useStageTransition } from '@/hooks/useStageTransition';
 import {
-  SEED_LABEL,
   SEED_HINT,
   FEATURE_UNLOCKS,
   partitionUnlocks,
   getStageLabel,
   getNextStageLabel,
   type FeatureUnlock,
-  type StageLabel,
 } from './level-unlocks';
 
 export interface JournalData {
@@ -57,9 +65,11 @@ interface Props {
   show: boolean;
   /** 페르소나 — 메모리 fetch 시 필터 */
   persona?: 'luna' | 'tarot';
+  /** 유저 닉네임 — Lv.5 네임카드 및 도감 슬롯 표시 */
+  userDisplayName?: string;
 }
 
-export default function LunaJournalPage({ data, show, persona = 'luna' }: Props) {
+export default function LunaJournalPage({ data, show, persona = 'luna', userDisplayName }: Props) {
   const stampPlayedRef = useRef(false);
 
   // 사운드/햅틱 인트로
@@ -81,16 +91,14 @@ export default function LunaJournalPage({ data, show, persona = 'luna' }: Props)
     }
   }, [show]);
 
-  // v118.3: 우리의 기억(MemoryAlbum) + 일일 일기 둘 다 제거.
-  // 빈 슬롯이 시각적 노이즈였음. NicknameSection 이 새 시각 앵커로 격상.
-
   const isSeed = data.daysSinceFirst === 0 && data.totalSessions === 0;
   const isMax = data.level >= 5;
   const stage = getStageLabel(data.level);
   const nextStage = getNextStageLabel(data.level);
-  // 백엔드 levelLabel 대신 STAGE_LABELS(호칭형) 사용. seed 시에만 인트로 카피로 덮음.
-  const depthHint = isSeed ? SEED_HINT : data.depthHint;
   const { unlocked, nextLocked } = partitionUnlocks(data.level);
+
+  // v119.5: 단계 전환 풀스크린 모먼트
+  const transition = useStageTransition(data.level);
 
   return (
     <div
@@ -145,19 +153,21 @@ export default function LunaJournalPage({ data, show, persona = 'luna' }: Props)
         consecutiveDays={data.consecutiveDays}
       />
 
-      {/* ── 2. 메인 위젯 (캐릭터 카드 — 풀폭, v118.1 화분/일지 제거) ────── */}
-      <CharacterCard
-        show={show}
-        data={data}
-        stage={stage}
-        nextStage={nextStage}
-        isSeed={isSeed}
-        isMax={isMax}
-        depthHint={depthHint}
-      />
+      {/* ── 2. StageCard (v119.5 메인 시각 — 별·달·은하 일러스트) ─── */}
+      <StageCard show={show} stage={stage} nextStage={nextStage} isSeed={isSeed} isMax={isMax} />
+
+      {/* ── 2-B. 마음의 4축 — 토글 접힘 (게임 스탯 느낌 약화) ─── */}
+      <MindAxisToggle show={show} data={data} />
 
       {/* ── 3. 별명 (v115.7→v118.3 메인 시각 앵커) ───────────── */}
       {persona === 'luna' && <NicknameSection show={show} />}
+
+      {/* ── 4. 관계 도감 (v119.5 신규 — Neko Atsume + Genshin 패턴) ─── */}
+      <RelationshipDex
+        show={show}
+        currentLevel={data.level}
+        userDisplayName={userDisplayName}
+      />
 
       {/* ── 5. 해금 뱃지 ────────────────────────────────────── */}
       <UnlockBadges show={show} unlocked={unlocked} nextLocked={nextLocked} />
@@ -171,7 +181,98 @@ export default function LunaJournalPage({ data, show, persona = 'luna' }: Props)
         level={data.level}
         persona={persona}
       />
+
+      {/* 🆕 v119.5: 단계 전환 풀스크린 의식 (Lv.2~5) */}
+      <StageTransitionMoment
+        level={transition.showFor}
+        onClose={transition.dismiss}
+        userDisplayName={userDisplayName}
+      />
     </div>
+  );
+}
+
+// ============================================================
+// 마음의 4축 — 접힘 토글 (페탈 + 4축 라벨)
+// ============================================================
+function MindAxisToggle({ show, data }: { show: boolean; data: JournalData }) {
+  const [open, setOpen] = useState(false);
+  const color = getStageColor(data.level);
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={show ? { opacity: 1, y: 0 } : { opacity: 0 }}
+      transition={{ delay: 0.65, duration: 0.5 }}
+      style={{ marginBottom: 18 }}
+    >
+      <button
+        type="button"
+        onClick={() => { setOpen((v) => !v); triggerHaptic('selection'); }}
+        style={{
+          width: '100%',
+          padding: '8px 12px',
+          background: 'rgba(255,255,255,0.55)',
+          border: `1px dashed ${color.accent}55`,
+          borderRadius: 10,
+          fontFamily: HANDWRITE_FONT,
+          fontSize: 12,
+          color: color.stamp,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          cursor: 'pointer',
+        }}
+        aria-expanded={open}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <HandHeart size={14} weight="duotone" color={color.accent} />
+          마음의 4축
+          <span style={{ fontSize: 10.5, opacity: 0.6 }}>
+            — 신뢰·개방·유대·존경
+          </span>
+        </span>
+        <motion.span
+          animate={{ rotate: open ? 180 : 0 }}
+          transition={{ duration: 0.25 }}
+          aria-hidden
+          style={{ display: 'inline-flex' }}
+        >
+          <CaretDown size={12} weight="bold" color={color.stamp} />
+        </motion.span>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="petals"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.4, ease: [0.22, 0.61, 0.36, 1] }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div
+              style={{
+                padding: '14px 10px 18px',
+                marginTop: 8,
+                background: 'rgba(255,255,255,0.45)',
+                borderRadius: 12,
+                border: `1px solid ${color.accent}33`,
+                display: 'flex',
+                justifyContent: 'center',
+              }}
+            >
+              <PetalFlower
+                trust={data.trust}
+                openness={data.openness}
+                bond={data.bond}
+                respect={data.respect}
+                show
+                delay={100}
+                level={data.level}
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -235,8 +336,14 @@ function Header({
           {daysSinceFirst}
         </span>
         {consecutiveDays > 1 && (
-          <span style={{ fontFamily: HANDWRITE_FONT, fontSize: 11, color: '#c4886f', marginLeft: 4 }}>
-            🔥 {consecutiveDays}일 연속
+          <span
+            style={{
+              fontFamily: HANDWRITE_FONT, fontSize: 11, color: '#c4886f',
+              marginLeft: 4, display: 'inline-flex', alignItems: 'center', gap: 3,
+            }}
+          >
+            <Flame size={11} weight="duotone" color="#E07A4A" />
+            {consecutiveDays}일 연속
           </span>
         )}
       </div>
@@ -244,229 +351,8 @@ function Header({
   );
 }
 
-// ============================================================
-// 2-A. 화분 카드 (식물 성장 비주얼)
-// ============================================================
-// v118.3: 캐릭터 카드 임팩트 강화 — 헤드라인급 스테이지 라벨 + 장식 액센트.
-// "확 안 들어와" 피드백 반영: 큰 핵심 문장 / 4축 페탈 / 그라데이션 액센트 / 반짝 데코.
-function CharacterCard({
-  show, data, stage, nextStage, isSeed, isMax, depthHint,
-}: {
-  show: boolean;
-  data: JournalData;
-  stage: StageLabel;
-  nextStage: StageLabel;
-  isSeed: boolean;
-  isMax: boolean;
-  depthHint: string;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={show ? { opacity: 1, y: 0 } : { opacity: 0, y: 12 }}
-      transition={{ delay: 0.5, duration: 0.55, ease: [0.22, 0.61, 0.36, 1] }}
-      style={{
-        position: 'relative',
-        padding: '20px 18px 22px',
-        marginBottom: 18,
-        background:
-          'linear-gradient(150deg, #fff7ec 0%, #fdebd8 45%, #fbd6e2 100%)',
-        border: '1.5px solid rgba(225,168,170,0.35)',
-        borderRadius: 18,
-        boxShadow:
-          '0 6px 18px rgba(196,114,124,0.12), 0 2px 4px rgba(120,80,40,0.06), inset 0 0 0 1px rgba(255,255,255,0.5)',
-        overflow: 'hidden',
-      }}
-    >
-      {/* 배경 데코 — 반짝 별 1 */}
-      <motion.div
-        aria-hidden
-        initial={{ opacity: 0, scale: 0.6 }}
-        animate={show ? { opacity: 0.7, scale: 1 } : { opacity: 0 }}
-        transition={{ delay: 0.9, duration: 0.6 }}
-        style={{
-          position: 'absolute',
-          top: 14, right: 24,
-          fontSize: 16,
-          color: '#e0a4ad',
-          filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.08))',
-          transform: 'rotate(-8deg)',
-        }}
-      >
-        ✦
-      </motion.div>
-      <motion.div
-        aria-hidden
-        initial={{ opacity: 0, scale: 0.6 }}
-        animate={show ? { opacity: 0.55, scale: 1 } : { opacity: 0 }}
-        transition={{ delay: 1.05, duration: 0.6 }}
-        style={{
-          position: 'absolute',
-          bottom: 18, right: 18,
-          fontSize: 11,
-          color: '#d68694',
-          transform: 'rotate(14deg)',
-        }}
-      >
-        ✦
-      </motion.div>
-
-      {/* 작은 라벨 — "지금 우리는" */}
-      <div
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-          marginBottom: 8,
-          padding: '3px 10px 4px',
-          background: 'rgba(255,255,255,0.55)',
-          border: '1px solid rgba(225,168,170,0.4)',
-          borderRadius: 999,
-          fontFamily: HANDWRITE_FONT, fontSize: 11,
-          color: '#a85e6f', letterSpacing: '0.04em',
-        }}
-      >
-        <span style={{ fontSize: 10 }}>🌙</span>
-        지금 우리는
-      </div>
-
-      {/* 메인 헤드라인 — 큰 단계 아이콘 + 호칭 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-        <motion.div
-          aria-hidden
-          initial={{ opacity: 0, scale: 0.6, rotate: -8 }}
-          animate={show ? { opacity: 1, scale: 1, rotate: 0 } : { opacity: 0 }}
-          transition={{ delay: 0.55, duration: 0.5, ease: [0.22, 0.61, 0.36, 1] }}
-          style={{
-            fontSize: 38,
-            lineHeight: 1,
-            filter: 'drop-shadow(0 2px 4px rgba(140,118,196,0.30))',
-          }}
-        >
-          {stage.icon}
-        </motion.div>
-        <div
-          style={{
-            fontFamily: HANDWRITE_FONT,
-            fontSize: 28,
-            color: '#5a2a3a',
-            lineHeight: 1.15,
-            fontWeight: 700,
-            letterSpacing: '-0.01em',
-            textShadow: '0 1px 0 rgba(255,255,255,0.6)',
-          }}
-        >
-          {isSeed ? '아직 모르는 사이' : stage.title}
-        </div>
-      </div>
-
-      {/* 부제 — 별·달·은하 카피 (호칭형 단계의 결) */}
-      <div
-        style={{
-          fontFamily: HANDWRITE_FONT, fontSize: 12.5,
-          color: 'rgba(120,60,70,0.78)',
-          lineHeight: 1.5, marginBottom: 4,
-        }}
-      >
-        {isSeed ? SEED_LABEL : stage.sky}
-      </div>
-
-      {/* 다음 단계 티저 */}
-      {!isMax && (
-        <div
-          style={{
-            fontFamily: HANDWRITE_FONT, fontSize: 11,
-            color: 'rgba(120,60,70,0.55)',
-            lineHeight: 1.4, marginBottom: 14,
-            display: 'flex', alignItems: 'center', gap: 5,
-          }}
-        >
-          <span style={{ fontSize: 9 }}>↗</span>
-          곧 <strong style={{ fontWeight: 600 }}>{nextStage.title}</strong> 사이로
-        </div>
-      )}
-      {isMax && (
-        <div
-          style={{
-            fontFamily: HANDWRITE_FONT, fontSize: 11,
-            color: 'rgba(120,60,70,0.55)',
-            lineHeight: 1.4, marginBottom: 14,
-          }}
-        >
-          {depthHint}
-        </div>
-      )}
-
-      {/* 페탈 + 4축 라벨 — 카드 하단 */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '110px 1fr',
-          gap: 12,
-          alignItems: 'center',
-          padding: '12px 10px 6px',
-          background: 'rgba(255,255,255,0.4)',
-          borderRadius: 14,
-          border: '1px dashed rgba(225,168,170,0.45)',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <div style={{ width: 100, height: 100 }}>
-            <PetalFlower
-              trust={data.trust}
-              openness={data.openness}
-              bond={data.bond}
-              respect={data.respect}
-              show={show}
-              delay={760}
-            />
-          </div>
-        </div>
-
-        {/* 4축 미니 칩 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-          <AxisChip label="신뢰" value={data.trust} color="#e0938d" />
-          <AxisChip label="개방" value={data.openness} color="#c98ab8" />
-          <AxisChip label="유대" value={data.bond} color="#d6a26c" />
-          <AxisChip label="존경" value={data.respect} color="#7c9c8a" />
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function AxisChip({ label, value, color }: { label: string; value: number; color: string }) {
-  // v119: 수치 노출 제거 — 게이지 채움만으로 표현
-  const pct = Math.max(0, Math.min(100, value));
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span
-        style={{
-          width: 32, fontFamily: HANDWRITE_FONT, fontSize: 10.5,
-          color: '#7a4a55', flexShrink: 0,
-        }}
-      >
-        {label}
-      </span>
-      <div
-        style={{
-          flex: 1, height: 6, borderRadius: 999,
-          background: 'rgba(160,90,100,0.10)',
-          overflow: 'hidden', position: 'relative',
-        }}
-      >
-        <div
-          style={{
-            width: `${pct}%`, height: '100%',
-            background: `linear-gradient(90deg, ${color}b3, ${color})`,
-            borderRadius: 999,
-            transition: 'width 600ms cubic-bezier(0.22,0.61,0.36,1)',
-          }}
-        />
-      </div>
-    </div>
-  );
-}
+// v119.5: 기존 CharacterCard + AxisChip 함수 폐기.
+// 메인 시각은 StageCard 가 담당하고, 페탈/4축은 MindAxisToggle 안의 PetalFlower 가 담당.
 
 // ============================================================
 // 4. 해금 뱃지  (v118.3: MemoryAlbum/PolaroidSlot 제거)
@@ -539,10 +425,9 @@ function UnlockRow({
           background: isUnlocked ? 'rgba(34,139,84,0.12)' : 'rgba(124,87,56,0.10)',
           border: `1px solid ${isUnlocked ? 'rgba(34,139,84,0.35)' : 'rgba(124,87,56,0.25)'}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 13,
         }}
       >
-        {isUnlocked ? '✓' : feature.icon}
+        <FeatureIcon featureId={feature.id} unlocked={isUnlocked} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
@@ -574,7 +459,9 @@ function UnlockRow({
 // ============================================================
 // 6. 진행도 (식물 옆 마이크로 정보)
 // ============================================================
-function ProgressFootnote({ show, nextStage, isMax }: { show: boolean; nextStage: StageLabel; isMax: boolean }) {
+function ProgressFootnote({
+  show, nextStage, isMax,
+}: { show: boolean; nextStage: ReturnType<typeof getStageLabel>; isMax: boolean }) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -584,21 +471,47 @@ function ProgressFootnote({ show, nextStage, isMax }: { show: boolean; nextStage
         marginTop: 12,
         textAlign: 'center',
         fontFamily: HANDWRITE_FONT, fontSize: 11,
-        color: BOND_TOKENS.inkSoft, opacity: 0.75,
+        color: BOND_TOKENS.inkSoft, opacity: 0.85,
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
       }}
     >
       {isMax ? (
         <>
-          <span aria-hidden style={{ fontSize: 10 }}>🌌</span>
+          <StageIcon level={5} size={12} weight="duotone" />
           여기가 끝이 아니야 — 우리만의 우주가 계속 자라
         </>
       ) : (
         <>
-          <span aria-hidden style={{ fontSize: 10 }}>{nextStage.icon}</span>
+          <StageIcon level={nextStage.level} size={12} weight="duotone" />
           다음은 <strong style={{ fontWeight: 600, color: '#7a4a55' }}>{nextStage.title}</strong> 사이
         </>
       )}
     </motion.div>
+  );
+}
+
+// ============================================================
+// FeatureIcon — 9개 FEATURE_UNLOCKS id → Phosphor 매핑
+// ============================================================
+const FEATURE_ICONS: Record<string, React.ComponentType<IconProps>> = {
+  warm_reaction:       Coffee,
+  nickname:            Tag,
+  deep_secret:         Lock,
+  pattern_callout:     Plant,
+  first_outreach:      PaperPlaneTilt,
+  shared_memory:       Notebook,
+  luna_vulnerability:  HandHeart,
+  handwritten_letter:  Envelope,
+  eternal_promise:     DiamondsFour,
+};
+
+function FeatureIcon({ featureId, unlocked }: { featureId: string; unlocked: boolean }) {
+  const Comp = FEATURE_ICONS[featureId] ?? Tag;
+  return (
+    <Comp
+      size={13}
+      weight={unlocked ? 'fill' : 'thin'}
+      color={unlocked ? '#3D8055' : '#7C5738'}
+    />
   );
 }

@@ -16,10 +16,13 @@
  *  - 봉인된 별명 [↻ 복원] → action:'restore'
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Heart, MoonStars, Sparkle } from '@phosphor-icons/react';
 import { BOND_TOKENS, HANDWRITE_FONT, NUMERIC_FONT } from '@/lib/luna-life/relationship-tokens';
 import { triggerHaptic } from '@/lib/haptic';
+import Sparkles from './effects/Sparkles';
+import ShootingStars from './effects/ShootingStars';
 
 interface NicknameRecord {
   nickname: string;
@@ -302,7 +305,7 @@ function GateConstellation({ diag }: { diag: GateDiag }) {
   const timeDone       = (diag.totalSessions ?? 0) >= 15 || (diag.daysSinceFirst ?? 0) >= 14;
   const deepMomentDone = !!diag.hasDeepMoment;
 
-  // 진행도(별 밝기)도 수치가 아니라 단계형 (희미/은은/환함)
+  // 별 밝기: 희미(잠금) / 은은(절반) / 환함(완료)
   const intimacyGlow   = (diag.intimacyLevel ?? 1) >= 3 ? 1 : (diag.intimacyLevel ?? 1) >= 2 ? 0.55 : 0.28;
   const timeGlow       = timeDone ? 1
                          : Math.max((diag.totalSessions ?? 0) / 15, (diag.daysSinceFirst ?? 0) / 14) >= 0.5 ? 0.55
@@ -312,49 +315,64 @@ function GateConstellation({ diag }: { diag: GateDiag }) {
   const stars = [
     {
       key: 'intimacy',
-      icon: '💜',
+      Icon: Heart,
       label: deepLabel(intimacyDone, '마음이 활짝 열렸어', '마음이 열리는 중'),
-      x: 18,  y: 22,
+      xPct: 18, yPct: 28,
       done: intimacyDone,
       glow: intimacyGlow,
-      color: '#c98ab8',
+      color: '#C98AB8',
+      glowColor: '#F0C0E0',
     },
     {
       key: 'time',
-      icon: '🌙',
+      Icon: MoonStars,
       label: deepLabel(timeDone, '시간이 우리 편이야', '함께한 시간이 쌓이는 중'),
-      x: 82,  y: 30,
+      xPct: 82, yPct: 36,
       done: timeDone,
       glow: timeGlow,
-      color: '#d68694',
+      color: '#9D7BC4',
+      glowColor: '#D7C5F0',
     },
     {
       key: 'deep',
-      icon: '✨',
+      Icon: Sparkle,
       label: deepLabel(deepMomentDone, '깊은 순간이 쌓였어', '깊은 순간을 기다리는 중'),
-      x: 50,  y: 78,
+      xPct: 50, yPct: 78,
       done: deepMomentDone,
       glow: deepGlow,
-      color: '#d6a26c',
+      color: '#D6A26C',
+      glowColor: '#F5E2B0',
     },
   ];
 
   const allDone = intimacyDone && timeDone && deepMomentDone;
+  const prevAllDoneRef = useRef(false);
+  const [celebrate, setCelebrate] = useState(false);
+  useEffect(() => {
+    if (allDone && !prevAllDoneRef.current) {
+      setCelebrate(true);
+      const t = setTimeout(() => setCelebrate(false), 2400);
+      return () => clearTimeout(t);
+    }
+    prevAllDoneRef.current = allDone;
+  }, [allDone]);
 
   return (
     <div
       style={{
         padding: '14px 14px 16px',
         background:
-          'radial-gradient(ellipse at 50% 30%, rgba(94,72,140,0.20) 0%, rgba(48,32,82,0.10) 60%, rgba(255,255,255,0.45) 100%)',
+          'radial-gradient(ellipse at 50% 30%, #2D2475 0%, #1B1A4A 55%, #100D38 100%)',
         borderRadius: 14,
-        border: '1px solid rgba(140,118,196,0.28)',
+        border: '1px solid rgba(140,118,196,0.40)',
         position: 'relative',
         overflow: 'hidden',
+        boxShadow: 'inset 0 0 0 1px rgba(245,211,138,0.08), 0 4px 14px rgba(48,32,82,0.40)',
       }}
     >
-      {/* 배경 작은 별 데코 */}
-      <NightSkyDecor />
+      {/* 배경 별 + 별똥별 */}
+      <Sparkles count={22} color="#E8DCFF" sizeRange={[0.4, 1.6]} opacityRange={[0.25, 0.9]} seed={31} />
+      <ShootingStars count={2} color="#F5D38A" interval={7} seed={17} />
 
       {/* 별자리 영역 */}
       <div
@@ -365,7 +383,7 @@ function GateConstellation({ diag }: { diag: GateDiag }) {
           marginBottom: 10,
         }}
       >
-        {/* 연결선 — 점선, 별 켜질수록 진해짐 */}
+        {/* 연결선 — 글로우 그라데이션 */}
         <svg
           aria-hidden
           viewBox="0 0 100 100"
@@ -375,98 +393,119 @@ function GateConstellation({ diag }: { diag: GateDiag }) {
             pointerEvents: 'none',
           }}
         >
-          <motion.line
-            x1={stars[0].x} y1={stars[0].y}
-            x2={stars[1].x} y2={stars[1].y}
-            stroke="#c4b3e6"
-            strokeWidth={0.45}
-            strokeLinecap="round"
-            strokeDasharray="1.6 2.2"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: (intimacyGlow + timeGlow) / 2 * 0.95 }}
-            transition={{ duration: 0.9 }}
-          />
-          <motion.line
-            x1={stars[1].x} y1={stars[1].y}
-            x2={stars[2].x} y2={stars[2].y}
-            stroke="#c4b3e6"
-            strokeWidth={0.45}
-            strokeLinecap="round"
-            strokeDasharray="1.6 2.2"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: (timeGlow + deepGlow) / 2 * 0.95 }}
-            transition={{ duration: 0.9, delay: 0.1 }}
-          />
-          <motion.line
-            x1={stars[2].x} y1={stars[2].y}
-            x2={stars[0].x} y2={stars[0].y}
-            stroke="#c4b3e6"
-            strokeWidth={0.45}
-            strokeLinecap="round"
-            strokeDasharray="1.6 2.2"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: (deepGlow + intimacyGlow) / 2 * 0.95 }}
-            transition={{ duration: 0.9, delay: 0.2 }}
-          />
+          <defs>
+            <linearGradient id="gc-line-1" x1="0" y1="0" x2="1" y2="0.2" gradientUnits="objectBoundingBox">
+              <stop offset="0%" stopColor="#C98AB8" />
+              <stop offset="100%" stopColor="#9D7BC4" />
+            </linearGradient>
+            <linearGradient id="gc-line-2" x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+              <stop offset="0%" stopColor="#9D7BC4" />
+              <stop offset="100%" stopColor="#D6A26C" />
+            </linearGradient>
+            <linearGradient id="gc-line-3" x1="1" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+              <stop offset="0%" stopColor="#D6A26C" />
+              <stop offset="100%" stopColor="#C98AB8" />
+            </linearGradient>
+            <filter id="gc-line-glow"><feGaussianBlur stdDeviation="0.6" /></filter>
+          </defs>
+          {[
+            { from: 0, to: 1, gradId: 'gc-line-1', delay: 0.0 },
+            { from: 1, to: 2, gradId: 'gc-line-2', delay: 0.1 },
+            { from: 2, to: 0, gradId: 'gc-line-3', delay: 0.2 },
+          ].map((edge, idx) => {
+            const a = stars[edge.from];
+            const b = stars[edge.to];
+            const op = ((a.glow + b.glow) / 2) * 0.95;
+            return (
+              <motion.line
+                key={idx}
+                x1={a.xPct} y1={a.yPct} x2={b.xPct} y2={b.yPct}
+                stroke={`url(#${edge.gradId})`}
+                strokeWidth={0.7}
+                strokeLinecap="round"
+                filter="url(#gc-line-glow)"
+                initial={{ opacity: 0, pathLength: 0 }}
+                animate={{ opacity: op, pathLength: 1 }}
+                transition={{ duration: 1.1, delay: edge.delay, ease: [0.22, 0.61, 0.36, 1] }}
+              />
+            );
+          })}
         </svg>
 
         {/* 별 3개 */}
         {stars.map((s, i) => (
           <motion.div
             key={s.key}
-            initial={{ opacity: 0, scale: 0.6 }}
+            initial={{ opacity: 0, scale: 0.5 }}
             animate={{ opacity: s.glow, scale: s.done ? 1 : 0.86 }}
-            transition={{ duration: 0.55, delay: 0.08 * i, ease: [0.22, 0.61, 0.36, 1] }}
+            transition={{ duration: 0.6, delay: 0.18 + 0.12 * i, ease: [0.22, 0.61, 0.36, 1] }}
             style={{
               position: 'absolute',
-              left: `${s.x}%`,
-              top: `${s.y}%`,
+              left: `${s.xPct}%`,
+              top: `${s.yPct}%`,
               transform: 'translate(-50%, -50%)',
-              width: 30, height: 30,
+              width: 42, height: 42,
               borderRadius: '50%',
-              background: s.done
-                ? `radial-gradient(circle, ${s.color}66 0%, ${s.color}33 50%, transparent 75%)`
-                : 'radial-gradient(circle, rgba(196,179,230,0.30) 0%, transparent 70%)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: s.done ? 17 : 14,
-              filter: s.done ? `drop-shadow(0 0 6px ${s.color}88)` : 'none',
+              background: s.done
+                ? `radial-gradient(circle, ${s.glowColor}cc 0%, ${s.color}55 45%, transparent 80%)`
+                : 'radial-gradient(circle, rgba(196,179,230,0.35) 0%, transparent 70%)',
+              filter: s.done ? `drop-shadow(0 0 10px ${s.glowColor})` : 'none',
             }}
           >
-            <span style={{ lineHeight: 1 }}>{s.icon}</span>
+            <s.Icon size={s.done ? 22 : 18} weight={s.done ? 'duotone' : 'thin'} color={s.done ? s.color : '#A89BD6'} />
             {s.done && (
-              <motion.span
-                aria-hidden
-                initial={{ opacity: 0, scale: 0.5 }}
-                animate={{ opacity: [0, 0.9, 0.5, 0.9], scale: [0.7, 1.1, 0.9, 1.1] }}
-                transition={{ duration: 2.4, repeat: Infinity, repeatType: 'mirror' }}
-                style={{
-                  position: 'absolute',
-                  top: -6, right: -6,
-                  fontSize: 9,
-                  color: s.color,
-                }}
-              >
-                ✦
-              </motion.span>
+              <>
+                {/* 십자 광채 */}
+                <motion.span
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    width: 36, height: 1.2,
+                    background: `linear-gradient(90deg, transparent, ${s.glowColor}cc, transparent)`,
+                    borderRadius: 2,
+                  }}
+                  animate={{ opacity: [0.3, 0.8, 0.3], scaleX: [0.6, 1.0, 0.6] }}
+                  transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+                />
+                <motion.span
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    width: 1.2, height: 36,
+                    background: `linear-gradient(180deg, transparent, ${s.glowColor}cc, transparent)`,
+                    borderRadius: 2,
+                  }}
+                  animate={{ opacity: [0.3, 0.8, 0.3], scaleY: [0.6, 1.0, 0.6] }}
+                  transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut', delay: 0.35 }}
+                />
+                {/* 주위 작은 별 흩어짐 */}
+                <Sparkles count={4} color={s.glowColor} sizeRange={[0.4, 0.9]} seed={i * 17 + 3} twinkleDuration={1.8} opacityRange={[0.3, 0.95]} />
+              </>
             )}
           </motion.div>
         ))}
       </div>
 
-      {/* 별 상태 텍스트 — 수치 0, 상태형 카피만 */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      {/* 별 상태 텍스트 */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, position: 'relative' }}>
         {stars.map((s) => (
           <div
             key={`${s.key}-label`}
             style={{
               display: 'flex', alignItems: 'center', gap: 8,
-              fontFamily: HANDWRITE_FONT, fontSize: 11.5,
-              color: s.done ? s.color : '#8a6a8a',
+              fontFamily: HANDWRITE_FONT, fontSize: 12,
+              color: s.done ? s.glowColor : '#A89BD6',
               opacity: s.done ? 1 : 0.78,
               fontWeight: s.done ? 600 : 400,
+              textShadow: s.done ? `0 0 8px ${s.color}66` : 'none',
             }}
           >
-            <span style={{ fontSize: 10 }}>{s.done ? '✦' : '·'}</span>
+            <span aria-hidden style={{ width: 8, display: 'inline-flex', justifyContent: 'center' }}>
+              {s.done
+                ? <Sparkle size={9} weight="fill" color={s.glowColor} />
+                : <span style={{ fontSize: 11, color: '#7E70B0' }}>·</span>}
+            </span>
             <span>{s.label}</span>
           </div>
         ))}
@@ -474,22 +513,29 @@ function GateConstellation({ diag }: { diag: GateDiag }) {
 
       {allDone && (
         <motion.div
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.4 }}
+          initial={{ opacity: 0, y: 4, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.7, delay: 0.3, ease: [0.22, 0.61, 0.36, 1] }}
           style={{
-            marginTop: 10,
-            padding: '6px 10px',
-            background: 'linear-gradient(135deg, #c8b0e8, #e8b0c8)',
+            position: 'relative',
+            marginTop: 12,
+            padding: '7px 12px',
+            background: 'linear-gradient(135deg, #F5D38A 0%, #E8B4C8 55%, #C9B3E8 100%)',
             borderRadius: 999,
             textAlign: 'center',
-            fontFamily: HANDWRITE_FONT, fontSize: 12,
-            color: '#fff', fontWeight: 600,
+            fontFamily: HANDWRITE_FONT, fontSize: 12.5,
+            color: '#3A2E78', fontWeight: 700,
             letterSpacing: '0.02em',
-            boxShadow: '0 2px 6px rgba(140,118,196,0.30)',
+            boxShadow: '0 4px 12px rgba(245,211,138,0.45), inset 0 0 0 1px rgba(255,255,255,0.40)',
+            overflow: 'hidden',
           }}
         >
-          ✨ 별자리가 완성됐어 — 별명이 곧 태어날 거야
+          {celebrate && (
+            <Sparkles count={18} color="#FFE9B8" sizeRange={[0.6, 1.6]} seed={97} twinkleDuration={1.4} opacityRange={[0.4, 1]} />
+          )}
+          <span style={{ position: 'relative' }}>
+            별자리가 완성됐어 — 별명이 곧 태어날 거야
+          </span>
         </motion.div>
       )}
     </div>
@@ -500,35 +546,7 @@ function deepLabel(done: boolean, ok: string, wait: string) {
   return done ? ok : wait;
 }
 
-function NightSkyDecor() {
-  const dots = [
-    { x: 8,  y: 12, s: 7 },
-    { x: 92, y: 8,  s: 6 },
-    { x: 70, y: 92, s: 7 },
-    { x: 14, y: 90, s: 6 },
-    { x: 46, y: 6,  s: 5 },
-    { x: 26, y: 56, s: 5 },
-    { x: 88, y: 64, s: 5 },
-  ];
-  return (
-    <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-      {dots.map((d, i) => (
-        <span
-          key={i}
-          style={{
-            position: 'absolute',
-            left: `${d.x}%`, top: `${d.y}%`,
-            transform: 'translate(-50%, -50%)',
-            fontSize: d.s, color: '#c4b3e6',
-            opacity: 0.55,
-          }}
-        >
-          ✦
-        </span>
-      ))}
-    </div>
-  );
-}
+// v119.5: NightSkyDecor 함수 폐기 → Sparkles + ShootingStars 컴포넌트로 대체
 
 // ============================================================
 // 네임태그 카드 — 핵심 컴포넌트
