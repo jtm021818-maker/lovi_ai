@@ -276,7 +276,7 @@ function EmptyState({ gate }: { gate: NicknameApiData['gate'] }) {
           color: '#5a2a3a', lineHeight: 1.25, marginBottom: 6,
         }}
       >
-        🌱 아직 별명이 없어
+        🌙 아직 별명이 없어
       </div>
       <div
         style={{
@@ -286,114 +286,246 @@ function EmptyState({ gate }: { gate: NicknameApiData['gate'] }) {
       >
         진짜 별명은 함께 쌓은 추억 위에 자연스럽게 생겨나.
         <br />
-        조금만 더 같이 시간 보내자
+        우리 별자리가 완성되면 곧 태어날 거야
       </div>
 
-      <GateChecklist diag={gate.diagnostics} />
+      <GateConstellation diag={gate.diagnostics} />
     </div>
   );
 }
 
 // ============================================================
-// 게이트 체크리스트 — 진행 바형
+// v119: 게이트 별자리 — 수치 대신 별 3개가 켜지는 시각화
 // ============================================================
-function GateChecklist({ diag }: { diag: GateDiag }) {
-  const items = [
+function GateConstellation({ diag }: { diag: GateDiag }) {
+  const intimacyDone   = (diag.intimacyLevel ?? 1) >= 3;
+  const timeDone       = (diag.totalSessions ?? 0) >= 15 || (diag.daysSinceFirst ?? 0) >= 14;
+  const deepMomentDone = !!diag.hasDeepMoment;
+
+  // 진행도(별 밝기)도 수치가 아니라 단계형 (희미/은은/환함)
+  const intimacyGlow   = (diag.intimacyLevel ?? 1) >= 3 ? 1 : (diag.intimacyLevel ?? 1) >= 2 ? 0.55 : 0.28;
+  const timeGlow       = timeDone ? 1
+                         : Math.max((diag.totalSessions ?? 0) / 15, (diag.daysSinceFirst ?? 0) / 14) >= 0.5 ? 0.55
+                         : 0.28;
+  const deepGlow       = deepMomentDone ? 1 : 0.28;
+
+  const stars = [
     {
+      key: 'intimacy',
       icon: '💜',
-      label: '친밀도 Lv.3',
-      current: diag.intimacyLevel ?? 1,
-      target: 3,
-      progress: Math.min(1, (diag.intimacyLevel ?? 1) / 3),
-      hint: `Lv.${diag.intimacyLevel ?? 1}`,
+      label: deepLabel(intimacyDone, '마음이 활짝 열렸어', '마음이 열리는 중'),
+      x: 18,  y: 22,
+      done: intimacyDone,
+      glow: intimacyGlow,
       color: '#c98ab8',
     },
     {
+      key: 'time',
       icon: '🌙',
-      label: '함께한 시간',
-      current: Math.max(diag.totalSessions ?? 0, diag.daysSinceFirst ?? 0),
-      target: 14,
-      progress: Math.min(
-        1,
-        Math.max(
-          (diag.totalSessions ?? 0) / 15,
-          (diag.daysSinceFirst ?? 0) / 14,
-        ),
-      ),
-      hint: `${diag.totalSessions ?? 0}회 · ${diag.daysSinceFirst ?? 0}일`,
+      label: deepLabel(timeDone, '시간이 우리 편이야', '함께한 시간이 쌓이는 중'),
+      x: 82,  y: 30,
+      done: timeDone,
+      glow: timeGlow,
       color: '#d68694',
     },
     {
+      key: 'deep',
       icon: '✨',
-      label: '깊은 순간',
-      current: diag.hasDeepMoment ? 1 : 0,
-      target: 1,
-      progress: diag.hasDeepMoment ? 1 : 0,
-      hint: diag.hasDeepMoment ? '쌓임' : '아직',
+      label: deepLabel(deepMomentDone, '깊은 순간이 쌓였어', '깊은 순간을 기다리는 중'),
+      x: 50,  y: 78,
+      done: deepMomentDone,
+      glow: deepGlow,
       color: '#d6a26c',
     },
   ];
 
+  const allDone = intimacyDone && timeDone && deepMomentDone;
+
   return (
     <div
       style={{
-        padding: '12px 14px',
-        background: 'rgba(255,255,255,0.45)',
-        borderRadius: 12,
-        border: '1px solid rgba(214,120,154,0.18)',
-        display: 'flex', flexDirection: 'column', gap: 10,
+        padding: '14px 14px 16px',
+        background:
+          'radial-gradient(ellipse at 50% 30%, rgba(94,72,140,0.20) 0%, rgba(48,32,82,0.10) 60%, rgba(255,255,255,0.45) 100%)',
+        borderRadius: 14,
+        border: '1px solid rgba(140,118,196,0.28)',
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
-      {items.map((it) => {
-        const done = it.progress >= 1;
-        return (
-          <div key={it.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span
-              style={{
-                width: 22, height: 22,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 13,
-                background: done ? `${it.color}33` : 'rgba(160,90,100,0.08)',
-                borderRadius: '50%',
-                flexShrink: 0,
-              }}
-            >
-              {done ? '✓' : it.icon}
-            </span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div
+      {/* 배경 작은 별 데코 */}
+      <NightSkyDecor />
+
+      {/* 별자리 영역 */}
+      <div
+        style={{
+          position: 'relative',
+          width: '100%',
+          aspectRatio: '5 / 3',
+          marginBottom: 10,
+        }}
+      >
+        {/* 연결선 — 점선, 별 켜질수록 진해짐 */}
+        <svg
+          aria-hidden
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          style={{
+            position: 'absolute', inset: 0, width: '100%', height: '100%',
+            pointerEvents: 'none',
+          }}
+        >
+          <motion.line
+            x1={stars[0].x} y1={stars[0].y}
+            x2={stars[1].x} y2={stars[1].y}
+            stroke="#c4b3e6"
+            strokeWidth={0.45}
+            strokeLinecap="round"
+            strokeDasharray="1.6 2.2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: (intimacyGlow + timeGlow) / 2 * 0.95 }}
+            transition={{ duration: 0.9 }}
+          />
+          <motion.line
+            x1={stars[1].x} y1={stars[1].y}
+            x2={stars[2].x} y2={stars[2].y}
+            stroke="#c4b3e6"
+            strokeWidth={0.45}
+            strokeLinecap="round"
+            strokeDasharray="1.6 2.2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: (timeGlow + deepGlow) / 2 * 0.95 }}
+            transition={{ duration: 0.9, delay: 0.1 }}
+          />
+          <motion.line
+            x1={stars[2].x} y1={stars[2].y}
+            x2={stars[0].x} y2={stars[0].y}
+            stroke="#c4b3e6"
+            strokeWidth={0.45}
+            strokeLinecap="round"
+            strokeDasharray="1.6 2.2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: (deepGlow + intimacyGlow) / 2 * 0.95 }}
+            transition={{ duration: 0.9, delay: 0.2 }}
+          />
+        </svg>
+
+        {/* 별 3개 */}
+        {stars.map((s, i) => (
+          <motion.div
+            key={s.key}
+            initial={{ opacity: 0, scale: 0.6 }}
+            animate={{ opacity: s.glow, scale: s.done ? 1 : 0.86 }}
+            transition={{ duration: 0.55, delay: 0.08 * i, ease: [0.22, 0.61, 0.36, 1] }}
+            style={{
+              position: 'absolute',
+              left: `${s.x}%`,
+              top: `${s.y}%`,
+              transform: 'translate(-50%, -50%)',
+              width: 30, height: 30,
+              borderRadius: '50%',
+              background: s.done
+                ? `radial-gradient(circle, ${s.color}66 0%, ${s.color}33 50%, transparent 75%)`
+                : 'radial-gradient(circle, rgba(196,179,230,0.30) 0%, transparent 70%)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: s.done ? 17 : 14,
+              filter: s.done ? `drop-shadow(0 0 6px ${s.color}88)` : 'none',
+            }}
+          >
+            <span style={{ lineHeight: 1 }}>{s.icon}</span>
+            {s.done && (
+              <motion.span
+                aria-hidden
+                initial={{ opacity: 0, scale: 0.5 }}
+                animate={{ opacity: [0, 0.9, 0.5, 0.9], scale: [0.7, 1.1, 0.9, 1.1] }}
+                transition={{ duration: 2.4, repeat: Infinity, repeatType: 'mirror' }}
                 style={{
-                  display: 'flex', justifyContent: 'space-between',
-                  fontFamily: HANDWRITE_FONT, fontSize: 11,
-                  color: done ? it.color : '#7a4a55',
-                  marginBottom: 3,
+                  position: 'absolute',
+                  top: -6, right: -6,
+                  fontSize: 9,
+                  color: s.color,
                 }}
               >
-                <span style={{ fontWeight: done ? 700 : 500 }}>{it.label}</span>
-                <span style={{ opacity: 0.75, fontVariantNumeric: 'tabular-nums' }}>{it.hint}</span>
-              </div>
-              <div
-                style={{
-                  height: 5, borderRadius: 999,
-                  background: 'rgba(160,90,100,0.10)',
-                  overflow: 'hidden',
-                }}
-              >
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${it.progress * 100}%` }}
-                  transition={{ duration: 0.8, ease: [0.22, 0.61, 0.36, 1] }}
-                  style={{
-                    height: '100%',
-                    background: `linear-gradient(90deg, ${it.color}99, ${it.color})`,
-                    borderRadius: 999,
-                  }}
-                />
-              </div>
-            </div>
+                ✦
+              </motion.span>
+            )}
+          </motion.div>
+        ))}
+      </div>
+
+      {/* 별 상태 텍스트 — 수치 0, 상태형 카피만 */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {stars.map((s) => (
+          <div
+            key={`${s.key}-label`}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              fontFamily: HANDWRITE_FONT, fontSize: 11.5,
+              color: s.done ? s.color : '#8a6a8a',
+              opacity: s.done ? 1 : 0.78,
+              fontWeight: s.done ? 600 : 400,
+            }}
+          >
+            <span style={{ fontSize: 10 }}>{s.done ? '✦' : '·'}</span>
+            <span>{s.label}</span>
           </div>
-        );
-      })}
+        ))}
+      </div>
+
+      {allDone && (
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.4 }}
+          style={{
+            marginTop: 10,
+            padding: '6px 10px',
+            background: 'linear-gradient(135deg, #c8b0e8, #e8b0c8)',
+            borderRadius: 999,
+            textAlign: 'center',
+            fontFamily: HANDWRITE_FONT, fontSize: 12,
+            color: '#fff', fontWeight: 600,
+            letterSpacing: '0.02em',
+            boxShadow: '0 2px 6px rgba(140,118,196,0.30)',
+          }}
+        >
+          ✨ 별자리가 완성됐어 — 별명이 곧 태어날 거야
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
+function deepLabel(done: boolean, ok: string, wait: string) {
+  return done ? ok : wait;
+}
+
+function NightSkyDecor() {
+  const dots = [
+    { x: 8,  y: 12, s: 7 },
+    { x: 92, y: 8,  s: 6 },
+    { x: 70, y: 92, s: 7 },
+    { x: 14, y: 90, s: 6 },
+    { x: 46, y: 6,  s: 5 },
+    { x: 26, y: 56, s: 5 },
+    { x: 88, y: 64, s: 5 },
+  ];
+  return (
+    <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+      {dots.map((d, i) => (
+        <span
+          key={i}
+          style={{
+            position: 'absolute',
+            left: `${d.x}%`, top: `${d.y}%`,
+            transform: 'translate(-50%, -50%)',
+            fontSize: d.s, color: '#c4b3e6',
+            opacity: 0.55,
+          }}
+        >
+          ✦
+        </span>
+      ))}
     </div>
   );
 }

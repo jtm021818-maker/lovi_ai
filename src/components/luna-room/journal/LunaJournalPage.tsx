@@ -30,7 +30,10 @@ import {
   SEED_HINT,
   FEATURE_UNLOCKS,
   partitionUnlocks,
+  getStageLabel,
+  getNextStageLabel,
   type FeatureUnlock,
+  type StageLabel,
 } from './level-unlocks';
 
 export interface JournalData {
@@ -83,7 +86,9 @@ export default function LunaJournalPage({ data, show, persona = 'luna' }: Props)
 
   const isSeed = data.daysSinceFirst === 0 && data.totalSessions === 0;
   const isMax = data.level >= 5;
-  const stageLabel = isSeed ? SEED_LABEL : data.levelLabel;
+  const stage = getStageLabel(data.level);
+  const nextStage = getNextStageLabel(data.level);
+  // 백엔드 levelLabel 대신 STAGE_LABELS(호칭형) 사용. seed 시에만 인트로 카피로 덮음.
   const depthHint = isSeed ? SEED_HINT : data.depthHint;
   const { unlocked, nextLocked } = partitionUnlocks(data.level);
 
@@ -144,7 +149,10 @@ export default function LunaJournalPage({ data, show, persona = 'luna' }: Props)
       <CharacterCard
         show={show}
         data={data}
-        stageLabel={stageLabel}
+        stage={stage}
+        nextStage={nextStage}
+        isSeed={isSeed}
+        isMax={isMax}
         depthHint={depthHint}
       />
 
@@ -155,7 +163,7 @@ export default function LunaJournalPage({ data, show, persona = 'luna' }: Props)
       <UnlockBadges show={show} unlocked={unlocked} nextLocked={nextLocked} />
 
       {/* ── 6. 진행도 ───────────────────────────────────────── */}
-      <ProgressFootnote show={show} percent={data.progressPercent} />
+      <ProgressFootnote show={show} nextStage={nextStage} isMax={isMax} />
 
       {/* 🆕 v117: 소프트 게이트 — Lv 3 진입 시 "마음 더 열기" 모먼트 */}
       <GateOpenMoment
@@ -242,11 +250,14 @@ function Header({
 // v118.3: 캐릭터 카드 임팩트 강화 — 헤드라인급 스테이지 라벨 + 장식 액센트.
 // "확 안 들어와" 피드백 반영: 큰 핵심 문장 / 4축 페탈 / 그라데이션 액센트 / 반짝 데코.
 function CharacterCard({
-  show, data, stageLabel, depthHint,
+  show, data, stage, nextStage, isSeed, isMax, depthHint,
 }: {
   show: boolean;
   data: JournalData;
-  stageLabel: string;
+  stage: StageLabel;
+  nextStage: StageLabel;
+  isSeed: boolean;
+  isMax: boolean;
   depthHint: string;
 }) {
   return (
@@ -315,36 +326,76 @@ function CharacterCard({
           color: '#a85e6f', letterSpacing: '0.04em',
         }}
       >
-        <span style={{ fontSize: 10 }}>🌷</span>
+        <span style={{ fontSize: 10 }}>🌙</span>
         지금 우리는
       </div>
 
-      {/* 메인 헤드라인 — 스테이지 라벨 (큰 손글씨) */}
-      <div
-        style={{
-          fontFamily: HANDWRITE_FONT,
-          fontSize: 26,
-          color: '#5a2a3a',
-          lineHeight: 1.18,
-          fontWeight: 700,
-          marginBottom: 6,
-          letterSpacing: '-0.01em',
-          textShadow: '0 1px 0 rgba(255,255,255,0.6)',
-        }}
-      >
-        "{stageLabel}"
+      {/* 메인 헤드라인 — 큰 단계 아이콘 + 호칭 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+        <motion.div
+          aria-hidden
+          initial={{ opacity: 0, scale: 0.6, rotate: -8 }}
+          animate={show ? { opacity: 1, scale: 1, rotate: 0 } : { opacity: 0 }}
+          transition={{ delay: 0.55, duration: 0.5, ease: [0.22, 0.61, 0.36, 1] }}
+          style={{
+            fontSize: 38,
+            lineHeight: 1,
+            filter: 'drop-shadow(0 2px 4px rgba(140,118,196,0.30))',
+          }}
+        >
+          {stage.icon}
+        </motion.div>
+        <div
+          style={{
+            fontFamily: HANDWRITE_FONT,
+            fontSize: 28,
+            color: '#5a2a3a',
+            lineHeight: 1.15,
+            fontWeight: 700,
+            letterSpacing: '-0.01em',
+            textShadow: '0 1px 0 rgba(255,255,255,0.6)',
+          }}
+        >
+          {isSeed ? '아직 모르는 사이' : stage.title}
+        </div>
       </div>
 
-      {/* 부제 — depthHint */}
+      {/* 부제 — 별·달·은하 카피 (호칭형 단계의 결) */}
       <div
         style={{
           fontFamily: HANDWRITE_FONT, fontSize: 12.5,
           color: 'rgba(120,60,70,0.78)',
-          lineHeight: 1.5, marginBottom: 14,
+          lineHeight: 1.5, marginBottom: 4,
         }}
       >
-        {depthHint}
+        {isSeed ? SEED_LABEL : stage.sky}
       </div>
+
+      {/* 다음 단계 티저 */}
+      {!isMax && (
+        <div
+          style={{
+            fontFamily: HANDWRITE_FONT, fontSize: 11,
+            color: 'rgba(120,60,70,0.55)',
+            lineHeight: 1.4, marginBottom: 14,
+            display: 'flex', alignItems: 'center', gap: 5,
+          }}
+        >
+          <span style={{ fontSize: 9 }}>↗</span>
+          곧 <strong style={{ fontWeight: 600 }}>{nextStage.title}</strong> 사이로
+        </div>
+      )}
+      {isMax && (
+        <div
+          style={{
+            fontFamily: HANDWRITE_FONT, fontSize: 11,
+            color: 'rgba(120,60,70,0.55)',
+            lineHeight: 1.4, marginBottom: 14,
+          }}
+        >
+          {depthHint}
+        </div>
+      )}
 
       {/* 페탈 + 4축 라벨 — 카드 하단 */}
       <div
@@ -385,12 +436,13 @@ function CharacterCard({
 }
 
 function AxisChip({ label, value, color }: { label: string; value: number; color: string }) {
+  // v119: 수치 노출 제거 — 게이지 채움만으로 표현
   const pct = Math.max(0, Math.min(100, value));
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <span
         style={{
-          width: 26, fontFamily: HANDWRITE_FONT, fontSize: 10.5,
+          width: 32, fontFamily: HANDWRITE_FONT, fontSize: 10.5,
           color: '#7a4a55', flexShrink: 0,
         }}
       >
@@ -412,16 +464,6 @@ function AxisChip({ label, value, color }: { label: string; value: number; color
           }}
         />
       </div>
-      <span
-        style={{
-          width: 24,
-          fontFamily: NUMERIC_FONT, fontSize: 10,
-          color: '#7a4a55', opacity: 0.7,
-          textAlign: 'right', fontVariantNumeric: 'tabular-nums',
-        }}
-      >
-        {Math.round(pct)}
-      </span>
     </div>
   );
 }
@@ -512,7 +554,7 @@ function UnlockRow({
           {feature.title}
           {!isUnlocked && (
             <span style={{ fontSize: 9.5, marginLeft: 5, color: BOND_TOKENS.inkSoft, opacity: 0.75 }}>
-              · Lv {feature.level} 해금
+              · <em style={{ fontStyle: 'normal', color: '#8c6aa0' }}>{getStageLabel(feature.level).title}</em> 사이가 되면
             </span>
           )}
         </div>
@@ -532,7 +574,7 @@ function UnlockRow({
 // ============================================================
 // 6. 진행도 (식물 옆 마이크로 정보)
 // ============================================================
-function ProgressFootnote({ show, percent }: { show: boolean; percent: number }) {
+function ProgressFootnote({ show, nextStage, isMax }: { show: boolean; nextStage: StageLabel; isMax: boolean }) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -541,11 +583,22 @@ function ProgressFootnote({ show, percent }: { show: boolean; percent: number })
       style={{
         marginTop: 12,
         textAlign: 'center',
-        fontFamily: HANDWRITE_FONT, fontSize: 10.5,
-        color: BOND_TOKENS.inkSoft, opacity: 0.7,
+        fontFamily: HANDWRITE_FONT, fontSize: 11,
+        color: BOND_TOKENS.inkSoft, opacity: 0.75,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
       }}
     >
-      다음 단계까지 — {Math.round(percent)}% 자랐어
+      {isMax ? (
+        <>
+          <span aria-hidden style={{ fontSize: 10 }}>🌌</span>
+          여기가 끝이 아니야 — 우리만의 우주가 계속 자라
+        </>
+      ) : (
+        <>
+          <span aria-hidden style={{ fontSize: 10 }}>{nextStage.icon}</span>
+          다음은 <strong style={{ fontWeight: 600, color: '#7a4a55' }}>{nextStage.title}</strong> 사이
+        </>
+      )}
     </motion.div>
   );
 }

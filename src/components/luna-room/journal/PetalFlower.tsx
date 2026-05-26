@@ -78,23 +78,7 @@ export default function PetalFlower({ trust, openness, bond, respect, show, dela
                 }}
                 style={{ transformOrigin: '0 0' }}
               />
-              {/* 점수 라벨 — 꽃잎 끝 안쪽 */}
-              <motion.text
-                x={0}
-                y={-len + 14}
-                textAnchor="middle"
-                fontSize={10}
-                fontWeight={700}
-                fill={BOND_TOKENS.ink}
-                opacity={0.65}
-                fontFamily={HANDWRITE_FONT}
-                initial={{ opacity: 0 }}
-                animate={show ? { opacity: 0.65 } : { opacity: 0 }}
-                transition={{ delay: (delay + i * 80 + 400) / 1000, duration: 0.4 }}
-                transform={`rotate(${-p.rotation})`}
-              >
-                {Math.round(p.score)}
-              </motion.text>
+              {/* v119: 점수 노출 제거 — 꽃잎 길이만으로 시각화 */}
             </g>
           );
         })}

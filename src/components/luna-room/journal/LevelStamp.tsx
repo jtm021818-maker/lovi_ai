@@ -9,17 +9,20 @@
 
 import { motion } from 'framer-motion';
 import { BOND_TOKENS, HANDWRITE_FONT, BOND_EASE } from '@/lib/luna-life/relationship-tokens';
+import { getStageLabel } from './level-unlocks';
 
 interface Props {
   level: number;       // 1~5
-  levelName: string;   // "새싹" / "개화" / ...
+  levelName: string;   // "새싹" / "개화" / ... (legacy, kept for back-compat)
   show: boolean;
   delay?: number;      // ms
   /** 만렙 별 액센트 표시 */
   isMax?: boolean;
 }
 
-export default function LevelStamp({ level, levelName, show, delay = 800, isMax = false }: Props) {
+export default function LevelStamp({ level, levelName: _legacyLevelName, show, delay = 800, isMax = false }: Props) {
+  const stage = getStageLabel(level);
+  void _legacyLevelName; // retained for back-compat; UI now uses STAGE_LABELS
   return (
     <motion.div
       initial={{ scale: 0.6, opacity: 0, rotate: -3 }}
@@ -66,44 +69,44 @@ export default function LevelStamp({ level, levelName, show, delay = 800, isMax 
           opacity={0.55}
         />
 
-        {/* LEVEL 텍스트 */}
+        {/* "우리는" 자그마한 라벨 */}
         <text
           x={42}
-          y={26}
+          y={28}
           textAnchor="middle"
           fontSize={8}
           fill={BOND_TOKENS.stampInk}
           fontFamily={HANDWRITE_FONT}
-          letterSpacing="0.25em"
-          opacity={0.85}
+          letterSpacing="0.15em"
+          opacity={0.75}
         >
-          LEVEL
+          우리는
         </text>
 
-        {/* 큰 숫자 */}
+        {/* 큰 단계 아이콘 (별·달·은하) */}
         <text
           x={42}
           y={51}
           textAnchor="middle"
-          fontSize={26}
-          fontWeight={800}
+          fontSize={22}
           fill={BOND_TOKENS.stampInk}
           fontFamily={HANDWRITE_FONT}
         >
-          {level}
+          {stage.icon}
         </text>
 
-        {/* levelName */}
+        {/* 관계 호칭 */}
         <text
           x={42}
-          y={67}
+          y={68}
           textAnchor="middle"
-          fontSize={11}
+          fontSize={stage.title.length >= 5 ? 9 : 11}
+          fontWeight={700}
           fill={BOND_TOKENS.stampInk}
           fontFamily={HANDWRITE_FONT}
           opacity={0.95}
         >
-          {levelName}
+          {stage.title}
         </text>
       </svg>
 

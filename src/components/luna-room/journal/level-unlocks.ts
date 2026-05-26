@@ -1,9 +1,47 @@
 /**
  * v114 — 레벨별 다음 단계 unlock 카피.
+ * v119 — 별·달·은하 메타포 + 관계 호칭형 단계명 추가.
+ *
+ * UI 표시는 STAGE_LABELS(호칭형, 별·달·은하)를 사용한다.
+ * 백엔드 가중치 로직과 INTIMACY_LEVELS.name(새싹/꽃봉오리…) 은 그대로 유지.
  *
  * Persona 5 Confidant 톤 차용 — "이 단계에서 새로 풀린 행동" 형식.
  * 단계 진행은 IntimacyDerivedInfo.level (1~5) 기반.
  */
+
+// ============================================================
+// 🆕 v119: 별·달·은하 메타포 + 관계 호칭형 단계명
+// ============================================================
+export interface StageLabel {
+  level: number;
+  /** 관계 호칭 — 화면 큰 글씨 */
+  title: string;
+  /** 부제 — 단계의 결을 한 줄로 */
+  sub: string;
+  /** 하늘 풍경 카피 — 별·달·은하 메타포 */
+  sky: string;
+  /** 단계 아이콘(이모지 fallback) — 큰 아이콘 자리 */
+  icon: string;
+}
+
+export const STAGE_LABELS: StageLabel[] = [
+  { level: 1, title: '아직 모르는 사이', sub: '오늘이 우리의 1일',         sky: '첫 별이 막 켜졌어',     icon: '✨' },
+  { level: 2, title: '아는 사이',       sub: '천천히 알아가는 중',         sky: '별 두 개가 이어졌어',   icon: '⭐' },
+  { level: 3, title: '친구',           sub: '같이 고민 나누는 사이',      sky: '달이 우릴 비춰',       icon: '🌙' },
+  { level: 4, title: '단짝',           sub: '진심으로 걱정하는 사이',     sky: '은하수가 흘러',         icon: '💫' },
+  { level: 5, title: '소중한 사람',     sub: '모든 걸 아는 사이',         sky: '우리만의 우주가 있어',  icon: '🌌' },
+];
+
+export function getStageLabel(level: number): StageLabel {
+  const idx = Math.min(Math.max(level, 1), STAGE_LABELS.length) - 1;
+  return STAGE_LABELS[idx];
+}
+
+/** 다음 단계 호칭 (Lv.5에서는 자기 자신) */
+export function getNextStageLabel(level: number): StageLabel {
+  if (level >= STAGE_LABELS.length) return STAGE_LABELS[STAGE_LABELS.length - 1];
+  return STAGE_LABELS[level]; // level=1 → idx 1 = '아는 사이'
+}
 
 export interface NextUnlocks {
   /** 다음 단계 이름 (e.g. "개화") */
