@@ -123,6 +123,7 @@ export default function LunaJournalSheet({ open, onClose }: Props) {
               zIndex: 201,
               maxHeight: '92vh',
               overflowY: 'auto',
+              overflowX: 'hidden', // v119.5 fix: 가로 스크롤 leak 차단
               borderTopLeftRadius: 28,
               borderTopRightRadius: 28,
               background: BOND_TOKENS.paper,

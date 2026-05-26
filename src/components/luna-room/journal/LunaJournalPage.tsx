@@ -111,6 +111,8 @@ export default function LunaJournalPage({ data, show, persona = 'luna', userDisp
         background: BOND_TOKENS.paper,
         borderRadius: 16,
         boxShadow: `0 4px 24px ${BOND_TOKENS.paperGrain}, 0 1px 4px rgba(45,32,19,0.06)`,
+        // v119.5 fix: 모바일 가로 스크롤 차단 (자식 절대위치 leak 방지)
+        overflow: 'hidden',
       }}
     >
       {/* 종이 그레인 */}
