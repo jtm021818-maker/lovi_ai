@@ -29,10 +29,10 @@ import { playSound } from '@/lib/audio';
 import LevelStamp from './LevelStamp';
 import PetalFlower from './PetalFlower';
 import GateOpenMoment from './GateOpenMoment';
-import NicknameSection from './NicknameSection';
+// 🆕 v120: NicknameSection + RelationshipDex 통합 대체 — 루나의 생각 노트
+import LunaThoughtNote from './LunaThoughtNote';
 import StageCard from './StageCard';
 import StageIcon from './StageIcon';
-import RelationshipDex from './RelationshipDex';
 import StageTransitionMoment from './StageTransitionMoment';
 import { useStageTransition } from '@/hooks/useStageTransition';
 import {
@@ -160,15 +160,8 @@ export default function LunaJournalPage({ data, show, persona = 'luna', userDisp
       {/* ── 2-B. 마음의 4축 — 토글 접힘 (게임 스탯 느낌 약화) ─── */}
       <MindAxisToggle show={show} data={data} />
 
-      {/* ── 3. 별명 (v115.7→v118.3 메인 시각 앵커) ───────────── */}
-      {persona === 'luna' && <NicknameSection show={show} />}
-
-      {/* ── 4. 관계 도감 (v119.5 신규 — Neko Atsume + Genshin 패턴) ─── */}
-      <RelationshipDex
-        show={show}
-        currentLevel={data.level}
-        userDisplayName={userDisplayName}
-      />
+      {/* ── 3. 🆕 v120: 루나의 생각 노트 (NicknameSection + RelationshipDex 통합 대체) ─── */}
+      {persona === 'luna' && <LunaThoughtNote show={show} />}
 
       {/* ── 5. 해금 뱃지 ────────────────────────────────────── */}
       <UnlockBadges show={show} unlocked={unlocked} nextLocked={nextLocked} />

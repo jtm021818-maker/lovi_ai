@@ -30,6 +30,10 @@ export interface NicknameRecord {
   /** v115.7: 그 episode 에서 따온 인용 */
   anchorQuote?: string | null;
   daysSinceFirstUse: number;
+  /** v120: 부르고 싶은 맥락 한 줄 가이드 */
+  useContextHint?: string | null;
+  /** v120: 맥락 태그 (late_night / vulnerable_moment / playful_banter ...) */
+  useContextTags?: string[];
 }
 
 export type NicknameReaction = 'accepted' | 'neutral' | 'rejected' | null;
@@ -56,7 +60,7 @@ export async function loadNicknameSnapshot(
 ): Promise<NicknameSnapshot> {
   const { data, error } = await supabase
     .from('luna_nickname_state')
-    .select('nickname, status, use_count, last_used_at, user_reaction, origin_context, anchor_episode_id, anchor_quote, created_at')
+    .select('nickname, status, use_count, last_used_at, user_reaction, origin_context, anchor_episode_id, anchor_quote, created_at, use_context_tags, use_context_hint')
     .eq('user_id', userId)
     .order('last_used_at', { ascending: false })
     .limit(20);
@@ -88,6 +92,8 @@ export async function loadNicknameSnapshot(
         0,
         Math.round((now - new Date(row.created_at).getTime()) / (24 * 60 * 60 * 1000)),
       ),
+      useContextHint: (row as any).use_context_hint ?? null,
+      useContextTags: ((row as any).use_context_tags as string[] | null) ?? [],
     });
   }
 

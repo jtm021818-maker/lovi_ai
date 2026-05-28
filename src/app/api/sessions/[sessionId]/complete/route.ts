@@ -11,6 +11,13 @@ import { generateLunaMemoryImage } from '@/lib/ai/luna-image-gen';
 import { getAgeDays, getLifeStageInfo, type LunaMemory } from '@/lib/luna-life';
 // 🆕 v110: 장기 기억 시스템 — 4계층(L0~L3) 파이프라인. env flag MEMORY_V2_WRITE 로 토글.
 import { runSessionEndPipeline } from '@/engines/memory-v2';
+// 🆕 v120: 루나의 생각 노트 — 인상 + 별명 고민 상태 갱신
+import {
+  updateLunaImpression,
+  persistImpressionUpdate,
+  loadIntimacyStateForUser,
+} from '@/engines/luna-impression';
+import { loadNicknameSnapshot } from '@/engines/relationship/nickname-state';
 
 /**
  * PATCH /api/sessions/[sessionId]/complete
@@ -393,6 +400,93 @@ export async function PATCH(
       console.log(`[Memory] ✅ user_memories 저장 완료: ${extraction.newFacts.length + 1}개`);
     } catch (e) {
       console.error('[Memory] 메모리 추출 실패 (무시):', e);
+    }
+
+    // 🆕 v120: 루나의 생각 노트 — 인상 + 별명 고민 상태 갱신
+    //   원칙: 매 세션 종료 시 Gemini 한 번 호출해서
+    //         user_profiles.luna_impression_state 를 미세 보정.
+    //         pondering candidate 가 무르익으면 luna_nickname_state 에 자동 등록.
+    try {
+      // 직전 인상 + 누적 세션수
+      const { data: priorRow } = await supabase
+        .from('user_profiles')
+        .select('luna_impression_state, luna_session_count, luna_intimacy_level')
+        .eq('id', user.id)
+        .maybeSingle();
+      const priorImpression = (priorRow?.luna_impression_state as any) ?? null;
+      const sessionCount = Number(priorRow?.luna_session_count ?? 0);
+      const intimacyLevel = Number(priorRow?.luna_intimacy_level ?? 1);
+
+      // 첫 만남 후 일수
+      const { data: lifeForImpression } = await supabase
+        .from('luna_life')
+        .select('birth_date')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      const daysSinceFirst = lifeForImpression?.birth_date
+        ? Math.max(0, getAgeDays(new Date(lifeForImpression.birth_date as string)) - 1)
+        : 0;
+
+      // v110 에피소드 최근 3개 (있으면) — 별명 anchor 후보
+      const { data: recentEpisodesRaw } = await supabase
+        .from('luna_episodes')
+        .select('id, title, summary_short')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(3);
+      const recentEpisodes = (recentEpisodesRaw ?? []).map((e: any) => ({
+        id: e.id as string,
+        title: (e.title as string) ?? '',
+        summary_short: (e.summary_short as string) ?? '',
+      }));
+
+      // 현재 별명 상태
+      const nicknameSnap = await loadNicknameSnapshot(supabase, user.id);
+
+      // sessionMsgs 는 위 try 안 로컬 스코프 — 여기선 outer scope 의 orderedMessages 사용
+      const msgsForImpression = (orderedMessages ?? []).map((m) => ({
+        role: m.sender_type as string,
+        content: m.content as string,
+      }));
+
+      const v120Result = await updateLunaImpression({
+        sessionMessages: msgsForImpression,
+        scenario: session.locked_scenario ?? null,
+        phase: session.current_phase_v2 ?? null,
+        emotionStart: session.emotion_baseline ?? null,
+        emotionEnd: emotionEnd ?? null,
+        intimacyLevel,
+        sessionCount,
+        daysSinceFirst,
+        priorState: priorImpression,
+        recentEpisodes,
+        currentNicknames: nicknameSnap.history.map((h) => ({
+          nickname: h.nickname,
+          status: h.status,
+          useCount: h.useCount,
+        })),
+      });
+
+      if (v120Result) {
+        const intimacyState = await loadIntimacyStateForUser(supabase, user.id);
+        const persistRes = await persistImpressionUpdate(
+          supabase,
+          user.id,
+          sessionId,
+          v120Result,
+          intimacyState,
+          session.current_phase_v2 ?? 'BANTER',
+        );
+        console.log(
+          `[v120] ✅ Luna 인상 갱신 — impression=${persistRes.savedImpression}, ` +
+          `nickname=${persistRes.proposedNickname}${persistRes.reason ? ` (${persistRes.reason})` : ''} ` +
+          `(facets=${v120Result.impression.impression_facets.length}, pondering=${v120Result.impression.pondering.candidates.length})`,
+        );
+      } else {
+        console.log('[v120] ⏭️  Luna 인상 갱신 스킵 (메시지 부족/Gemini 미설정)');
+      }
+    } catch (e) {
+      console.warn('[v120] Luna 인상 갱신 실패 (무시):', (e as Error).message);
     }
 
     // 🆕 v29: 기억 감쇠 (에빙하우스 망각곡선)

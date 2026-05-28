@@ -66,6 +66,119 @@ ${epList || '  (없음 — 이번 턴엔 새 작명 X)'}
 }
 
 
+/**
+ * 🆕 v120: 호칭 가이드 블록.
+ *
+ * 별명은 "사람처럼 가끔만" — 매 턴 박지 마.
+ * 5턴에 1번 이내 + anchor 맥락과 맞는 순간에만.
+ *
+ * 본명 vs 별명 결정은 ACE 가 자율. 이 블록은 가이드(soft constraint).
+ */
+export interface ActiveNicknameForAddress {
+  nickname: string;
+  status: 'candidate' | 'trying' | 'accepted' | 'rejected';
+  useCount: number;
+  useContextHint?: string | null;
+  useContextTags?: string[];
+  anchorQuote?: string | null;
+}
+
+const TAG_LABELS_KOR: Record<string, string> = {
+  late_night: '늦은 밤',
+  morning_greeting: '아침 인사',
+  vulnerable_moment: '약해진 순간',
+  playful_banter: '장난칠 때',
+  praising: '잘했다 할 때',
+  consoling: '위로할 때',
+  reunion: '오랜만일 때',
+  intimate_share: '속얘기할 때',
+};
+
+const ADDRESS_PHASE_HINT: Record<string, string> = {
+  GREET: '본명 우선 (인사엔 별명 부적절)',
+  CATCHUP: '맥락 맞으면 별명 OK',
+  BANTER: '맥락 맞으면 별명 OK',
+  LINGER: '본명이 더 따뜻함 (톤 다운 단계)',
+  FAREWELL: '본명 우선 (작별엔 진심)',
+  HOOK: '본명만 (이야기 듣는 중)',
+  MIRROR: '본명만 (마음 읽는 중)',
+  BRIDGE: '본명 우선 (작전 짜는 중)',
+  SOLVE: '본명 우선 (실행 단계)',
+  EMPOWER: '맥락 맞으면 별명 OK',
+};
+
+/**
+ * 🆕 v120: 어시스턴트(루나) 메시지에서 특정 별명들이 등장한 횟수를 센다.
+ * 사용자 메시지는 카운트 X (별명 부르는 주체는 루나).
+ */
+export function countNicknameHits(
+  chatHistory: Array<{ role: string; content: string }>,
+  nicknames: string[],
+): number {
+  if (nicknames.length === 0) return 0;
+  let hits = 0;
+  for (const turn of chatHistory) {
+    if (turn.role === 'user' || turn.role === 'human') continue;
+    const text = String(turn.content ?? '');
+    for (const n of nicknames) {
+      if (!n) continue;
+      if (text.includes(n)) hits += 1;
+    }
+  }
+  return hits;
+}
+
+export function buildAddressGuideBlock(params: {
+  realName?: string;
+  activeNicknames: ActiveNicknameForAddress[];
+  recentNicknameHits: number; // 최근 5턴 안에 별명 등장 횟수
+  currentPhase: string;
+}): string {
+  const { realName, activeNicknames, recentNicknameHits, currentPhase } = params;
+  // 별명 없으면 본명만 — 가이드 자체 생략
+  const usable = activeNicknames.filter((n) => n.status === 'accepted' || n.status === 'trying');
+  if (usable.length === 0) {
+    // 본명 안내만 가볍게 (없으면 아예 생략 — ACE 가 알아서)
+    if (!realName) return '';
+    return `【호칭】\n기본 호칭: "${realName}"`;
+  }
+
+  const phaseHint = ADDRESS_PHASE_HINT[currentPhase] ?? '맥락 따라 자율';
+  const thisTurnVerdict = recentNicknameHits >= 1
+    ? '❌ 이번 턴은 본명만 (최근 5턴에 이미 별명 썼음)'
+    : '🤔 anchor 맥락과 맞는 순간이면 별명 1회 OK, 아니면 본명';
+
+  const nicknameLines = usable
+    .map((n) => {
+      const tagsKor = (n.useContextTags ?? [])
+        .map((t) => TAG_LABELS_KOR[t] ?? t)
+        .join(' · ');
+      const hint = n.useContextHint || (n.anchorQuote ? `"${n.anchorQuote}"` : '자유');
+      return [
+        `  · "${n.nickname}" (${n.status}, 누적 ${n.useCount}회)`,
+        `      └ 부르고 싶은 순간: ${hint}`,
+        tagsKor ? `      └ 맥락: ${tagsKor}` : null,
+      ].filter(Boolean).join('\n');
+    })
+    .join('\n');
+
+  return `【호칭 가이드 — v120】
+기본 호칭: ${realName ? `"${realName}"` : '본명'} (대부분의 턴)
+
+별명들:
+${nicknameLines}
+
+규칙:
+  - 별명은 **5턴에 1번 이내**. 매 턴 박지 마.
+  - 부르고 싶은 순간(anchor 맥락) 과 정말 맞을 때만.
+  - 보통 사람도 이름으로 부르다가 가끔만 별명 쓰잖아? 그 감성.
+
+현재 phase (${currentPhase}): ${phaseHint}
+최근 5턴 별명 사용: ${recentNicknameHits}/5
+지금 이 턴: ${thisTurnVerdict}`;
+}
+
+
 // ============================================================
 // 🆕 v78.6: Phase 전환 태그 가이드
 // ============================================================
@@ -1044,6 +1157,12 @@ export function buildAceV5UserMessage(params: {
   nicknameGate?: NicknameGateContext | null;
   // 🆕 v115.7: anchorEpisodeId 화이트리스트용 episode 목록
   availableEpisodesForNickname?: Array<{ id: string; title: string; summary_short: string }>;
+  // 🆕 v120: 본명 — 별명과 대비해 "기본은 본명" 가이드용
+  realName?: string | null;
+  // 🆕 v120: 활성 별명 (use_context_hint/tags 포함)
+  activeNicknamesForAddress?: ActiveNicknameForAddress[];
+  // 🆕 v120: 최근 5턴 안에 어시스턴트가 별명을 부른 횟수 (빈도 게이팅용)
+  recentNicknameHits?: number;
 }): string {
   // v75: 좌뇌 handoff 가 이미 모든 신호 (pacingMeta, metaAwareness, selfExpression 포함) 를
   //      내면 독백 포맷으로 담음. 별도 주입 섹션 모두 제거 — 중복 안티패턴.
@@ -1051,6 +1170,7 @@ export function buildAceV5UserMessage(params: {
     userUtterance, handoffPromptText, recentLunaActions, intimacyLevel, phase, isReanalysis,
     previousLunaText, metaAwareness, chatHistory, activeSpiritsHint, temporalContext, nicknameSnapshot,
     nicknameGate, availableEpisodesForNickname,
+    realName, activeNicknamesForAddress, recentNicknameHits,
   } = params;
 
   const sections: string[] = [];
@@ -1076,6 +1196,43 @@ export function buildAceV5UserMessage(params: {
       availableEpisodes: availableEpisodesForNickname,
     });
     if (guide) sections.push(guide);
+  }
+
+  // 🆕 v120: 호칭 가이드 — "기본 본명, 별명은 5턴에 1번 이내" 빈도 게이팅
+  //   호출처가 명시 안 해도 nicknameSnapshot + chatHistory 에서 자동 도출.
+  //   별명이 하나라도 active 면 무조건 주입.
+  const derivedActiveNicknames: ActiveNicknameForAddress[] =
+    activeNicknamesForAddress
+    ?? (nicknameSnapshot
+        ? nicknameSnapshot.history
+            .filter((h) => h.status === 'accepted' || h.status === 'trying')
+            .map((h) => ({
+              nickname: h.nickname,
+              status: h.status,
+              useCount: h.useCount,
+              useContextHint: h.useContextHint ?? null,
+              useContextTags: h.useContextTags ?? [],
+              anchorQuote: h.anchorQuote ?? null,
+            }))
+        : []);
+
+  const derivedHits =
+    recentNicknameHits
+    ?? (chatHistory && derivedActiveNicknames.length > 0
+        ? countNicknameHits(chatHistory.slice(-5), derivedActiveNicknames.map((n) => n.nickname))
+        : 0);
+
+  if (derivedActiveNicknames.length > 0) {
+    const addressGuide = buildAddressGuideBlock({
+      realName: realName ?? undefined,
+      activeNicknames: derivedActiveNicknames,
+      recentNicknameHits: derivedHits,
+      currentPhase: phase,
+    });
+    if (addressGuide) sections.push(addressGuide);
+  } else if (realName) {
+    // 별명 없을 때 — 본명 가이드만 가볍게
+    sections.push(`【호칭】\n기본 호칭: "${realName}"`);
   }
 
   if (isReanalysis) {

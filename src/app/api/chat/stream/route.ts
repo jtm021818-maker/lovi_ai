@@ -1338,6 +1338,51 @@ async function savePostProcessing(
     }).catch(() => { /* ignore */ });
   }
 
+  // 🆕 v120: 별명 사용 카운트 — 응답에 active 별명이 등장했으면 useCount++ / last_used_at=now()
+  //   원칙: 시스템 프롬프트의 호칭 가이드가 LLM 자율 결정 → 결정 결과를 사후 집계.
+  //   부수효과: candidate → trying 자동 승급도 promote_nickname_trying 통해 일어남.
+  if (shouldInsertAi && safeAiContent.length > 0) {
+    (async () => {
+      try {
+        const { data: activeRows } = await supabase
+          .from('luna_nickname_state')
+          .select('nickname, status')
+          .eq('user_id', userId)
+          .neq('status', 'rejected');
+        if (!activeRows || activeRows.length === 0) return;
+
+        for (const row of activeRows as Array<{ nickname: string; status: string }>) {
+          const n = (row.nickname ?? '').trim();
+          if (!n) continue;
+          if (!safeAiContent.includes(n)) continue;
+
+          if (row.status === 'candidate') {
+            // candidate → trying 승급 (use_count + 1, last_used_at = now)
+            await supabase.rpc('promote_nickname_trying', {
+              p_user_id: userId,
+              p_nickname: n,
+              p_turn_idx: turnCount ?? 0,
+            });
+          } else {
+            // trying/accepted → 단순 카운트 증가
+            await supabase.rpc('bump_nickname_usage', {
+              p_user_id: userId,
+              p_nickname: n,
+            });
+          }
+          // last_session_id 갱신 (UI "이번 세션에 N회" 분석용)
+          await supabase
+            .from('luna_nickname_state')
+            .update({ last_session_id: sessionId })
+            .eq('user_id', userId)
+            .eq('nickname', n);
+        }
+      } catch (e) {
+        console.warn('[PostProcess:v120] 별명 카운트 실패 (무시):', (e as Error).message);
+      }
+    })();
+  }
+
   // 🆕 v33: 시나리오 잠금 (1회 SELECT 필요 — 세션 UPDATE와 독립)
   // 🆕 v73: 재평가 로직 추가 — 2턴 연속 다른 시나리오 감지 시 덮어쓰기 (UNREQUITED_LOVE 오잠금 자동 해제)
   const detectedScenario = stateResult?.scenario;
