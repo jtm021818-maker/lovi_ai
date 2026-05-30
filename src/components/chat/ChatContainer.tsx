@@ -193,7 +193,7 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
     }
     return null;
   })();
-  const { toggle: toggleSpeak, isSpeaking, speak, isSupported: ttsSupported, settings: voiceSettings, updateSettings: updateVoiceSettings } = useLunaVoice();
+  const { toggle: toggleSpeak, isSpeaking, speak, speakQueue, isSupported: ttsSupported, settings: voiceSettings, updateSettings: updateVoiceSettings } = useLunaVoice();
   const scrollRef = useRef<HTMLDivElement>(null);
   // 🆕 스크롤: 마지막 AI 메시지 상단으로 이동하기 위한 ref
   const lastAiMsgRef = useRef<HTMLDivElement>(null);
@@ -300,16 +300,26 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
     }
   }, [isPersonaOpen]);
 
-  // v118.7: 음성 활성화 = 자동 더빙. 별도 autoSpeak 토글 폐지.
+  // v118.7 → v122: 음성 활성화 = 자동 더빙. 새 AI 메시지 전부 순서대로 재생.
+  //   기존: 마지막 AI 메시지 1개만 speak() → 루나가 3개 보내면 마지막만 들림.
+  //   수정: 새로 추가된 AI 메시지 전부를 speakQueue()로 순서대로 재생.
   useEffect(() => {
     if (!ttsSupported || !voiceSettings.enabled || isLoading) return;
     const aiMessages = messages.filter(m => m.senderType === 'ai' && m.content);
-    if (aiMessages.length > prevMsgCountRef.current) {
-      const lastAi = aiMessages[aiMessages.length - 1];
-      if (lastAi?.content) speak(lastAi.content);
+    const prevCount = prevMsgCountRef.current;
+    const newCount = aiMessages.length;
+    if (newCount > prevCount) {
+      // 새로 추가된 AI 메시지들만 추출
+      const newMessages = aiMessages.slice(prevCount);
+      const texts = newMessages.map(m => m.content).filter(Boolean) as string[];
+      if (texts.length === 1) {
+        speak(texts[0]);
+      } else if (texts.length > 1) {
+        speakQueue(texts);
+      }
     }
-    prevMsgCountRef.current = aiMessages.length;
-  }, [messages, isLoading, ttsSupported, voiceSettings.enabled, speak]);
+    prevMsgCountRef.current = newCount;
+  }, [messages, isLoading, ttsSupported, voiceSettings.enabled, speak, speakQueue]);
 
   // 페르소나 모드는 설정에서 선택한 값을 그대로 사용 (강제 변경 없음)
 

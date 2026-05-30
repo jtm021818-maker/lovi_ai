@@ -834,7 +834,7 @@ function ListeningMoment({
           background: `linear-gradient(135deg, ${color.soft} 0%, rgba(255,255,255,0.94) 100%)`,
           borderColor: `${color.primary}1a`,
           boxShadow: `0 2px 18px ${color.primary}12`,
-          paddingTop: 28,
+          paddingTop: 56,
           paddingBottom: 14,
           paddingLeft: 14,
           paddingRight: 14,
@@ -842,35 +842,47 @@ function ListeningMoment({
       >
         <FloatingPetals color={color} reduceMotion={reduceMotion} />
 
-        {/* 🆕 v122: 상단 중앙 — 추천(ASSIST) 갈래 힌트 (3갈래 삼지창의 위쪽 끝) */}
+        {/* 🆕 v122: 상단 중앙 — 추천(ASSIST) 갈래 힌트 (좌 상담 / 우 일상과 동일한 원형 배지 + 라벨 스타일) */}
         <motion.div
-          className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 pointer-events-none z-[2]"
-          style={{
-            top: 3,
-            background: 'rgba(255,255,255,0.82)',
-            border: `1px dashed ${assistColor}66`,
-            borderRadius: 999,
-            padding: '2px 8px',
-            boxShadow: `0 1px 6px ${assistColor}22`,
-          }}
-          initial={reduceMotion ? false : { opacity: 0, y: -3 }}
-          animate={{ opacity: 0.9, y: 0 }}
+          className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none z-[2]"
+          style={{ top: 2 }}
+          initial={reduceMotion ? false : { opacity: 0, y: -4 }}
+          animate={{ opacity: 0.8, y: 0 }}
           transition={{ duration: 0.6, delay: 0.85 }}
         >
-          <svg viewBox="0 0 24 24" width={12} height={12} aria-hidden>
-            <circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke={assistColor} strokeWidth="2.2" />
-            <line x1="15.5" y1="15.5" x2="21" y2="21" stroke={assistColor} strokeWidth="2.6" strokeLinecap="round" />
-          </svg>
-          <span style={{ fontFamily: '"Gowun Dodum", system-ui', fontSize: '10px', fontWeight: 700, letterSpacing: '-0.01em', color: `${assistColor}d8` }}>
+          <div
+            className="w-9 h-9 rounded-full flex items-center justify-center p-1"
+            style={{
+              background: 'rgba(255,255,255,0.78)',
+              border: `1px dashed ${assistColor}66`,
+              boxShadow: `0 1px 6px ${assistColor}22`,
+            }}
+          >
+            <svg viewBox="0 0 24 24" className="w-5 h-5">
+              <circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke={assistColor} strokeWidth="2" opacity="0.9" />
+              <line x1="15.5" y1="15.5" x2="21" y2="21" stroke={assistColor} strokeWidth="2.4" strokeLinecap="round" opacity="0.9" />
+            </svg>
+          </div>
+          <span
+            className="mt-1 whitespace-nowrap"
+            style={{
+              fontFamily: '"Gowun Dodum", system-ui',
+              fontSize: '10px',
+              fontWeight: 700,
+              letterSpacing: '-0.01em',
+              color: `${assistColor}d0`,
+              opacity: 0.9,
+            }}
+          >
             추천
           </span>
         </motion.div>
 
-        {/* Y자 분기 path SVG */}
+        {/* 삼지창 분기 path SVG (🆕 v122: 상단 추천 배지에 맞춰 아래로 이동) */}
         <svg
           viewBox="0 0 400 60"
           className="absolute left-0 right-0 mx-auto pointer-events-none"
-          style={{ top: 28, width: '100%', height: 60, opacity: 0.55 }}
+          style={{ top: 52, width: '100%', height: 60, opacity: 0.55 }}
           preserveAspectRatio="none"
         >
           <motion.path
