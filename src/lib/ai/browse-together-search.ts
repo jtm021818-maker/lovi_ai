@@ -74,6 +74,7 @@ const TOPIC_FALLBACK: Record<BrowseSessionData['topic'], { emoji: string; color:
   activity:    { emoji: '🎪', color: '#14b8a6', label: '체험' },
   movie:       { emoji: '🎬', color: '#6366f1', label: '영화/드라마' },
   anniversary: { emoji: '💌', color: '#f59e0b', label: '기념일' },
+  song:        { emoji: '🎵', color: '#22d3ee', label: '노래/음악' },
   general:     { emoji: '✨', color: '#a855f7', label: '추천' },
 };
 

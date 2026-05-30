@@ -49,6 +49,12 @@ const TOPIC_STAGES: Record<BrowseSessionData['topic'], string[]> = {
     '📝 실제 후기 읽는 중',
     '✨ 특별한 것만 골라내는 중',
   ],
+  song: [
+    '🎵 유튜브/멜론 훑는 중',
+    '🎧 분위기 맞는 곡 찾는 중',
+    '⭐ 가사·무드 체크 중',
+    '📻 지금 들을 만한 것만 추리는 중',
+  ],
   general: [
     '🔍 이것저것 둘러보는 중',
     '📝 후기 보는 중',
@@ -92,6 +98,13 @@ const FAKE_URLS: Record<BrowseSessionData['topic'], string[]> = {
     'pinterest.co.kr/...',
     'eventus.kr/...',
     'idus.com/...',
+  ],
+  song: [
+    'youtube.com/results?q=...',
+    'music.youtube.com/...',
+    'melon.com/search/...',
+    'genie.co.kr/...',
+    'blog.naver.com/playlist/...',
   ],
   general: [
     'google.com/search?q=...',

@@ -81,7 +81,10 @@ export function inferConversationMode(
   intent: ClientIntent | undefined,
   emotionScore: number | undefined,
   scenario: string | undefined | null,
-): 'COUNSELING' | 'CASUAL' {
+): 'COUNSELING' | 'CASUAL' | 'ASSIST' {
+  // 🆕 v121: ASSIST(추천/검색) 는 좌뇌 LLM 이 conversation_mode 로 직접 판단 → 캐시 경로로 들어옴.
+  //   휴리스틱 fallback 은 키워드 매칭을 피하기 위해 ASSIST 를 자체 판정하지 않음 (COUNSELING/CASUAL 만).
+  //   ([[feedback_llm_judgment]] — 맥락 판단은 LLM 우선, 코드는 구조적 안전망만)
   // 강한 상담 의도 신호
   if (intent === 'VENTING' || intent === 'SEEKING_ADVICE' ||
       intent === 'EXPRESSING_AMBIVALENCE' || intent === 'INSIGHT_EXPRESSION') {
@@ -284,7 +287,8 @@ export interface PhaseContext {
   hasGivenPermission: boolean;
 
   // 🆕 v105: 좌뇌가 판단한 대화 모드 (HOOK 후 분기에 사용)
-  conversationMode?: 'COUNSELING' | 'CASUAL';
+  // 🆕 v121: ASSIST 추가 — 추천/검색 작업 레인 (CASUAL 처럼 경량 라우팅)
+  conversationMode?: 'COUNSELING' | 'CASUAL' | 'ASSIST';
 
   // 감정 기준선
   emotionBaseline?: number;
@@ -458,8 +462,11 @@ export class PhaseManager {
     //   일상 phase 중 강한 감정/상담 의도 감지 시 MIRROR 로 자동 escape
     if (currentPhase === 'HOOK' && turnCount >= 2) {
       const mode = conversationMode ?? inferConversationMode(primaryIntent, currentEmotionScore, undefined);
-      if (mode === 'CASUAL') {
-        console.log(`[PhaseManager:v116] 💌 HOOK → GREET (intent=${primaryIntent}, emotion=${currentEmotionScore})`);
+      // 🆕 v121: ASSIST(추천/검색) 도 CASUAL 과 같은 경량 레인으로 라우팅.
+      //   무거운 상담 phase(MIRROR→BRIDGE→SOLVE→EMPOWER)·온도계·작전회의를 안 타고,
+      //   browse "같이 찾기" 이벤트가 자유롭게 발동하는 흐름으로 보냄.
+      if (mode === 'CASUAL' || mode === 'ASSIST') {
+        console.log(`[PhaseManager:v121] 💌 HOOK → GREET (mode=${mode}, intent=${primaryIntent}, emotion=${currentEmotionScore})`);
         return 'GREET';
       }
     }

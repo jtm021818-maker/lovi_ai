@@ -786,8 +786,8 @@ export interface BrowseCandidate {
 export interface BrowseSessionData {
   /** 세션 고유 id (같은 세션 내 반응 집계용) */
   sessionId: string;
-  /** 탐색 주제 내부 코드 */
-  topic: 'gift' | 'date-spot' | 'activity' | 'movie' | 'anniversary' | 'general';
+  /** 탐색 주제 내부 코드 (v121: song 추가 — 노래 추천도 같이 찾기로 통합) */
+  topic: 'gift' | 'date-spot' | 'activity' | 'movie' | 'anniversary' | 'song' | 'general';
   /** 화면용 주제 라벨 (예: "여친 생일 선물", "성수 조용한 카페") */
   topicLabel: string;
   /** 유저 원 질문 요약 (헤더 표시용) */

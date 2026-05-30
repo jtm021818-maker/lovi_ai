@@ -149,7 +149,7 @@ export interface ParsedMovieReadyData {
 
 // 🆕 v85.6: 🔍 같이 찾기 태그 파싱 데이터
 export interface ParsedBrowseReadyData {
-  topic: 'gift' | 'date-spot' | 'activity' | 'movie' | 'anniversary' | 'general';
+  topic: 'gift' | 'date-spot' | 'activity' | 'movie' | 'anniversary' | 'song' | 'general';
   query: string;
   context?: string;
   budget?: string;
@@ -591,7 +591,7 @@ export function parsePhaseSignal(response: string): {
   const browseMatch = cleaned.match(BROWSE_READY_REGEX);
   if (browseMatch) {
     const rawTopic = (browseMatch[1] ?? '').trim().toLowerCase();
-    const allowedTopics = ['gift', 'date-spot', 'activity', 'movie', 'anniversary', 'general'] as const;
+    const allowedTopics = ['gift', 'date-spot', 'activity', 'movie', 'anniversary', 'song', 'general'] as const;
     const topic = (allowedTopics as readonly string[]).includes(rawTopic)
       ? (rawTopic as ParsedBrowseReadyData['topic'])
       : 'general';

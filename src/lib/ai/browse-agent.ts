@@ -124,6 +124,7 @@ function topicLabelOf(topic: BrowseSessionMeta['topic']): string {
     case 'activity':    return '체험 데이트';
     case 'movie':       return '영화/드라마';
     case 'anniversary': return '기념일 이벤트';
+    case 'song':        return '노래/음악';
     case 'general':
     default:            return '추천';
   }

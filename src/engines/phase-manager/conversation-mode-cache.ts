@@ -14,7 +14,7 @@
  *                 향후 DB 컬럼 마이그레이션 시 교체 가능.
  */
 
-const CACHE = new Map<string, { mode: 'COUNSELING' | 'CASUAL'; reason?: string; updatedAt: number }>();
+const CACHE = new Map<string, { mode: 'COUNSELING' | 'CASUAL' | 'ASSIST'; reason?: string; updatedAt: number }>();
 const TTL_MS = 60 * 60 * 1000;   // 1시간
 
 /** 만료된 entry 청소 (lazy cleanup). 캐시 사이즈가 너무 커지면 가끔 호출. */
@@ -28,7 +28,7 @@ function maybeCleanup() {
 
 /** 이전 턴 좌뇌 conversation_mode 조회. 없거나 만료면 undefined. */
 export function getLastConversationMode(sessionId: string | undefined | null):
-  | { mode: 'COUNSELING' | 'CASUAL'; reason?: string }
+  | { mode: 'COUNSELING' | 'CASUAL' | 'ASSIST'; reason?: string }
   | undefined
 {
   if (!sessionId) return undefined;
@@ -44,7 +44,7 @@ export function getLastConversationMode(sessionId: string | undefined | null):
 /** 좌뇌 판단 결과 저장. 다음 턴에서 사용. */
 export function setLastConversationMode(
   sessionId: string | undefined | null,
-  mode: 'COUNSELING' | 'CASUAL' | undefined,
+  mode: 'COUNSELING' | 'CASUAL' | 'ASSIST' | undefined,
   reason?: string,
 ): void {
   if (!sessionId || !mode) return;

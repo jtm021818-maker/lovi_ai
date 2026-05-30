@@ -10,6 +10,7 @@ import { accumulateSignal, setSurfaceFromThermometer } from '@/engines/emotion-a
 import { generateDynamicMirror } from '@/engines/emotion-accumulator/mirror-generator';
 import { generateDynamicPatterns } from '@/engines/emotion-accumulator/pattern-generator';
 import { generateSituationScene } from '@/engines/situation-scene-generator';
+import { getScenarioLens } from '@/engines/ace-v5/scenario-lens'; // 🆕 v121: 시나리오별 상담 렌즈
 import { matchSolutions, calculateReadiness, getSolutionDictionaryPrompt, parseAxesFromMessage, analyzeAxesState, generateDiagnosticPrompt, mergeLLMAxes, markAxisAsked, generateAxisChoices } from '@/engines/solution-dictionary';
 import type { ReadIgnoredAxes, AxisChoice } from '@/engines/solution-dictionary';
 import type { PersonaMode, PanelResponse } from '@/types/persona.types';
@@ -1576,6 +1577,16 @@ export class CounselingPipeline {
       hlrePromptForGen,  // 🆕 v29: HLRE 프롬프트 → generate() 상단 배치
     );
 
+    // 🆕 v121: 시나리오 렌즈 — 감정상담 시 시나리오별 톤·전략 가이드 주입.
+    //   GENERAL/UNKNOWN 은 렌즈 null → 일반 톤 그대로. luna 페르소나만 (타로냥/패널 제외).
+    if (persona !== 'tarot' && persona !== 'panel') {
+      const scenarioLens = getScenarioLens(currentScenario);
+      if (scenarioLens) {
+        systemPrompt = systemPrompt + scenarioLens;
+        console.log(`[Pipeline:v121] 🎯 시나리오 렌즈 주입: ${currentScenario}`);
+      }
+    }
+
     // ============================================================
     // 🆕 v41: 친밀도 시스템 — 트리거 감지 + 프롬프트 힌트 주입
     // ============================================================
@@ -2129,7 +2140,7 @@ ${researchResult.insight}
               // 🆕 v105: 좌뇌가 conversation_mode 직접 판단했으면 캐시 → 다음 턴 활용
               const lbMode = (chunk.data as any)?.conversation_mode;
               const lbReason = (chunk.data as any)?.conversation_mode_reason;
-              if (lbMode === 'COUNSELING' || lbMode === 'CASUAL') {
+              if (lbMode === 'COUNSELING' || lbMode === 'CASUAL' || lbMode === 'ASSIST') {
                 setLastConversationMode(ragContext?.sessionId, lbMode, lbReason);
                 console.log(`[Pipeline:v105] 💾 좌뇌 직접 판단 캐시 저장: ${lbMode} (${lbReason ?? '-'}) → 다음 턴 적용`);
               }
@@ -2474,7 +2485,14 @@ ${researchResult.insight}
               lbRecommendsVN ||                                            // 좌뇌가 VN_THEATER 추천
               (lbPacingState === 'READY' && lbTransition === 'JUMP')       // 좌뇌가 이번 턴 다음 Phase JUMP
             ));
-          const vnGate = willEnterMirror;
+          // 🆕 v121: 검색/추천 작업 턴엔 루나극장(VN) 차단.
+          //   유저 1차 의도가 "같이 찾기"(선물/데이트/노래 등)면 감정 미러링 극장은 맥락에 안 맞음.
+          //   같은 턴에 [BROWSE_READY] 가 발동했으면 VN 게이트를 강제로 닫음 (한 턴 한 초점).
+          const browseFiringThisTurn = !!hlrePost.browseReady;
+          const vnGate = willEnterMirror && !browseFiringThisTurn;
+          if (willEnterMirror && browseFiringThisTurn) {
+            console.log('[Pipeline] 🎭🚫 VN 극장 차단 — 이번 턴 BROWSE_READY 발동(검색 작업 우선)');
+          }
 
           if (vnGate && !vnAlreadyFired) {
             // 🆕 v86: VN 극장은 최고 우선순위 — 선행 이벤트(온도계 등)를 대체
@@ -2605,9 +2623,14 @@ ${researchResult.insight}
             console.log(`[Pipeline] 🤔 IDEA_REFINE 발동`);
           }
 
+          // 🆕 v121: 옛 6종 배치-카드(SONG/DATE_SPOT/GIFT/ACTIVITY/ANNIVERSARY/MOVIE)는
+          //   BROWSE_STREAM "같이 찾기"로 통합됨. 트리거를 dead-path 로 둠 (검증 후 블록 삭제 예정).
+          //   pending*Search 는 이 트리거에서만 세팅되므로, false 게이팅 시 하단 RECOMMENDATION yield 도 자동 비활성.
+          const LEGACY_SEARCH_CARDS_ENABLED = false;
+
           // 🆕 v84: 🎵 노래 추천 — [SONG_READY:mood|context|preference]
           //   루나 자율 판단 → SONG_SEARCHING 이벤트 즉시 발동 + 실제 grounded 검색은 루프 이후 async yield
-          if (hlrePost.songReady && canFireEvent() && !updatedCompletedEvents.includes('SONG_SEARCHING') && !updatedCompletedEvents.includes('SONG_RECOMMENDATION')) {
+          if (LEGACY_SEARCH_CARDS_ENABLED && hlrePost.songReady && canFireEvent() && !updatedCompletedEvents.includes('SONG_SEARCHING') && !updatedCompletedEvents.includes('SONG_RECOMMENDATION')) {
             eventsToFire.push(createSongSearching(hlrePost.songReady.mood, newPhaseV2));
             updatedCompletedEvents.push('SONG_SEARCHING');
             updatedLastEventTurn = turnCount;
@@ -2616,7 +2639,7 @@ ${researchResult.insight}
           }
 
           // 🆕 v84: 📍 데이트 장소 — [DATE_SPOT_READY:area|vibe|requirements]
-          if (hlrePost.dateSpotReady && canFireEvent() && !updatedCompletedEvents.includes('DATE_SPOT_SEARCHING') && !updatedCompletedEvents.includes('DATE_SPOT_RECOMMENDATION')) {
+          if (LEGACY_SEARCH_CARDS_ENABLED && hlrePost.dateSpotReady && canFireEvent() && !updatedCompletedEvents.includes('DATE_SPOT_SEARCHING') && !updatedCompletedEvents.includes('DATE_SPOT_RECOMMENDATION')) {
             eventsToFire.push(createDateSpotSearching(hlrePost.dateSpotReady.area, hlrePost.dateSpotReady.vibe, newPhaseV2));
             updatedCompletedEvents.push('DATE_SPOT_SEARCHING');
             updatedLastEventTurn = turnCount;
@@ -2625,7 +2648,7 @@ ${researchResult.insight}
           }
 
           // 🆕 v85: 🎁 선물 — [GIFT_READY:relation|occasion|budget|vibe]
-          if (hlrePost.giftReady && canFireEvent() && !updatedCompletedEvents.includes('GIFT_SEARCHING') && !updatedCompletedEvents.includes('GIFT_RECOMMENDATION')) {
+          if (LEGACY_SEARCH_CARDS_ENABLED && hlrePost.giftReady && canFireEvent() && !updatedCompletedEvents.includes('GIFT_SEARCHING') && !updatedCompletedEvents.includes('GIFT_RECOMMENDATION')) {
             eventsToFire.push(createGiftSearching(hlrePost.giftReady.occasion, hlrePost.giftReady.relation, newPhaseV2));
             updatedCompletedEvents.push('GIFT_SEARCHING');
             updatedLastEventTurn = turnCount;
@@ -2634,7 +2657,7 @@ ${researchResult.insight}
           }
 
           // 🆕 v85: 🎪 체험 데이트 — [ACTIVITY_READY:area|category|vibe|level]
-          if (hlrePost.activityReady && canFireEvent() && !updatedCompletedEvents.includes('ACTIVITY_SEARCHING') && !updatedCompletedEvents.includes('ACTIVITY_RECOMMENDATION')) {
+          if (LEGACY_SEARCH_CARDS_ENABLED && hlrePost.activityReady && canFireEvent() && !updatedCompletedEvents.includes('ACTIVITY_SEARCHING') && !updatedCompletedEvents.includes('ACTIVITY_RECOMMENDATION')) {
             eventsToFire.push(createActivitySearching(hlrePost.activityReady.area, hlrePost.activityReady.category, newPhaseV2));
             updatedCompletedEvents.push('ACTIVITY_SEARCHING');
             updatedLastEventTurn = turnCount;
@@ -2643,7 +2666,7 @@ ${researchResult.insight}
           }
 
           // 🆕 v85: 💌 기념일 이벤트 — [ANNIVERSARY_READY:milestone|relation|budget|style]
-          if (hlrePost.anniversaryReady && canFireEvent() && !updatedCompletedEvents.includes('ANNIVERSARY_SEARCHING') && !updatedCompletedEvents.includes('ANNIVERSARY_RECOMMENDATION')) {
+          if (LEGACY_SEARCH_CARDS_ENABLED && hlrePost.anniversaryReady && canFireEvent() && !updatedCompletedEvents.includes('ANNIVERSARY_SEARCHING') && !updatedCompletedEvents.includes('ANNIVERSARY_RECOMMENDATION')) {
             eventsToFire.push(createAnniversarySearching(hlrePost.anniversaryReady.milestone, hlrePost.anniversaryReady.style, newPhaseV2));
             updatedCompletedEvents.push('ANNIVERSARY_SEARCHING');
             updatedLastEventTurn = turnCount;
@@ -2652,7 +2675,7 @@ ${researchResult.insight}
           }
 
           // 🆕 v85: 🎬 영화/드라마 — [MOVIE_READY:mood|context|preference]
-          if (hlrePost.movieReady && canFireEvent() && !updatedCompletedEvents.includes('MOVIE_SEARCHING') && !updatedCompletedEvents.includes('MOVIE_RECOMMENDATION')) {
+          if (LEGACY_SEARCH_CARDS_ENABLED && hlrePost.movieReady && canFireEvent() && !updatedCompletedEvents.includes('MOVIE_SEARCHING') && !updatedCompletedEvents.includes('MOVIE_RECOMMENDATION')) {
             eventsToFire.push(createMovieSearching(hlrePost.movieReady.mood, newPhaseV2));
             updatedCompletedEvents.push('MOVIE_SEARCHING');
             updatedLastEventTurn = turnCount;
@@ -2660,8 +2683,10 @@ ${researchResult.insight}
             console.log(`[Pipeline] 🎬 MOVIE_SEARCHING 발동: "${hlrePost.movieReady.mood}"`);
           }
 
-          // 🆕 v85.7: 🔍 같이 찾기 — BRIDGE 단계에서만 발동 (랜덤 이벤트 아님)
-          // luna_strategy 카드에서 선택 or [BROWSE_READY:...] 태그, 둘 다 BRIDGE 전용.
+          // 🆕 v121: 🔍 같이 찾기 — 추천류 통합 진입점. 전 Phase 자율 발동.
+          //   이전(v85.7): newPhaseV2==='BRIDGE' 로 묶여 휴면 상태 → 초반(HOOK)에 "선물 뭐사지" 해도
+          //   browse 안 뜨고 옛 6종 배치카드만 떴음. 제약 제거 → LLM 이 [BROWSE_READY] emit 하면 어느 Phase 든 발동.
+          //   luna_strategy 카드 경로(browseActivatedMeta)는 여전히 BRIDGE 발(자체적으로 BRIDGE 에서만 생성됨).
           const browseActivatedMeta = (
             suggestionMeta?.source === 'luna_strategy' &&
             (suggestionMeta?.context as any)?.strategyType === 'browse_together'
@@ -2669,7 +2694,6 @@ ${researchResult.insight}
 
           if (
             (hlrePost.browseReady || browseActivatedMeta) &&
-            newPhaseV2 === 'BRIDGE' &&
             canFireEvent() &&
             !updatedCompletedEvents.includes('BROWSE_SEARCHING') &&
             !updatedCompletedEvents.includes('BROWSE_SESSION')
@@ -2793,7 +2817,7 @@ ${researchResult.insight}
               // 🆕 v105.1: 현재 턴 좌뇌 conversation_mode 즉시 반영 (캐시 1턴 지연 보정)
               //   기존: phaseCtx.conversationMode = 이전 턴 캐시 → DAILY_CHAT 탈출 1턴 늦어짐
               //   수정: 이번 턴 분석 도착 후 재판단 → 첫 무거운 발언에 즉시 반응
-              conversationMode: ((capturedLeftBrainAnalysis as any)?.conversation_mode as 'COUNSELING' | 'CASUAL' | undefined) ?? phaseCtx.conversationMode,
+              conversationMode: ((capturedLeftBrainAnalysis as any)?.conversation_mode as 'COUNSELING' | 'CASUAL' | 'ASSIST' | undefined) ?? phaseCtx.conversationMode,
               completedEvents: updatedCompletedEvents,
               lastEventTurn: updatedLastEventTurn,
               phaseStartTurn: updatedPhaseStartTurn,

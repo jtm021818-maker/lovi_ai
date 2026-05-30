@@ -328,9 +328,10 @@ export interface LeftBrainAnalysis {
   /**
    * "COUNSELING" = 관계/감정/결정 얘기 (코칭 흐름 필요)
    * "CASUAL" = 인사/일상 잡담/단순 푸념 (가벼운 수다)
+   * "ASSIST" = 🆕 v121: 추천/검색 작업 (선물·데이트·영화·노래 "뭐 고르지") — 같이 찾기 흐름
    * 누락 시 휴리스틱 fallback 사용
    */
-  conversation_mode?: 'COUNSELING' | 'CASUAL';
+  conversation_mode?: 'COUNSELING' | 'CASUAL' | 'ASSIST';
   /** 🆕 v105: 분기 판단 근거 (디버그/로그용, 한 줄) */
   conversation_mode_reason?: string;
 
