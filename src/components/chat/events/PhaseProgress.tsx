@@ -340,6 +340,8 @@ interface PhaseProgressProps {
   persona?: PersonaMode;
   lunaThinking?: string;
   understandingLevel?: number;
+  // 🆕 v121: 대화 레인. ASSIST(추천/검색)면 일상 스텝퍼 대신 "같이 찾는 중" 트랙 렌더.
+  conversationMode?: 'COUNSELING' | 'CASUAL' | 'ASSIST' | null;
 }
 
 // ============================================================================
@@ -1467,16 +1469,128 @@ function CasualPhaseTrack({ currentPhase, lunaThinking, branchOverlay }: { curre
 
 
 // ============================================================================
+// 🆕 v121 — AssistTrack : 추천/검색 "같이 찾기" 전용 트랙
+//  - ASSIST 레인은 CASUAL phase(GREET 등)로 라우팅되지만, 일상 스텝퍼는 맥락에 안 맞음.
+//  - 대신 돋보기 모티프 + 라이브 루나 메달리온 + "같이 골라보는 중 🔍" 배너.
+//  - 스텝퍼 없음 (browse 는 이벤트 기반이라 단계가 의미 없음).
+// ============================================================================
+const ASSIST_COLOR: PhaseColor = {
+  primary: '#0ea5b7',
+  secondary: '#a5f3fc',
+  glow: 'rgba(14,165,183,0.40)',
+  soft: 'rgba(240,253,255,0.96)',
+};
+
+function AssistTrack({
+  lunaThinking,
+  persona,
+  branchOverlay,
+}: {
+  lunaThinking?: string;
+  persona: PersonaMode;
+  branchOverlay?: ReactNode;
+}) {
+  const reduceMotion = useReducedMotion() ?? false;
+  const color = ASSIST_COLOR;
+  const displayText = (lunaThinking && lunaThinking.trim()) ? lunaThinking : '같이 골라보는 중 🔍';
+  const typedStatus = useTypewriter(displayText, 70);
+
+  return (
+    <div className="w-full sticky top-[60px] z-10" role="status" aria-live="polite" aria-label="같이 찾는 중">
+      <div className="h-[1px]" style={{ background: `linear-gradient(to right, transparent, ${color.primary}55, transparent)` }} />
+      <div
+        className="relative overflow-hidden backdrop-blur-xl border-b"
+        style={{
+          background: `linear-gradient(135deg, ${color.soft} 0%, rgba(255,255,255,0.94) 100%)`,
+          borderColor: `${color.primary}1a`,
+          boxShadow: `0 2px 18px ${color.primary}12`,
+          paddingTop: 10, paddingBottom: 10, paddingLeft: 12, paddingRight: 12,
+        }}
+      >
+        <FloatingPetals color={color} reduceMotion={reduceMotion} />
+
+        <div className="relative flex items-center gap-3">
+          <LiveLunaMedallion persona={persona} color={color} phaseKey="ASSIST" reduceMotion={reduceMotion} size={44} />
+
+          <div className="flex-1 min-w-0">
+            {/* 라벨 행 */}
+            <div className="flex items-center gap-1.5">
+              {/* 돋보기 아이콘 */}
+              <svg viewBox="0 0 24 24" width={16} height={16} aria-hidden>
+                <circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke={color.primary} strokeWidth="2" />
+                <line x1="15.5" y1="15.5" x2="21" y2="21" stroke={color.primary} strokeWidth="2.4" strokeLinecap="round" />
+              </svg>
+              <span
+                className="whitespace-nowrap"
+                style={{
+                  fontFamily: '"Gowun Dodum", system-ui',
+                  fontSize: '12.5px',
+                  fontWeight: 800,
+                  letterSpacing: '-0.01em',
+                  color: color.primary,
+                }}
+              >
+                같이 찾는 중
+              </span>
+              {/* 진행 점 3개 (browse 흐름 ongoing 표시) */}
+              <div className="flex items-center gap-[3px] ml-1">
+                {[0, 1, 2].map((i) => (
+                  <motion.span
+                    key={i}
+                    className="block rounded-full"
+                    style={{ width: 4, height: 4, background: color.primary, boxShadow: `0 0 4px ${color.glow}` }}
+                    animate={reduceMotion ? {} : { y: [0, -2, 0], opacity: [0.4, 1, 0.4] }}
+                    transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15, ease: 'easeInOut' }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* 상태 카피 (typewriter) */}
+            <div className="mt-1" aria-live="polite">
+              <span
+                className="inline-flex items-center gap-0.5"
+                style={{
+                  fontFamily: '"Nanum Pen Script", "Gowun Dodum", system-ui',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  color: `${color.primary}cc`,
+                }}
+              >
+                {typedStatus}
+                <motion.span
+                  animate={{ opacity: [1, 0, 1] }}
+                  transition={{ duration: 0.8, repeat: Infinity }}
+                  className="inline-block ml-0.5 w-[1.5px] h-[12px] align-middle rounded-full"
+                  style={{ background: color.primary }}
+                />
+              </span>
+            </div>
+          </div>
+        </div>
+        {branchOverlay}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
 // 🆕 v118 — PhaseProgress main entry (간결 라우터)
 //  - 상담 5단계 (HOOK/MIRROR/BRIDGE/SOLVE/EMPOWER) → ConsultStepperTrack (통합)
 //  - 일상 5단계 (GREET/CATCHUP/BANTER/LINGER/FAREWELL) → CasualPhaseTrack
 //  - DAILY_CHAT (legacy alias) → CasualPhaseTrack(BANTER)
 // ============================================================================
-export default function PhaseProgress({ currentPhase, progress, persona = 'luna', lunaThinking, understandingLevel }: PhaseProgressProps) {
+export default function PhaseProgress({ currentPhase, progress, persona = 'luna', lunaThinking, understandingLevel, conversationMode }: PhaseProgressProps) {
   // 🆕 v118 — 분기 트랜지션 훅 (HOOK 일 때도 호출 → React Hook 규칙)
   const { branchEvent, branchedTo } = usePhaseTransition(currentPhase);
 
   if (!currentPhase) return null;
+
+  // 🆕 v121 — ASSIST(추천/검색) 레인: 일상/상담 스텝퍼 대신 "같이 찾는 중" 트랙.
+  //   단, HOOK(분기 전)에선 아직 듣는 중이므로 ListeningMoment 유지 → ASSIST 트랙은 분기 후부터.
+  if (conversationMode === 'ASSIST' && currentPhase !== 'HOOK') {
+    return <AssistTrack lunaThinking={lunaThinking} persona={persona} />;
+  }
 
   // 🆕 v118 — 분기 후 트랙에 얹을 overlay (배지 + 셀러브레이션)
   const branchOverlay: ReactNode = branchedTo ? (

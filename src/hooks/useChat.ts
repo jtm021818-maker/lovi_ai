@@ -35,6 +35,7 @@ interface UseChatReturn {
   axesProgress: { filledCount: number; totalCount: number; isComplete: boolean } | null;
   phaseEvents: PhaseEvent[];
   currentPhase: ConversationPhaseV2 | null;
+  conversationMode: 'COUNSELING' | 'CASUAL' | 'ASSIST' | null;
   phaseProgress: number;
   concernDepth: 'light' | 'medium' | 'deep' | null;
   depthOverride: 'light' | 'medium' | 'deep' | null;
@@ -104,6 +105,8 @@ export function useChat(sessionId: string): UseChatReturn {
   const [axesProgress, setAxesProgress] = useState<{ filledCount: number; totalCount: number; isComplete: boolean } | null>(null);
   const [phaseEvents, setPhaseEvents] = useState<PhaseEvent[]>([]);
   const [currentPhase, setCurrentPhase] = useState<ConversationPhaseV2 | null>('HOOK');
+  // 🆕 v121: 대화 레인 (COUNSELING/CASUAL/ASSIST) — 상단 PhaseProgress 가 ASSIST 면 같이찾기 UI 렌더
+  const [conversationMode, setConversationMode] = useState<'COUNSELING' | 'CASUAL' | 'ASSIST' | null>(null);
   const [phaseProgress, setPhaseProgress] = useState(0);
   const [concernDepth, setConcernDepth] = useState<'light' | 'medium' | 'deep' | null>(null);
   const [depthOverride, setDepthOverride] = useState<'light' | 'medium' | 'deep' | null>(null);
@@ -710,6 +713,7 @@ export function useChat(sessionId: string): UseChatReturn {
                 console.log('[useChat] 🔄 단계 변경 수신:', phaseData.phase, phaseData.progress, phaseData.concernDepth);
                 setCurrentPhase(phaseData.phase as ConversationPhaseV2);
                 setPhaseProgress(phaseData.progress ?? 0);
+                if (phaseData.conversationMode) setConversationMode(phaseData.conversationMode);
                 if (phaseData.concernDepth) setConcernDepth(phaseData.concernDepth);
                 if (phaseData.lunaThinking) setLunaThinking(phaseData.lunaThinking);
                 if (phaseData.understandingLevel !== undefined) setUnderstandingLevel(phaseData.understandingLevel);
@@ -997,7 +1001,7 @@ export function useChat(sessionId: string): UseChatReturn {
 
   return {
     messages, isLoading, nudges, stateResult, suggestions, panelData,
-    axesProgress, phaseEvents, currentPhase, phaseProgress, concernDepth,
+    axesProgress, phaseEvents, currentPhase, conversationMode, phaseProgress, concernDepth,
     depthOverride, setDepthOverride,
     sessionStatus, sessionSummary, sendMessage, pendingEventLock,
     lunaThinking, understandingLevel,

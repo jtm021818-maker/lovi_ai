@@ -180,7 +180,7 @@ const SCENARIO_LABELS: Record<RelationshipScenario, { icon: string; label: strin
 };
 
 export default function ChatContainer({ sessionId }: ChatContainerProps) {
-  const { messages, isLoading, nudges, stateResult, suggestions, panelData, axesProgress, phaseEvents, currentPhase, phaseProgress, sessionStatus, sessionSummary, sendMessage, pendingEventLock, lunaThinking, understandingLevel, thinkingDeep, retryStatus, lunaThoughtBubble, intimacyLevelUp, dismissIntimacyLevelUp, intimacyDerived, intimacyDelta,
+  const { messages, isLoading, nudges, stateResult, suggestions, panelData, axesProgress, phaseEvents, currentPhase, conversationMode, phaseProgress, sessionStatus, sessionSummary, sendMessage, pendingEventLock, lunaThinking, understandingLevel, thinkingDeep, retryStatus, lunaThoughtBubble, intimacyLevelUp, dismissIntimacyLevelUp, intimacyDerived, intimacyDelta,
     // 🆕 v88: 루나 대화형 "같이 찾기"
     handleBrowseDecision, resolvedBrowsePrompts, browseTypingDot,
     // 🆕 v105.2: DAILY_CHAT 작별 시그널
@@ -921,7 +921,7 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
       </div>
 
       {/* 🆕 구간 진행률 바 (HOOK부터 마지막 EMPOWER까지 상태 시각화) */}
-      <PhaseProgress currentPhase={currentPhase} progress={phaseProgress} persona={activePersona} lunaThinking={lunaThinking} understandingLevel={understandingLevel} />
+      <PhaseProgress currentPhase={currentPhase} conversationMode={conversationMode} progress={phaseProgress} persona={activePersona} lunaThinking={lunaThinking} understandingLevel={understandingLevel} />
 
       {/* v28.7: 깊이 조정 패널 제거 — AI 자체 판단(PHASE_SIGNAL)으로 대체 */}
 

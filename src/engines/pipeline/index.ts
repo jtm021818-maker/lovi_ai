@@ -380,7 +380,7 @@ export class CounselingPipeline {
     | { type: 'axis_choices'; data: { axis: 'duration' | 'stage'; choices: AxisChoice[] } }
     | { type: 'axes_progress'; data: { filledCount: number; totalCount: number; isComplete: boolean; axes?: Partial<ReadIgnoredAxes> } }
     | { type: 'phase_event'; data: PhaseEvent }
-    | { type: 'phase_change'; data: { phase: ConversationPhaseV2; progress: number; lunaThinking?: string; understandingLevel?: number } }
+    | { type: 'phase_change'; data: { phase: ConversationPhaseV2; progress: number; lunaThinking?: string; understandingLevel?: number; conversationMode?: 'COUNSELING' | 'CASUAL' | 'ASSIST' } }
     // 🆕 v40: 루나가 "진짜 생각하는 중" UI 이벤트 (Gemini Grounding DeepResearch)
     | { type: 'luna_thinking_deep'; data: { status: 'started' | 'done'; keyword?: string; phrases?: string[]; durationMs?: number; hasInsight?: boolean } }
     // 🆕 좌뇌 생각 미리보기 — 우뇌 시작 전 루나의 내면 생각
@@ -909,7 +909,7 @@ export class CounselingPipeline {
     const { lunaThinking, understandingLevel } = computeLunaThinking(
       newPhaseV2, turnsInCurrentPhase, stateResult, completedEvents ?? [],
     );
-    yield { type: 'phase_change', data: { phase: newPhaseV2, progress: adjustedProgress, lunaThinking, understandingLevel } };
+    yield { type: 'phase_change', data: { phase: newPhaseV2, progress: adjustedProgress, lunaThinking, understandingLevel, conversationMode: phaseCtx.conversationMode } };
 
     // v2→v1 매핑 (레거시 호환)
     let conversationPhase = PhaseManager.toLegacyPhase(newPhaseV2);
@@ -2842,7 +2842,7 @@ ${researchResult.insight}
               updatedPhaseStartTurn = turnCount;
               const reProgress = Math.min(PhaseManager.getProgress(reCheckedPhase) + Math.min(turnCount * 3, 15), 100);
               const reThinking = computeLunaThinking(reCheckedPhase, 0, stateResult, updatedCompletedEvents);
-              yield { type: 'phase_change', data: { phase: reCheckedPhase, progress: reProgress, lunaThinking: reThinking.lunaThinking, understandingLevel: reThinking.understandingLevel } };
+              yield { type: 'phase_change', data: { phase: reCheckedPhase, progress: reProgress, lunaThinking: reThinking.lunaThinking, understandingLevel: reThinking.understandingLevel, conversationMode: ((capturedLeftBrainAnalysis as any)?.conversation_mode as 'COUNSELING' | 'CASUAL' | 'ASSIST' | undefined) ?? phaseCtx.conversationMode } };
             }
           }
         } catch (e) {
