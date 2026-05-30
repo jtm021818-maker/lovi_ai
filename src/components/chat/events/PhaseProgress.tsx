@@ -349,12 +349,26 @@ interface PhaseProgressProps {
 //   HOOK → (일상/상담) 점프 시점 감지 + 1.6초 셀러브레이션 오버레이 + 영구 배지
 // ============================================================================
 
-type BranchDirection = 'consult' | 'daily';
+type BranchDirection = 'consult' | 'daily' | 'assist';
 
 const CASUAL_PHASE_IDS = ['GREET', 'CATCHUP', 'BANTER', 'LINGER', 'FAREWELL', 'DAILY_CHAT'] as const;
 
 function isCasualPhase(p: ConversationPhaseV2 | null): boolean {
   return p !== null && (CASUAL_PHASE_IDS as readonly string[]).includes(p);
+}
+
+// 🆕 v122: ASSIST(추천/검색) phase 집합 + 헬퍼 (분기/라우팅에서 공용)
+type AssistPhaseId = 'ASSIST_INTENT' | 'ASSIST_BROWSE' | 'ASSIST_PICK';
+const ASSIST_PHASE_IDS = ['ASSIST_INTENT', 'ASSIST_BROWSE', 'ASSIST_PICK'] as const;
+function isAssistPhase(p: ConversationPhaseV2 | null): boolean {
+  return p !== null && (ASSIST_PHASE_IDS as readonly string[]).includes(p);
+}
+
+/** phase 로 분기 방향 판정 (🆕 v122: assist 추가) */
+function branchDirectionOf(p: ConversationPhaseV2 | null): BranchDirection {
+  if (isAssistPhase(p)) return 'assist';
+  if (isCasualPhase(p)) return 'daily';
+  return 'consult';
 }
 
 /** HOOK → 분기 점프 감지 훅. branchEvent 가 1.6초 동안 살아있다가 자동 소멸. */
@@ -364,14 +378,14 @@ function usePhaseTransition(currentPhase: ConversationPhaseV2 | null) {
   // 한 번이라도 분기됐는지 (배지 표시용)
   const [branchedTo, setBranchedTo] = useState<BranchDirection | null>(() => {
     if (currentPhase && currentPhase !== 'HOOK') {
-      return isCasualPhase(currentPhase) ? 'daily' : 'consult';
+      return branchDirectionOf(currentPhase);
     }
     return null;
   });
 
   useEffect(() => {
     if (prevPhase === 'HOOK' && currentPhase && currentPhase !== 'HOOK') {
-      const direction: BranchDirection = isCasualPhase(currentPhase) ? 'daily' : 'consult';
+      const direction: BranchDirection = branchDirectionOf(currentPhase);
       const ts = Date.now();
       setBranchEvent({ direction, timestamp: ts });
       setBranchedTo(direction);
@@ -409,6 +423,15 @@ const BRANCH_THEME: Record<BranchDirection, { primary: string; secondary: string
     label: '일상 모드',
     emoji: '🍃',
     particleFills: ['#86efac', '#bbf7d0', '#fbbf24', '#fda4af', '#fff'],
+  },
+  // 🆕 v122: 추천/검색 레인 — 시안 톤 (ASSIST_COLOR 와 정렬)
+  assist: {
+    primary: '#0ea5b7',
+    secondary: '#a5f3fc',
+    glow: 'rgba(14,165,183,0.45)',
+    label: '추천 모드',
+    emoji: '🔍',
+    particleFills: ['#67e8f9', '#a5f3fc', '#22d3ee', '#fbbf24', '#fff'],
   },
 };
 
@@ -793,6 +816,8 @@ function ListeningMoment({
   // 일상 경로 컬러 (분기 힌트용)
   const dailyColor = isTarot ? color.primary : '#22c55e';
   const dailyGlow = isTarot ? color.glow : 'rgba(34,197,94,0.22)';
+  // 🆕 v122: 추천(ASSIST) 경로 컬러 (3번째 갈래)
+  const assistColor = isTarot ? color.primary : '#0ea5b7';
 
   return (
     <div className="w-full sticky top-[60px] z-10"
@@ -809,13 +834,37 @@ function ListeningMoment({
           background: `linear-gradient(135deg, ${color.soft} 0%, rgba(255,255,255,0.94) 100%)`,
           borderColor: `${color.primary}1a`,
           boxShadow: `0 2px 18px ${color.primary}12`,
-          paddingTop: 12,
+          paddingTop: 28,
           paddingBottom: 14,
           paddingLeft: 14,
           paddingRight: 14,
         }}
       >
         <FloatingPetals color={color} reduceMotion={reduceMotion} />
+
+        {/* 🆕 v122: 상단 중앙 — 추천(ASSIST) 갈래 힌트 (3갈래 삼지창의 위쪽 끝) */}
+        <motion.div
+          className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 pointer-events-none z-[2]"
+          style={{
+            top: 3,
+            background: 'rgba(255,255,255,0.82)',
+            border: `1px dashed ${assistColor}66`,
+            borderRadius: 999,
+            padding: '2px 8px',
+            boxShadow: `0 1px 6px ${assistColor}22`,
+          }}
+          initial={reduceMotion ? false : { opacity: 0, y: -3 }}
+          animate={{ opacity: 0.9, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.85 }}
+        >
+          <svg viewBox="0 0 24 24" width={12} height={12} aria-hidden>
+            <circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke={assistColor} strokeWidth="2.2" />
+            <line x1="15.5" y1="15.5" x2="21" y2="21" stroke={assistColor} strokeWidth="2.6" strokeLinecap="round" />
+          </svg>
+          <span style={{ fontFamily: '"Gowun Dodum", system-ui', fontSize: '10px', fontWeight: 700, letterSpacing: '-0.01em', color: `${assistColor}d8` }}>
+            추천
+          </span>
+        </motion.div>
 
         {/* Y자 분기 path SVG */}
         <svg
@@ -845,6 +894,18 @@ function ListeningMoment({
             initial={reduceMotion ? false : { pathLength: 0, opacity: 0 }}
             animate={{ pathLength: 1, opacity: 0.7 }}
             transition={{ duration: 1.4, ease: 'easeOut', delay: 0.18 }}
+          />
+          {/* 🆕 v122: 중앙 위로 — 추천 갈래 (삼지창) */}
+          <motion.path
+            d="M200 22 Q200 12 200 4"
+            fill="none"
+            stroke={assistColor}
+            strokeWidth="1.4"
+            strokeDasharray="3 4"
+            strokeLinecap="round"
+            initial={reduceMotion ? false : { pathLength: 0, opacity: 0 }}
+            animate={{ pathLength: 1, opacity: 0.7 }}
+            transition={{ duration: 1.4, ease: 'easeOut', delay: 0.32 }}
           />
         </svg>
 
@@ -1469,10 +1530,8 @@ function CasualPhaseTrack({ currentPhase, lunaThinking, branchOverlay }: { curre
 
 
 // ============================================================================
-// 🆕 v121 — AssistTrack : 추천/검색 "같이 찾기" 전용 트랙
-//  - ASSIST 레인은 CASUAL phase(GREET 등)로 라우팅되지만, 일상 스텝퍼는 맥락에 안 맞음.
-//  - 대신 돋보기 모티프 + 라이브 루나 메달리온 + "같이 골라보는 중 🔍" 배너.
-//  - 스텝퍼 없음 (browse 는 이벤트 기반이라 단계가 의미 없음).
+// 🆕 v122 — ASSIST(추천/검색) 3단계 레인 — 상담/일상과 나란한 전용 스텝퍼
+//  취향 파악 🔍 → 같이 둘러보기 🛍️ → 고르기 ✅  (browse 라이프사이클과 1:1)
 // ============================================================================
 const ASSIST_COLOR: PhaseColor = {
   primary: '#0ea5b7',
@@ -1481,22 +1540,86 @@ const ASSIST_COLOR: PhaseColor = {
   soft: 'rgba(240,253,255,0.96)',
 };
 
-function AssistTrack({
+/** 돋보기+하트 아이콘 (ASSIST_INTENT: 취향 파악) */
+const LensHeartIcon = ({ active, past }: { active: boolean; past: boolean }) => (
+  <svg viewBox="0 0 40 40" className="w-full h-full">
+    <circle cx="18" cy="18" r="12" fill={active ? '#ecfeff' : past ? '#f0fdff' : '#f8fafc'}
+      stroke={active ? '#0ea5b7' : past ? '#67e8f9' : '#cbd5e1'} strokeWidth="1.6" />
+    <path d="M18 24 C13 20 11 16.5 13 14 C15 11.5 18 14 18 14 C18 14 21 11.5 23 14 C25 16.5 23 20 18 24 Z"
+      fill={active ? '#a5f3fc' : past ? '#cffafe' : '#e2e8f0'}
+      stroke={active ? '#0ea5b7' : past ? '#67e8f9' : '#cbd5e1'} strokeWidth="1.1" strokeLinejoin="round" />
+    <line x1="27" y1="27" x2="34" y2="34" stroke={active ? '#0e7490' : past ? '#22d3ee' : '#cbd5e1'} strokeWidth="2.6" strokeLinecap="round" />
+  </svg>
+);
+
+/** 쇼핑백 아이콘 (ASSIST_BROWSE: 같이 둘러보기) */
+const ShoppingBagIcon = ({ active, past }: { active: boolean; past: boolean }) => (
+  <svg viewBox="0 0 40 40" className="w-full h-full">
+    <path d="M11 14 L29 14 L31 34 Q31 35 30 35 L10 35 Q9 35 9 34 Z"
+      fill={active ? '#ecfeff' : past ? '#f0fdff' : '#f8fafc'}
+      stroke={active ? '#0ea5b7' : past ? '#67e8f9' : '#cbd5e1'} strokeWidth="1.6" strokeLinejoin="round" />
+    <path d="M15 16 L15 12 Q15 7 20 7 Q25 7 25 12 L25 16" fill="none"
+      stroke={active ? '#0ea5b7' : past ? '#67e8f9' : '#cbd5e1'} strokeWidth="1.6" strokeLinecap="round" />
+    <circle cx="20" cy="23" r="2" fill={active ? '#22d3ee' : past ? '#a5f3fc' : '#e2e8f0'} />
+  </svg>
+);
+
+/** 선물+체크 아이콘 (ASSIST_PICK: 고르기/결정) */
+const GiftCheckIcon = ({ active, past }: { active: boolean; past: boolean }) => (
+  <svg viewBox="0 0 40 40" className="w-full h-full">
+    <rect x="9" y="16" width="22" height="18" rx="2"
+      fill={active ? '#ecfeff' : past ? '#f0fdff' : '#f8fafc'}
+      stroke={active ? '#0ea5b7' : past ? '#67e8f9' : '#cbd5e1'} strokeWidth="1.6" />
+    <rect x="9" y="13" width="22" height="5" rx="1.2"
+      fill={active ? '#a5f3fc' : past ? '#cffafe' : '#e2e8f0'}
+      stroke={active ? '#0ea5b7' : past ? '#67e8f9' : '#cbd5e1'} strokeWidth="1.2" />
+    <line x1="20" y1="13" x2="20" y2="34" stroke={active ? '#0ea5b7' : past ? '#67e8f9' : '#cbd5e1'} strokeWidth="1.2" />
+    <path d="M16 26 L19 29 L24 23" fill="none"
+      stroke={active ? '#0e7490' : past ? '#22d3ee' : '#cbd5e1'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+// AssistPhaseId / ASSIST_PHASE_IDS / isAssistPhase 는 상단(분기 시스템)에 정의됨 — 재사용.
+
+const ASSIST_STEPS: ReadonlyArray<{
+  id: AssistPhaseId;
+  label: string;
+  status: string;
+  Icon: React.FC<{ active: boolean; past: boolean }>;
+}> = [
+  { id: 'ASSIST_INTENT', label: '취향 파악',   status: '취향 파악하는 중 🔍', Icon: LensHeartIcon },
+  { id: 'ASSIST_BROWSE', label: '같이 둘러보기', status: '같이 둘러보는 중 🛍️', Icon: ShoppingBagIcon },
+  { id: 'ASSIST_PICK',   label: '고르기',      status: '고르는 중 ✅',        Icon: GiftCheckIcon },
+];
+
+function AssistStepperTrack({
+  currentPhase,
   lunaThinking,
   persona,
   branchOverlay,
 }: {
+  currentPhase: AssistPhaseId;
   lunaThinking?: string;
   persona: PersonaMode;
   branchOverlay?: ReactNode;
 }) {
   const reduceMotion = useReducedMotion() ?? false;
   const color = ASSIST_COLOR;
-  const displayText = (lunaThinking && lunaThinking.trim()) ? lunaThinking : '같이 골라보는 중 🔍';
+  const currentIdx = Math.max(0, ASSIST_STEPS.findIndex((s) => s.id === currentPhase));
+  const currentStep = ASSIST_STEPS[currentIdx];
+  const displayText = (lunaThinking && lunaThinking.trim()) ? lunaThinking : currentStep.status;
   const typedStatus = useTypewriter(displayText, 70);
 
+  const iconCount = ASSIST_STEPS.length;
+  const slotWidth = 100 / iconCount;
+  const startOffset = slotWidth / 2;
+  const barRange = 100 - slotWidth;
+  const basePercent = (currentIdx / (iconCount - 1)) * 100;
+
   return (
-    <div className="w-full sticky top-[60px] z-10" role="status" aria-live="polite" aria-label="같이 찾는 중">
+    <div className="w-full sticky top-[60px] z-10" role="progressbar"
+      aria-valuemin={0} aria-valuemax={iconCount} aria-valuenow={currentIdx + 1}
+      aria-label={`추천 단계 ${currentIdx + 1} / ${iconCount}: ${currentStep.label}`}>
       <div className="h-[1px]" style={{ background: `linear-gradient(to right, transparent, ${color.primary}55, transparent)` }} />
       <div
         className="relative overflow-hidden backdrop-blur-xl border-b"
@@ -1509,64 +1632,94 @@ function AssistTrack({
       >
         <FloatingPetals color={color} reduceMotion={reduceMotion} />
 
-        <div className="relative flex items-center gap-3">
-          <LiveLunaMedallion persona={persona} color={color} phaseKey="ASSIST" reduceMotion={reduceMotion} size={44} />
+        <div className="relative flex items-start gap-3">
+          <LiveLunaMedallion persona={persona} color={color} phaseKey={currentPhase} reduceMotion={reduceMotion} size={44} />
 
-          <div className="flex-1 min-w-0">
-            {/* 라벨 행 */}
-            <div className="flex items-center gap-1.5">
-              {/* 돋보기 아이콘 */}
-              <svg viewBox="0 0 24 24" width={16} height={16} aria-hidden>
-                <circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke={color.primary} strokeWidth="2" />
-                <line x1="15.5" y1="15.5" x2="21" y2="21" stroke={color.primary} strokeWidth="2.4" strokeLinecap="round" />
-              </svg>
-              <span
-                className="whitespace-nowrap"
-                style={{
-                  fontFamily: '"Gowun Dodum", system-ui',
-                  fontSize: '12.5px',
-                  fontWeight: 800,
-                  letterSpacing: '-0.01em',
-                  color: color.primary,
-                }}
+          <div className="flex-1 min-w-0 pt-0.5">
+            <div className="flex justify-between items-start w-full relative">
+              {/* 진행선 배경 */}
+              <div className="absolute top-[13px] h-[2.5px] rounded-full z-0"
+                style={{ left: `${startOffset}%`, width: `${barRange}%`, background: `${color.secondary}88` }} />
+              {/* 진행선 활성 */}
+              <motion.div className="absolute top-[13px] h-[2.5px] z-[1] rounded-full"
+                style={{ left: `${startOffset}%`, background: `linear-gradient(to right, ${color.primary}, ${color.primary}dd)` }}
+                initial={{ width: 0 }}
+                animate={{ width: `${basePercent * (barRange / 100)}%` }}
+                transition={{ type: 'spring', damping: 20, stiffness: 90 }}
               >
-                같이 찾는 중
-              </span>
-              {/* 진행 점 3개 (browse 흐름 ongoing 표시) */}
-              <div className="flex items-center gap-[3px] ml-1">
-                {[0, 1, 2].map((i) => (
-                  <motion.span
-                    key={i}
-                    className="block rounded-full"
-                    style={{ width: 4, height: 4, background: color.primary, boxShadow: `0 0 4px ${color.glow}` }}
-                    animate={reduceMotion ? {} : { y: [0, -2, 0], opacity: [0.4, 1, 0.4] }}
-                    transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15, ease: 'easeInOut' }}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* 상태 카피 (typewriter) */}
-            <div className="mt-1" aria-live="polite">
-              <span
-                className="inline-flex items-center gap-0.5"
-                style={{
-                  fontFamily: '"Nanum Pen Script", "Gowun Dodum", system-ui',
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  color: `${color.primary}cc`,
-                }}
-              >
-                {typedStatus}
-                <motion.span
-                  animate={{ opacity: [1, 0, 1] }}
-                  transition={{ duration: 0.8, repeat: Infinity }}
-                  className="inline-block ml-0.5 w-[1.5px] h-[12px] align-middle rounded-full"
+                <motion.div className="absolute right-0 top-1/2 -translate-y-1/2 w-[7px] h-[7px] rounded-full"
                   style={{ background: color.primary }}
+                  animate={reduceMotion ? {} : {
+                    boxShadow: [`0 0 4px 2px ${color.glow}`, `0 0 8px 4px ${color.glow}`, `0 0 4px 2px ${color.glow}`],
+                    scale: [1, 1.3, 1],
+                  }}
+                  transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
                 />
-              </span>
+              </motion.div>
+
+              {ASSIST_STEPS.map((step, idx) => {
+                const isPast = idx < currentIdx;
+                const isCurrent = idx === currentIdx;
+                const StepIcon = step.Icon;
+                return (
+                  <div key={step.id} className="relative z-10 flex flex-col items-center flex-1">
+                    <div className="relative">
+                      {isCurrent && (
+                        <motion.svg viewBox="0 0 44 44" className="absolute -inset-1 w-[calc(100%+8px)] h-[calc(100%+8px)] z-20">
+                          <motion.circle cx="22" cy="22" r="20" fill="none" stroke={color.primary} strokeWidth="2"
+                            strokeLinecap="round" strokeDasharray="0 1"
+                            initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.2, ease: 'easeOut' }} />
+                        </motion.svg>
+                      )}
+                      <motion.div
+                        animate={isCurrent && !reduceMotion ? { y: [0, -2, 0] } : {}}
+                        transition={isCurrent ? { duration: 2, repeat: Infinity, ease: 'easeInOut' } : {}}
+                        className="w-7 h-7 rounded-full flex items-center justify-center p-0.5 transition-all duration-500"
+                        style={{
+                          background: isCurrent ? 'rgba(255,255,255,0.85)' : isPast ? `${color.secondary}88` : 'rgba(248,250,252,0.65)',
+                          boxShadow: isCurrent ? `0 2px 12px ${color.glow}` : 'none',
+                          transform: isCurrent ? 'scale(1.12)' : 'scale(1)',
+                          opacity: isCurrent ? 1 : isPast ? 0.95 : 0.4,
+                        }}
+                      >
+                        <StepIcon active={isCurrent} past={isPast} />
+                      </motion.div>
+                      <AnimatePresence>
+                        {isPast && (
+                          <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                            className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center z-30 shadow-sm"
+                            style={{ background: color.primary }}>
+                            <svg viewBox="0 0 12 12" className="w-2 h-2">
+                              <path d="M2 6 L5 9 L10 3" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                    <div className="text-center mt-1.5 w-full">
+                      <span className="block whitespace-nowrap"
+                        style={{
+                          fontFamily: '"Gowun Dodum", system-ui', fontSize: '10.5px', fontWeight: 700, letterSpacing: '-0.01em',
+                          color: isCurrent ? color.primary : isPast ? `${color.primary}cc` : '#cbd5e1',
+                        }}>
+                        {step.label}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
+        </div>
+
+        {/* 상태 카피 */}
+        <div className="text-center mt-1.5" aria-live="polite">
+          <span className="inline-flex items-center gap-0.5"
+            style={{ fontFamily: '"Nanum Pen Script", "Gowun Dodum", system-ui', fontSize: '13px', fontWeight: 700, color: color.primary, opacity: 0.9 }}>
+            {typedStatus}
+            <motion.span animate={{ opacity: [1, 0, 1] }} transition={{ duration: 0.8, repeat: Infinity }}
+              className="inline-block ml-0.5 w-[1.5px] h-[12px] align-middle rounded-full" style={{ background: color.primary }} />
+          </span>
         </div>
         {branchOverlay}
       </div>
@@ -1586,12 +1739,6 @@ export default function PhaseProgress({ currentPhase, progress, persona = 'luna'
 
   if (!currentPhase) return null;
 
-  // 🆕 v121 — ASSIST(추천/검색) 레인: 일상/상담 스텝퍼 대신 "같이 찾는 중" 트랙.
-  //   단, HOOK(분기 전)에선 아직 듣는 중이므로 ListeningMoment 유지 → ASSIST 트랙은 분기 후부터.
-  if (conversationMode === 'ASSIST' && currentPhase !== 'HOOK') {
-    return <AssistTrack lunaThinking={lunaThinking} persona={persona} />;
-  }
-
   // 🆕 v118 — 분기 후 트랙에 얹을 overlay (배지 + 셀러브레이션)
   const branchOverlay: ReactNode = branchedTo ? (
     <>
@@ -1601,6 +1748,15 @@ export default function PhaseProgress({ currentPhase, progress, persona = 'luna'
       </AnimatePresence>
     </>
   ) : null;
+
+  // 🆕 v122 — ASSIST(추천/검색) 3단계 레인 → 전용 스텝퍼 (상담/일상과 나란한 3번째 레인)
+  //   phase 가 ASSIST 면 즉시. (방어) mode 만 ASSIST 이고 phase 가 아직 안 따라온 경우 INTENT 로.
+  if (isAssistPhase(currentPhase)) {
+    return <AssistStepperTrack currentPhase={currentPhase as AssistPhaseId} lunaThinking={lunaThinking} persona={persona} branchOverlay={branchOverlay} />;
+  }
+  if (conversationMode === 'ASSIST' && currentPhase !== 'HOOK') {
+    return <AssistStepperTrack currentPhase="ASSIST_INTENT" lunaThinking={lunaThinking} persona={persona} branchOverlay={branchOverlay} />;
+  }
 
   // 일상 5-Phase 트랙 (분기 후)
   if (currentPhase === 'GREET' || currentPhase === 'CATCHUP' || currentPhase === 'BANTER'

@@ -67,6 +67,53 @@ function isCasualPhaseInternal(phase: ConversationPhaseV2): boolean {
 }
 
 // ============================================
+// 🆕 v122: 추천/검색(ASSIST) 3단계 레인 — "같이 찾기" 전용
+// HOOK 후 ASSIST 분기 → ASSIST_INTENT(취향 파악) → ASSIST_BROWSE(같이 둘러보기) → ASSIST_PICK(고르기)
+// browse 라이프사이클과 1:1로 진행. 자동 상담 이벤트(온도계/극장/작전회의)는 안 탐.
+// ============================================
+const ASSIST_PHASE_ORDER: ConversationPhaseV2[] = ['ASSIST_INTENT', 'ASSIST_BROWSE', 'ASSIST_PICK'];
+
+/** ASSIST phase 게이트 — browse 실제 이벤트로 단계 전진 */
+const ASSIST_GATE_EVENTS: Partial<Record<ConversationPhaseV2, PhaseEventType[]>> = {
+  ASSIST_INTENT: ['BROWSE_SEARCHING'],   // browse 검색 발동 → 같이 둘러보기
+  ASSIST_BROWSE: ['BROWSE_STREAM_END'],  // 후보 결정 → 고르기
+};
+
+/** ASSIST phase safety_max — 이벤트 누락 안전망 */
+const ASSIST_SAFETY_TURNS: Partial<Record<ConversationPhaseV2, number>> = {
+  ASSIST_INTENT: 3,   // 3턴 안에 둘러보기로
+  ASSIST_BROWSE: 12,
+  ASSIST_PICK:   99,  // 종착
+};
+
+/** ASSIST phase 여부 */
+function isAssistPhase(phase: ConversationPhaseV2): boolean {
+  return ASSIST_PHASE_ORDER.includes(phase);
+}
+
+/** 다음 ASSIST phase: 게이트 이벤트 충족 또는 safety 턴 초과 시 전진 */
+function getAssistNextPhase(ctx: PhaseContext, current: ConversationPhaseV2): ConversationPhaseV2 {
+  const idx = ASSIST_PHASE_ORDER.indexOf(current);
+  if (idx < 0 || idx >= ASSIST_PHASE_ORDER.length - 1) return current;
+  const next = ASSIST_PHASE_ORDER[idx + 1];
+
+  // 게이트 이벤트 충족 → 즉시 전진
+  const gates = ASSIST_GATE_EVENTS[current] ?? [];
+  if (gates.some((e) => ctx.completedEvents.includes(e))) {
+    console.log(`[PhaseManager:v122] 🔍 ${current} → ${next} (게이트: ${gates.join(',')})`);
+    return next;
+  }
+  // safety 턴 초과 → 전진
+  const turnsInPhase = ctx.turnCount - (ctx.phaseStartTurn ?? ctx.turnCount);
+  const safetyMax = ASSIST_SAFETY_TURNS[current] ?? 99;
+  if (turnsInPhase >= safetyMax) {
+    console.log(`[PhaseManager:v122] ⏱️ ${current} → ${next} (safety ${turnsInPhase}/${safetyMax})`);
+    return next;
+  }
+  return current;
+}
+
+// ============================================
 // 🆕 v105: 일상/상담 분기 판단 (LLM이 분류한 primaryIntent + emotion 휴리스틱)
 // ============================================
 /**
@@ -238,6 +285,10 @@ const PHASE_EVENTS: Record<ConversationPhaseV2, PhaseEventType[]> = {
   BANTER:   ['LINGER_START', 'HEAVY_TURN'],
   LINGER:   ['CASUAL_BYE'],
   FAREWELL: [],
+  // 🆕 v122: ASSIST 3단계 — 자동 상담 이벤트 없음 (browse 는 phase 무관하게 직접 발동)
+  ASSIST_INTENT: [],
+  ASSIST_BROWSE: [],
+  ASSIST_PICK:   [],
 };
 
 // ============================================
@@ -256,6 +307,10 @@ const PHASE_START_TURNS: Record<ConversationPhaseV2, number> = {
   BANTER:   5,
   LINGER:   13,
   FAREWELL: 15,
+  // 🆕 v122: ASSIST 3단계 진입 턴 (참조용 — 실제는 phaseStartTurn 동적 갱신)
+  ASSIST_INTENT: 2,
+  ASSIST_BROWSE: 3,
+  ASSIST_PICK:   6,
 };
 
 // ============================================
@@ -462,13 +517,21 @@ export class PhaseManager {
     //   일상 phase 중 강한 감정/상담 의도 감지 시 MIRROR 로 자동 escape
     if (currentPhase === 'HOOK' && turnCount >= 2) {
       const mode = conversationMode ?? inferConversationMode(primaryIntent, currentEmotionScore, undefined);
-      // 🆕 v121: ASSIST(추천/검색) 도 CASUAL 과 같은 경량 레인으로 라우팅.
-      //   무거운 상담 phase(MIRROR→BRIDGE→SOLVE→EMPOWER)·온도계·작전회의를 안 타고,
-      //   browse "같이 찾기" 이벤트가 자유롭게 발동하는 흐름으로 보냄.
-      if (mode === 'CASUAL' || mode === 'ASSIST') {
-        console.log(`[PhaseManager:v121] 💌 HOOK → GREET (mode=${mode}, intent=${primaryIntent}, emotion=${currentEmotionScore})`);
+      // 🆕 v122: ASSIST(추천/검색) → 전용 레인(ASSIST_INTENT) 진입. 상담/일상과 나란한 3번째 레인.
+      if (mode === 'ASSIST') {
+        console.log(`[PhaseManager:v122] 🔍 HOOK → ASSIST_INTENT (intent=${primaryIntent}, emotion=${currentEmotionScore})`);
+        return 'ASSIST_INTENT';
+      }
+      // 🆕 v121: CASUAL → 경량 일상 레인(GREET).
+      if (mode === 'CASUAL') {
+        console.log(`[PhaseManager:v116] 💌 HOOK → GREET (intent=${primaryIntent}, emotion=${currentEmotionScore})`);
         return 'GREET';
       }
+    }
+
+    // 🆕 v122: ASSIST 3단계 레인 흐름 처리 (browse 라이프사이클 기반 전진)
+    if (isAssistPhase(currentPhase)) {
+      return getAssistNextPhase(ctx, currentPhase);
     }
 
     // 🆕 v116: 일상 5-Phase 흐름 처리 (DAILY_CHAT 호환 alias 포함)
@@ -712,7 +775,9 @@ export class PhaseManager {
    * Phase 진행률 (0~100%)
    */
   static getProgress(phase: ConversationPhaseV2): number {
-    return (this.getPhaseIndex(phase) / 4) * 100;
+    // 🆕 v122: 상담(PHASE_ORDER) 외 phase(일상/ASSIST)는 인덱스 -1 → 음수 방지로 0 클램프.
+    //   표시 진행률은 클라이언트 트랙(CasualPhaseTrack/AssistStepperTrack)이 자체 계산.
+    return Math.max(0, (this.getPhaseIndex(phase) / 4) * 100);
   }
 
   /**

@@ -126,10 +126,14 @@ export type ConversationPhaseV2 =
   | 'CATCHUP'   // 일상 2단계: 안부/근황 (그래서 오늘 뭐 했어)
   | 'BANTER'    // 일상 3단계: 본 수다 (자유 주제 흐름)
   | 'LINGER'    // 일상 4단계: 여운/pre-closing (톤 다운)
-  | 'FAREWELL'; // 일상 5단계: 작별 (응 잘 자~)
+  | 'FAREWELL'  // 일상 5단계: 작별 (응 잘 자~)
+  // 🆕 v122: 추천/검색(ASSIST) 3단계 레인 — "같이 찾기" 전용 (상담/일상과 나란한 3번째 레인)
+  | 'ASSIST_INTENT'  // 추천 1단계: 취향 파악 (뭘/누구에게/예산)
+  | 'ASSIST_BROWSE'  // 추천 2단계: 같이 둘러보기 (후보 하나씩)
+  | 'ASSIST_PICK';   // 추천 3단계: 고르기/결정
 
-/** 대화 모드 — 좌뇌 LLM이 판단 */
-export type ConversationMode = 'COUNSELING' | 'CASUAL';
+/** 대화 모드 — 좌뇌 LLM이 판단 (🆕 v122: ASSIST 추가) */
+export type ConversationMode = 'COUNSELING' | 'CASUAL' | 'ASSIST';
 
 /** v2→v1 레거시 매핑 (하위 호환) */
 export const PHASE_V2_TO_V1: Record<ConversationPhaseV2, ConversationPhase> = {
@@ -145,6 +149,10 @@ export const PHASE_V2_TO_V1: Record<ConversationPhaseV2, ConversationPhase> = {
   BANTER: 'EXPLORATION',
   LINGER: 'EXPLORATION',
   FAREWELL: 'EXPLORATION',
+  // 🆕 v122: ASSIST 3단계 — 가벼운 탐색으로 매핑
+  ASSIST_INTENT: 'EXPLORATION',
+  ASSIST_BROWSE: 'EXPLORATION',
+  ASSIST_PICK: 'EXPLORATION',
 };
 
 /** 🆕 v116: 일상 phase 5종 집합 (헬퍼) */

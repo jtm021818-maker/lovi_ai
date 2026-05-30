@@ -198,6 +198,13 @@ function computeLunaThinking(
         : '따뜻하게 마무리 중... 🤗';
       return { lunaThinking: thoughts, understandingLevel: level };
     }
+    // 🆕 v122: ASSIST 3단계 — 추천/검색 "같이 찾기" 레인
+    case 'ASSIST_INTENT':
+      return { lunaThinking: '취향 파악하는 중 🔍', understandingLevel: 30 };
+    case 'ASSIST_BROWSE':
+      return { lunaThinking: '같이 둘러보는 중 🛍️', understandingLevel: 65 };
+    case 'ASSIST_PICK':
+      return { lunaThinking: '고르는 중 ✅', understandingLevel: 95 };
     default:
       return { lunaThinking: '듣고 있어...', understandingLevel: 10 };
   }
@@ -395,6 +402,18 @@ export class CounselingPipeline {
     | { type: 'retry_status'; data: RetryStatusEvent }
     | { type: 'done'; data: { stateResult: StateResult; strategyResult: StrategyResult; suggestionShown: boolean; responseMode?: ResponseMode; updatedAxes?: Partial<ReadIgnoredAxes>; phaseV2?: ConversationPhaseV2; completedEvents?: PhaseEventType[]; lastEventTurn?: number; confirmedEmotionScore?: number; emotionHistory?: number[]; promptStyle?: string; emotionAccumulatorState?: EmotionAccumulatorState; phaseStartTurn?: number; lunaEmotionState?: string; sessionStoryState?: string; strategyMode?: StrategyMode | null; intimacyState?: import('@/engines/intimacy').IntimacyState | null; intimacyPersonaKey?: 'luna' | 'tarot'; intimacyAll?: { luna: import('@/engines/intimacy').IntimacyState; tarot: import('@/engines/intimacy').IntimacyState } | null; intimacyLevelUp?: { oldLevel: number; newLevel: number; newLevelName: string } | null; intimacyDelta?: { trust: number; openness: number; bond: number; respect: number; triggers: string[] } | null; _contextLog?: any } }
   > {
+    // 🆕 v122: 복원 방어 — DB current_phase_v2 가 알 수 없는 값이면 HOOK 폴백.
+    //   (free TEXT 컬럼이라 손상/구버전 값 가능. 신규 ASSIST phase 포함 화이트리스트.)
+    const KNOWN_PHASES_V2: ConversationPhaseV2[] = [
+      'HOOK', 'MIRROR', 'BRIDGE', 'SOLVE', 'EMPOWER', 'DAILY_CHAT',
+      'GREET', 'CATCHUP', 'BANTER', 'LINGER', 'FAREWELL',
+      'ASSIST_INTENT', 'ASSIST_BROWSE', 'ASSIST_PICK',
+    ];
+    if (currentPhaseV2 !== undefined && !KNOWN_PHASES_V2.includes(currentPhaseV2)) {
+      console.warn(`[Pipeline:v122] 알 수 없는 phase "${currentPhaseV2}" → HOOK 폴백`);
+      currentPhaseV2 = 'HOOK';
+    }
+
     const logCollector = new LogCollector();
     // 🆕 v31: Step 1 + Step 4를 병렬 실행 (상태분석과 RAG는 독립적 — ~200~500ms 절약)
     // 🆕 v89: WM 로드도 같이 병렬 — 기존엔 dual-brain 직전에 직렬 로드(~50~100ms 블로킹)
@@ -2810,14 +2829,24 @@ ${researchResult.insight}
             lbPacing.phase_transition_recommendation === 'PUSH'
           );
 
-          if (hasNewGateEvents || hasTransitionSignal || hasPacingTransition) {
+          // 🆕 v122: browse 가 이번 턴 발동했으면 ASSIST 레인 강제.
+          //   좌뇌가 conversation_mode 를 CASUAL 로 잘못 분류해도 (실제로 "같이 찾기" 중이므로)
+          //   UI/phase 가 현실과 일치하도록 구조적으로 고정. 캐시에도 저장 → 다음 턴 유지.
+          const browseFiredThisTurn = !!pendingBrowseSearch;
+          const lbMode2 = ((capturedLeftBrainAnalysis as any)?.conversation_mode as 'COUNSELING' | 'CASUAL' | 'ASSIST' | undefined);
+          const effectiveMode: 'COUNSELING' | 'CASUAL' | 'ASSIST' = browseFiredThisTurn
+            ? 'ASSIST'
+            : (lbMode2 ?? phaseCtx.conversationMode ?? 'CASUAL');
+          if (browseFiredThisTurn) {
+            setLastConversationMode(ragContext?.sessionId, 'ASSIST', 'browse 발동');
+          }
+
+          if (hasNewGateEvents || hasTransitionSignal || hasPacingTransition || browseFiredThisTurn) {
             const reCheckCtx: PhaseContext = {
               ...phaseCtx,
               currentPhase: newPhaseV2,
-              // 🆕 v105.1: 현재 턴 좌뇌 conversation_mode 즉시 반영 (캐시 1턴 지연 보정)
-              //   기존: phaseCtx.conversationMode = 이전 턴 캐시 → DAILY_CHAT 탈출 1턴 늦어짐
-              //   수정: 이번 턴 분석 도착 후 재판단 → 첫 무거운 발언에 즉시 반응
-              conversationMode: ((capturedLeftBrainAnalysis as any)?.conversation_mode as 'COUNSELING' | 'CASUAL' | 'ASSIST' | undefined) ?? phaseCtx.conversationMode,
+              // 🆕 v105.1/v122: 이번 턴 effectiveMode (browse 발동 시 ASSIST 강제, 아니면 좌뇌/캐시)
+              conversationMode: effectiveMode,
               completedEvents: updatedCompletedEvents,
               lastEventTurn: updatedLastEventTurn,
               phaseStartTurn: updatedPhaseStartTurn,
@@ -2834,15 +2863,22 @@ ${researchResult.insight}
               consecutiveReadyTurns: (capturedWorkingMemory?.consecutive_ready_turns as number | undefined) ?? 0,
               consecutiveFrustratedTurns: (capturedWorkingMemory?.consecutive_frustrated_turns as number | undefined) ?? 0,
             };
-            const reCheckedPhase = PhaseManager.getCurrentPhase(reCheckCtx);
+            let reCheckedPhase = PhaseManager.getCurrentPhase(reCheckCtx);
+            // 🆕 v122: browse 발동 턴이면 browse 라이프사이클 → ASSIST 단계로 직접 매핑.
+            //   (이전 phase 가 casual/HOOK 이어도 ASSIST 레인으로 확실히 진입 보장.)
+            if (browseFiredThisTurn) {
+              reCheckedPhase = updatedCompletedEvents.includes('BROWSE_STREAM_END')
+                ? 'ASSIST_PICK'
+                : 'ASSIST_BROWSE';
+            }
             if (reCheckedPhase !== newPhaseV2) {
-              const reason = hasNewGateEvents ? `게이트이벤트(${updatedCompletedEvents.slice(-1)})` : `AI시그널(${aiPhaseSignal})`;
+              const reason = browseFiredThisTurn ? 'browse발동(ASSIST)' : hasNewGateEvents ? `게이트이벤트(${updatedCompletedEvents.slice(-1)})` : `AI시그널(${aiPhaseSignal})`;
               console.log(`[Pipeline] 🔄 Phase 재판단! ${reason} → ${newPhaseV2} → ${reCheckedPhase} (턴 ${turnCount})`);
               newPhaseV2 = reCheckedPhase;
               updatedPhaseStartTurn = turnCount;
               const reProgress = Math.min(PhaseManager.getProgress(reCheckedPhase) + Math.min(turnCount * 3, 15), 100);
               const reThinking = computeLunaThinking(reCheckedPhase, 0, stateResult, updatedCompletedEvents);
-              yield { type: 'phase_change', data: { phase: reCheckedPhase, progress: reProgress, lunaThinking: reThinking.lunaThinking, understandingLevel: reThinking.understandingLevel, conversationMode: ((capturedLeftBrainAnalysis as any)?.conversation_mode as 'COUNSELING' | 'CASUAL' | 'ASSIST' | undefined) ?? phaseCtx.conversationMode } };
+              yield { type: 'phase_change', data: { phase: reCheckedPhase, progress: reProgress, lunaThinking: reThinking.lunaThinking, understandingLevel: reThinking.understandingLevel, conversationMode: effectiveMode } };
             }
           }
         } catch (e) {

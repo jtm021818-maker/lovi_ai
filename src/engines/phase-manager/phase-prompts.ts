@@ -78,6 +78,23 @@ export const PHASE_ALLOWED_MODES_V2: Record<ConversationPhaseV2, ResponseMode[]>
     ResponseMode.MINIMAL_ENCOURAGER,
     ResponseMode.PRESENCE,
   ],
+  // 🆕 v122: ASSIST 3단계 — 가벼운 동행/제안 모드 (상담식 깊은 모드 X)
+  ASSIST_INTENT: [
+    ResponseMode.OPEN_QUESTION,
+    ResponseMode.MINIMAL_ENCOURAGER,
+    ResponseMode.PRESENCE,
+  ],
+  ASSIST_BROWSE: [
+    ResponseMode.PRESENCE,
+    ResponseMode.MINIMAL_ENCOURAGER,
+    ResponseMode.APPROVAL,
+    ResponseMode.SELF_DISCLOSURE,
+  ],
+  ASSIST_PICK: [
+    ResponseMode.APPROVAL,
+    ResponseMode.DIRECT_GUIDANCE,
+    ResponseMode.PRESENCE,
+  ],
 };
 
 // ============================================
@@ -177,6 +194,19 @@ Schegloff–Sacks (1973) pre-closing: "okay", "well", "그래서~", "근데~" �
 "ㅂㅂ~ 또 와ㅋㅋ[CASUAL_BYE]"
 "응! 기다리고 있을게[CASUAL_BYE]"
 2줄 이상, 요약, 새 질문 전부 금지. 한 줄 fade-out.`,
+
+  // 🆕 v122: ASSIST 3단계 — 추천/검색 "같이 찾기" (감정상담 아님, 가볍고 신나게)
+  ASSIST_INTENT: `[이 단계 목적: 취향 파악]
+뭘 찾는지 / 누구에게 / 예산·취향을 가볍게 확인. 무거운 상담 톤 X.
+"오 그거 같이 골라보자" 느낌으로 핵심만 잡고, 준비되면 [BROWSE_READY] 로 같이 둘러보기 시작.`,
+
+  ASSIST_BROWSE: `[이 단계 목적: 같이 둘러보기]
+시스템이 후보를 하나씩 보여주는 중. 너는 진짜 언니처럼 맞장구 ("오 이거 괜찮은데", "이건 좀 별로지?").
+후보명 직접 나열 금지 (UI가 띄움). 유저 반응 받아 같이 좁혀가.`,
+
+  ASSIST_PICK: `[이 단계 목적: 고르기/결정]
+유저가 마음에 드는 걸 골랐어. 결정 응원 + 짧은 마무리. "오 그거 진짜 잘 골랐다" 톤.
+새 상담 시작 금지 — 가볍게 마무리하거나 다른 거 더 볼지 물어봐.`,
 };
 
 // 🆕 GTC: MIRROR 턴 0 — 마음읽기 반응 전용 프롬프트
@@ -1014,6 +1044,10 @@ const PHASE_PROMPTS_FALLBACK: Record<ConversationPhaseV2, string> = {
   BANTER:   BANTER_BASE,
   LINGER:   LINGER_BASE,
   FAREWELL: FAREWELL_BASE,
+  // 🆕 v122: ASSIST 3단계 — 추천/검색 "같이 찾기" (가벼운 동행 톤)
+  ASSIST_INTENT: `지금은 추천/검색 도와주는 중. 뭘 찾는지·취향·예산을 가볍게 확인하고, 준비되면 같이 둘러보자. 무거운 상담 톤 금지.`,
+  ASSIST_BROWSE: `같이 후보를 하나씩 보는 중. 진짜 언니처럼 맞장구치며 반응해. 후보명 직접 나열 금지(시스템 UI가 띄움).`,
+  ASSIST_PICK:   `유저가 골랐어. 결정 응원 + 가벼운 마무리. 새 상담 시작 금지.`,
 };
 
 // ============================================
