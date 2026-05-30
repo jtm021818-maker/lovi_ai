@@ -186,14 +186,7 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
     // 🆕 v105.2: DAILY_CHAT 작별 시그널
     casualFarewellSignal,
   } = useChat(sessionId);
-  // 🆕 v79: 마지막 AI 메시지 ID (bubble FX 매칭용)
-  const lastAiMsgId = (() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].senderType === 'ai' && messages[i].content) return messages[i].id;
-    }
-    return null;
-  })();
-  const { toggle: toggleSpeak, isSpeaking, speak, speakQueue, isSupported: ttsSupported, settings: voiceSettings, updateSettings: updateVoiceSettings } = useLunaVoice();
+  const { toggle: toggleSpeak, isSpeaking, speak, isSupported: ttsSupported, settings: voiceSettings, updateSettings: updateVoiceSettings } = useLunaVoice();
   const scrollRef = useRef<HTMLDivElement>(null);
   // 🆕 스크롤: 마지막 AI 메시지 상단으로 이동하기 위한 ref
   const lastAiMsgRef = useRef<HTMLDivElement>(null);
@@ -203,6 +196,25 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
   const [activePersona, setActivePersona] = useState<PersonaMode>('luna');
   const prevMsgCountRef = useRef(0);
   const [isPersonaOpen, setIsPersonaOpen] = useState(false);
+  // 🆕 v123: TTS 순차 노출 상태
+  const [visibleMessageIds, setVisibleMessageIds] = useState<Set<string>>(new Set());
+  const ttsRevealQueueRef = useRef<ChatMessage[]>([]);
+  const isRevealingRef = useRef(false);
+
+  // 🆕 v123: 화면에 보일 메시지 필터링
+  const visibleMessages = useMemo(() => {
+    if (isLoading) return [];
+    if (visibleMessageIds.size === 0) return messages; // 초기화 전 폴백
+    return messages.filter((m) => visibleMessageIds.has(m.id));
+  }, [messages, visibleMessageIds, isLoading]);
+
+  // 🆕 v79: 마지막 AI 메시지 ID (bubble FX 매칭용)
+  const lastAiMsgId = useMemo(() => {
+    for (let i = visibleMessages.length - 1; i >= 0; i--) {
+      if (visibleMessages[i].senderType === 'ai' && visibleMessages[i].content) return visibleMessages[i].id;
+    }
+    return null;
+  }, [visibleMessages]);
 
   // 구독 상태 + 잔여 횟수
   const [isPremium, setIsPremium] = useState(true); // 기본 true로 깜빡임 방지
@@ -300,31 +312,85 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
     }
   }, [isPersonaOpen]);
 
-  // v118.7 → v122: 음성 활성화 = 자동 더빙. 새 AI 메시지 전부 순서대로 재생.
-  //   기존: 마지막 AI 메시지 1개만 speak() → 루나가 3개 보내면 마지막만 들림.
-  //   수정: 새로 추가된 AI 메시지 전부를 speakQueue()로 순서대로 재생.
-  useEffect(() => {
-    if (!ttsSupported || !voiceSettings.enabled || isLoading) return;
-    const aiMessages = messages.filter(m => m.senderType === 'ai' && m.content);
-    const prevCount = prevMsgCountRef.current;
-    const newCount = aiMessages.length;
-    if (newCount > prevCount) {
-      // 새로 추가된 AI 메시지들만 추출
-      const newMessages = aiMessages.slice(prevCount);
-      const texts = newMessages.map(m => m.content).filter(Boolean) as string[];
-      if (texts.length === 1) {
-        speak(texts[0]);
-      } else if (texts.length > 1) {
-        speakQueue(texts);
+  const triggerNextReveal = useCallback(async () => {
+    if (isRevealingRef.current || ttsRevealQueueRef.current.length === 0) return;
+    isRevealingRef.current = true;
+
+    while (ttsRevealQueueRef.current.length > 0) {
+      const nextMsg = ttsRevealQueueRef.current.shift();
+      if (!nextMsg) break;
+
+      // 1. 화면에 메시지 노출
+      setVisibleMessageIds((prev) => {
+        const next = new Set(prev);
+        next.add(nextMsg.id);
+        return next;
+      });
+
+      // 2. 음성 재생 및 완료 대기
+      if (nextMsg.content && ttsSupported && voiceSettings.enabled) {
+        try {
+          await speak(nextMsg.content);
+        } catch (err) {
+          console.error('[ChatContainer] TTS 재생 실패:', err);
+        }
       }
     }
-    prevMsgCountRef.current = newCount;
-  }, [messages, isLoading, ttsSupported, voiceSettings.enabled, speak, speakQueue]);
+
+    isRevealingRef.current = false;
+  }, [speak, ttsSupported, voiceSettings.enabled]);
+
+  // 1. 초기 메시지 로드 시 visibleMessageIds 설정
+  useEffect(() => {
+    if (isLoading) return;
+    if (visibleMessageIds.size === 0 && messages.length > 0) {
+      setVisibleMessageIds(new Set(messages.map((m) => m.id)));
+    }
+  }, [messages, isLoading, visibleMessageIds.size]);
+
+  // 2. 신규 메시지가 올 때 순차 reveal 제어
+  useEffect(() => {
+    if (isLoading || messages.length === 0) return;
+
+    // 이미 노출 완료된 ID는 스킵
+    const newMessages = messages.filter((m) => !visibleMessageIds.has(m.id));
+    if (newMessages.length === 0) return;
+
+    const hasAiMessage = newMessages.some((m) => m.senderType === 'ai');
+
+    // 음성 비활성화 상태이거나, 신규 메시지 중 AI 메시지가 없다면 즉시 노출
+    if (!voiceSettings.enabled || !hasAiMessage) {
+      setVisibleMessageIds((prev) => {
+        const next = new Set(prev);
+        newMessages.forEach((m) => next.add(m.id));
+        return next;
+      });
+      return;
+    }
+
+    // 음성 활성화 상태이고 신규 AI 메시지가 존재할 때:
+    // 유저 메시지나 이벤트 등은 즉시 노출
+    const nonAiMessages = newMessages.filter((m) => m.senderType !== 'ai');
+    if (nonAiMessages.length > 0) {
+      setVisibleMessageIds((prev) => {
+        const next = new Set(prev);
+        nonAiMessages.forEach((m) => next.add(m.id));
+        return next;
+      });
+    }
+
+    // 신규 AI 메시지들은 큐에 적재하고 순차 reveal 시작
+    const newAiMessages = newMessages.filter((m) => m.senderType === 'ai');
+    if (newAiMessages.length > 0) {
+      ttsRevealQueueRef.current = [...ttsRevealQueueRef.current, ...newAiMessages];
+      triggerNextReveal();
+    }
+  }, [messages, isLoading, voiceSettings.enabled, visibleMessageIds, triggerNextReveal]);
 
   // 페르소나 모드는 설정에서 선택한 값을 그대로 사용 (강제 변경 없음)
 
   useEffect(() => {
-    const aiMsgs = messages.filter(m => m.senderType === 'ai' && m.content);
+    const aiMsgs = visibleMessages.filter(m => m.senderType === 'ai' && m.content);
     const newAiCount = aiMsgs.length;
 
     if (newAiCount > prevAiScrollCountRef.current) {
@@ -338,12 +404,12 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
         // 말풍선이 아직 있음 → 사라진 후에 스크롤하도록 플래그 세팅
         scrollToAiTopPendingRef.current = true;
       }
-    } else if (messages.length > 0 && messages[messages.length - 1].senderType === 'user') {
+    } else if (visibleMessages.length > 0 && visibleMessages[visibleMessages.length - 1].senderType === 'user') {
       // 유저 메시지 전송 직후 → 하단으로 (thinking indicator / 말풍선 표시)
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
     }
     // 스트리밍 업데이트 / panelData / suggestions → 스크롤 위치 유지
-  }, [messages, panelData, suggestions, lunaThoughtBubble]);
+  }, [visibleMessages, panelData, suggestions, lunaThoughtBubble]);
 
   // 말풍선이 사라지는 순간 → 대기 중이던 응답 상단 스크롤 실행
   useEffect(() => {
@@ -361,7 +427,7 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
 
   const emotionScore  = stateResult?.emotionScore ?? null;
   const gradient      = getEmotionGradient(emotionScore);
-  const messageGroups = groupMessagesByDate(messages);
+  const messageGroups = groupMessagesByDate(visibleMessages);
   const personaInfo   = PERSONA_INFO[activePersona];
 
   // 시나리오: 유저 오버라이드 > AI 분류

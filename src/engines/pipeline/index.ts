@@ -20,7 +20,7 @@ import { saveMemory } from '@/engines/human-like/memory-engine';
 import { routeModel } from '@/lib/ai/model-router';
 import { validateResponse } from '@/lib/ai/response-validator';
 import { retrieveMemories, formatMemoriesAsContext } from '@/lib/rag/retriever';
-import { PhaseManager, type PhaseContext, inferConversationMode } from '@/engines/phase-manager';
+import { PhaseManager, type PhaseContext, inferConversationMode, detectAssistIntent } from '@/engines/phase-manager';
 // 🆕 v105: 좌뇌 LLM이 판단한 conversation_mode 를 다음 턴에 활용
 import {
   getLastConversationMode,
@@ -844,17 +844,21 @@ export class CounselingPipeline {
       //   - fallback: primaryIntent + emotion + scenario 휴리스틱
       conversationMode: (() => {
         const cached = getLastConversationMode(ragContext?.sessionId);
-        if (cached) {
-          console.log(`[Pipeline:v105] 💬 좌뇌 캐시 사용: ${cached.mode} (${cached.reason ?? '-'})`);
-          return cached.mode;
+        const baseline = cached
+          ? cached.mode
+          : inferConversationMode(
+              intentResult.primaryIntent,
+              effectiveEmotionScore,
+              stateResult.scenario as unknown as string | undefined,
+            );
+        // 🆕 v122: 추천 작업 구조적 안전망 — 좌뇌/캐시가 CASUAL 이어도 추천 신호 있으면 ASSIST 승격.
+        //   감정상담(COUNSELING)은 절대 안 건드림. (browse 전 "취향 파악" 턴에도 ASSIST 레인 보장.)
+        if (baseline !== 'COUNSELING' && detectAssistIntent(userMessage)) {
+          console.log(`[Pipeline:v122] 🔍 ASSIST 승격 (추천 신호 감지, baseline=${baseline})`);
+          return 'ASSIST';
         }
-        const heuristic = inferConversationMode(
-          intentResult.primaryIntent,
-          effectiveEmotionScore,
-          stateResult.scenario as unknown as string | undefined,
-        );
-        console.log(`[Pipeline:v105] 💬 휴리스틱 결정: ${heuristic} (intent=${intentResult.primaryIntent}, emotion=${effectiveEmotionScore})`);
-        return heuristic;
+        console.log(`[Pipeline:v105] 💬 분기: ${baseline} (cached=${!!cached}, intent=${intentResult.primaryIntent}, emotion=${effectiveEmotionScore})`);
+        return baseline;
       })(),
       hasAskedForAdvice,
       hasGivenPermission: false,
@@ -2159,9 +2163,19 @@ ${researchResult.insight}
               // 🆕 v105: 좌뇌가 conversation_mode 직접 판단했으면 캐시 → 다음 턴 활용
               const lbMode = (chunk.data as any)?.conversation_mode;
               const lbReason = (chunk.data as any)?.conversation_mode_reason;
-              if (lbMode === 'COUNSELING' || lbMode === 'CASUAL' || lbMode === 'ASSIST') {
-                setLastConversationMode(ragContext?.sessionId, lbMode, lbReason);
-                console.log(`[Pipeline:v105] 💾 좌뇌 직접 판단 캐시 저장: ${lbMode} (${lbReason ?? '-'}) → 다음 턴 적용`);
+              // 🆕 v122: 추천 안전망 + 스티키. 좌뇌가 CASUAL 이어도 (a) 이번 메시지에 추천 신호가 있거나
+              //   (b) 이전 턴이 ASSIST 였고 좌뇌가 COUNSELING(감정 전환) 이 아니면 → ASSIST 로 캐시 유지.
+              //   감정상담(좌뇌 COUNSELING)은 그대로 존중 → ASSIST 에서 자연 탈출.
+              const prevMode = getLastConversationMode(ragContext?.sessionId)?.mode;
+              let modeToCache: 'COUNSELING' | 'CASUAL' | 'ASSIST' | undefined =
+                (lbMode === 'COUNSELING' || lbMode === 'CASUAL' || lbMode === 'ASSIST') ? lbMode : undefined;
+              if (lbMode !== 'COUNSELING') {
+                if (detectAssistIntent(userMessage)) modeToCache = 'ASSIST';
+                else if (prevMode === 'ASSIST') modeToCache = 'ASSIST';
+              }
+              if (modeToCache) {
+                setLastConversationMode(ragContext?.sessionId, modeToCache, lbReason);
+                console.log(`[Pipeline:v122] 💾 conversation_mode 캐시: ${modeToCache} (lb=${lbMode ?? '-'}, prev=${prevMode ?? '-'})`);
               }
             } else if (chunk.type === 'thought_bubble') {
               // 🆕 fast-path: prefetched 로 이미 yield 했으면 중복 방지
@@ -2834,14 +2848,19 @@ ${researchResult.insight}
           //   UI/phase 가 현실과 일치하도록 구조적으로 고정. 캐시에도 저장 → 다음 턴 유지.
           const browseFiredThisTurn = !!pendingBrowseSearch;
           const lbMode2 = ((capturedLeftBrainAnalysis as any)?.conversation_mode as 'COUNSELING' | 'CASUAL' | 'ASSIST' | undefined);
-          const effectiveMode: 'COUNSELING' | 'CASUAL' | 'ASSIST' = browseFiredThisTurn
+          // 🆕 v122: effectiveMode — browse 발동 / 추천 신호 / 캐시(스티키) 중 하나라도 ASSIST 면 ASSIST.
+          //   (단 좌뇌 COUNSELING 이면 감정 우선 → ASSIST 승격 안 함.)
+          const assistThisTurn =
+            browseFiredThisTurn ||
+            (lbMode2 !== 'COUNSELING' && (detectAssistIntent(userMessage) || phaseCtx.conversationMode === 'ASSIST'));
+          const effectiveMode: 'COUNSELING' | 'CASUAL' | 'ASSIST' = assistThisTurn
             ? 'ASSIST'
             : (lbMode2 ?? phaseCtx.conversationMode ?? 'CASUAL');
-          if (browseFiredThisTurn) {
-            setLastConversationMode(ragContext?.sessionId, 'ASSIST', 'browse 발동');
+          if (assistThisTurn) {
+            setLastConversationMode(ragContext?.sessionId, 'ASSIST', browseFiredThisTurn ? 'browse 발동' : '추천 신호');
           }
 
-          if (hasNewGateEvents || hasTransitionSignal || hasPacingTransition || browseFiredThisTurn) {
+          if (hasNewGateEvents || hasTransitionSignal || hasPacingTransition || assistThisTurn) {
             const reCheckCtx: PhaseContext = {
               ...phaseCtx,
               currentPhase: newPhaseV2,
@@ -2864,15 +2883,19 @@ ${researchResult.insight}
               consecutiveFrustratedTurns: (capturedWorkingMemory?.consecutive_frustrated_turns as number | undefined) ?? 0,
             };
             let reCheckedPhase = PhaseManager.getCurrentPhase(reCheckCtx);
-            // 🆕 v122: browse 발동 턴이면 browse 라이프사이클 → ASSIST 단계로 직접 매핑.
-            //   (이전 phase 가 casual/HOOK 이어도 ASSIST 레인으로 확실히 진입 보장.)
+            // 🆕 v122: ASSIST 턴이면 ASSIST 레인 단계로 직접 매핑 (casual/HOOK 에 갇히지 않게 보장).
+            //   - browse 발동: 라이프사이클(검색→결정)로 BROWSE/PICK
+            //   - 그 외(취향 파악 단계): 이미 ASSIST phase 면 getAssistNextPhase 결과 유지, 아니면 ASSIST_INTENT
+            const ASSIST_PHASE_SET = ['ASSIST_INTENT', 'ASSIST_BROWSE', 'ASSIST_PICK'];
             if (browseFiredThisTurn) {
               reCheckedPhase = updatedCompletedEvents.includes('BROWSE_STREAM_END')
                 ? 'ASSIST_PICK'
                 : 'ASSIST_BROWSE';
+            } else if (assistThisTurn && !ASSIST_PHASE_SET.includes(reCheckedPhase)) {
+              reCheckedPhase = 'ASSIST_INTENT';
             }
             if (reCheckedPhase !== newPhaseV2) {
-              const reason = browseFiredThisTurn ? 'browse발동(ASSIST)' : hasNewGateEvents ? `게이트이벤트(${updatedCompletedEvents.slice(-1)})` : `AI시그널(${aiPhaseSignal})`;
+              const reason = browseFiredThisTurn ? 'browse발동(ASSIST)' : assistThisTurn ? '추천신호(ASSIST)' : hasNewGateEvents ? `게이트이벤트(${updatedCompletedEvents.slice(-1)})` : `AI시그널(${aiPhaseSignal})`;
               console.log(`[Pipeline] 🔄 Phase 재판단! ${reason} → ${newPhaseV2} → ${reCheckedPhase} (턴 ${turnCount})`);
               newPhaseV2 = reCheckedPhase;
               updatedPhaseStartTurn = turnCount;

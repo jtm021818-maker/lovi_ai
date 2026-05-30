@@ -153,9 +153,6 @@ export function useLunaVoice() {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  // 🆕 v122: TTS 큐 — 루나가 여러 메시지를 보낼 때 순서대로 재생
-  const queueRef = useRef<string[]>([]);
-  const isProcessingRef = useRef(false);
 
   useEffect(() => {
     setSettings(loadSettings());
@@ -181,9 +178,6 @@ export function useLunaVoice() {
   }, []);
 
   const stop = useCallback(() => {
-    // 🆕 v122: 큐도 함께 클리어 — 사용자가 중단하면 대기 중인 것도 전부 취소
-    queueRef.current = [];
-    isProcessingRef.current = false;
     abortRef.current?.abort();
     if (audioRef.current) {
       audioRef.current.pause();
@@ -223,65 +217,37 @@ export function useLunaVoice() {
     [settings.supertonicVoice],
   );
 
-  // 🆕 v122: 큐에서 다음 항목을 꺼내 재생하는 내부 함수
-  const processQueue = useCallback(
-    async () => {
-      if (isProcessingRef.current) return; // 이미 재생 중
-      const next = queueRef.current.shift();
-      if (!next) {
-        setIsSpeaking(false);
-        return;
-      }
-      isProcessingRef.current = true;
-      setIsSpeaking(true);
+  /** 단일 텍스트 재생 — 재생 완료 시 완료되는 Promise 반환 */
+  const speak = useCallback(
+    async (text: string): Promise<void> => {
+      if (!settings.enabled || !text.trim()) return;
+      stop();
+
       const controller = new AbortController();
       abortRef.current = controller;
+      setIsSpeaking(true);
+
       try {
-        await speakViaEdge(next, controller.signal);
+        await speakViaEdge(text, controller.signal);
       } catch (err: any) {
         if (err?.name !== 'AbortError') {
           console.error('[LunaVoice] TTS 재생 오류:', err?.message);
         }
-      }
-      isProcessingRef.current = false;
-      // 다음 큐 항목 처리 (재귀)
-      if (queueRef.current.length > 0) {
-        processQueue();
-      } else {
+        throw err;
+      } finally {
         setIsSpeaking(false);
       }
     },
-    [speakViaEdge],
-  );
-
-  /** 단일 텍스트 재생 — 기존 큐/재생을 취소하고 즉시 재생 */
-  const speak = useCallback(
-    async (text: string) => {
-      if (!settings.enabled || !text.trim()) return;
-      stop();
-      queueRef.current = [text];
-      processQueue();
-    },
-    [settings.enabled, stop, processQueue],
-  );
-
-  /** 🆕 v122: 여러 텍스트를 순서대로 재생 — 루나 멀티 메시지 대응 */
-  const speakQueue = useCallback(
-    (texts: string[]) => {
-      if (!settings.enabled) return;
-      const valid = texts.filter(t => t.trim());
-      if (valid.length === 0) return;
-      stop();
-      queueRef.current = [...valid];
-      processQueue();
-    },
-    [settings.enabled, stop, processQueue],
+    [settings.enabled, stop, speakViaEdge],
   );
 
   const toggle = useCallback(
-    (text: string) => {
-      if (isSpeaking) stop();
-      else speak(text);
+    async (text: string) => {
+      if (isSpeaking) {
+        stop();
+      } else {
+        await speak(text);
+      }
     },
     [isSpeaking, speak, stop],
   );
@@ -339,7 +305,6 @@ export function useLunaVoice() {
 
   return {
     speak,
-    speakQueue,
     stop,
     toggle,
     isSpeaking,
@@ -356,25 +321,39 @@ export function useLunaVoice() {
 // ============================================================
 // Audio playback helper (shared by both engines)
 // ============================================================
-async function playBlob(
+function playBlob(
   blob: Blob,
   audioRef: React.RefObject<HTMLAudioElement | null>,
   setIsSpeaking: (v: boolean) => void,
 ): Promise<void> {
-  const url = URL.createObjectURL(blob);
-  const audio = new Audio(url);
-  audioRef.current = audio;
+  return new Promise<void>((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audioRef.current = audio;
 
-  audio.onended = () => {
-    URL.revokeObjectURL(url);
-    audioRef.current = null;
-    setIsSpeaking(false);
-  };
-  audio.onerror = () => {
-    URL.revokeObjectURL(url);
-    audioRef.current = null;
-    setIsSpeaking(false);
-  };
+    const cleanup = () => {
+      URL.revokeObjectURL(url);
+      if (audioRef.current === audio) {
+        audioRef.current = null;
+      }
+    };
 
-  await audio.play();
+    audio.onended = () => {
+      cleanup();
+      setIsSpeaking(false);
+      resolve();
+    };
+
+    audio.onerror = (e) => {
+      cleanup();
+      setIsSpeaking(false);
+      reject(new Error('Audio playback failed: ' + e));
+    };
+
+    audio.play().catch((err) => {
+      cleanup();
+      setIsSpeaking(false);
+      reject(err);
+    });
+  });
 }
