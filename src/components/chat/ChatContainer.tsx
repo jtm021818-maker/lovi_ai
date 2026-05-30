@@ -200,6 +200,8 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
   const [visibleMessageIds, setVisibleMessageIds] = useState<Set<string>>(new Set());
   const ttsRevealQueueRef = useRef<ChatMessage[]>([]);
   const isRevealingRef = useRef(false);
+  // 큐에 이미 적재된 AI 메시지 ID — 재진입 effect 의 중복 적재 방지 (음성 반복 버그 수정)
+  const enqueuedIdsRef = useRef<Set<string>>(new Set());
 
   // 🆕 v123: 화면에 보일 메시지 필터링
   const visibleMessages = useMemo(() => {
@@ -379,9 +381,14 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
       });
     }
 
-    // 신규 AI 메시지들은 큐에 적재하고 순차 reveal 시작
-    const newAiMessages = newMessages.filter((m) => m.senderType === 'ai');
+    // 신규 AI 메시지들은 큐에 적재하고 순차 reveal 시작.
+    // 아직 visible 되지 않은 큐 대기 메시지가 effect 재진입 시 중복 적재되지 않도록
+    // enqueuedIdsRef 로 한 번만 적재되도록 보장 (음성 반복/꼬임/지연 버그 수정)
+    const newAiMessages = newMessages.filter(
+      (m) => m.senderType === 'ai' && !enqueuedIdsRef.current.has(m.id),
+    );
     if (newAiMessages.length > 0) {
+      newAiMessages.forEach((m) => enqueuedIdsRef.current.add(m.id));
       ttsRevealQueueRef.current = [...ttsRevealQueueRef.current, ...newAiMessages];
       triggerNextReveal();
     }
