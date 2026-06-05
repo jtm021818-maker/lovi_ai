@@ -9,6 +9,7 @@ import { braveWebSearch, formatBraveResultsForPrompt, type BraveWebResult } from
 import { LUNA_SYNTHESIS_PREAMBLE, scrubForbiddenPhrasing } from './luna-tone';
 import type { MovieRecommendationData, MovieCard } from '@/types/engine.types';
 import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
+import { searchYearTag } from '@/lib/utils/current-year';
 
 const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -32,7 +33,7 @@ function buildCacheKey(p: MovieSearchParams): string {
 
 function buildBraveQuery(p: MovieSearchParams): string {
   const prefPart = p.preference ? ` ${p.preference}` : '';
-  return `${p.mood} 영화 드라마 추천${prefPart} 넷플릭스 티빙 2026`;
+  return `${p.mood} 영화 드라마 추천${prefPart} 넷플릭스 티빙 ${searchYearTag(1)}`;
 }
 
 function buildSynthesisPrompt(p: MovieSearchParams, snippets: string): string {

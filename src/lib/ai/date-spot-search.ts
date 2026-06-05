@@ -16,6 +16,7 @@ import { braveWebSearch, formatBraveResultsForPrompt, type BraveWebResult } from
 import { LUNA_SYNTHESIS_PREAMBLE, scrubForbiddenPhrasing } from './luna-tone';
 import type { DateSpotRecommendationData, DateSpot } from '@/types/engine.types';
 import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
+import { searchYearTag } from '@/lib/utils/current-year';
 
 const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -42,7 +43,7 @@ function buildCacheKey(p: DateSpotSearchParams): string {
 /** Brave Search 쿼리 빌더 — 한국어 장소 리뷰 최적화 */
 function buildBraveQuery(p: DateSpotSearchParams): string {
   const reqPart = p.requirements ? ` ${p.requirements}` : '';
-  return `${p.area} ${p.vibe} 데이트${reqPart} 리뷰 2025 2026`;
+  return `${p.area} ${p.vibe} 데이트${reqPart} 리뷰 ${searchYearTag(2)}`;
 }
 
 function buildSynthesisPrompt(p: DateSpotSearchParams, snippets: string): string {

@@ -10,6 +10,7 @@ import { braveWebSearch, formatBraveResultsForPrompt, type BraveWebResult } from
 import { LUNA_SYNTHESIS_PREAMBLE, scrubForbiddenPhrasing } from './luna-tone';
 import type { AnniversaryRecommendationData, AnniversaryIdea } from '@/types/engine.types';
 import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
+import { searchYearTag } from '@/lib/utils/current-year';
 
 const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -37,7 +38,7 @@ function buildCacheKey(p: AnniversarySearchParams): string {
 }
 
 function buildBraveQuery(p: AnniversarySearchParams): string {
-  return `${p.milestone} 이벤트 아이디어 ${p.style} ${p.relation} 2026`;
+  return `${p.milestone} 이벤트 아이디어 ${p.style} ${p.relation} ${searchYearTag(1)}`;
 }
 
 function buildSynthesisPrompt(p: AnniversarySearchParams, snippets: string): string {

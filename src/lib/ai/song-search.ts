@@ -16,6 +16,7 @@ import { braveWebSearch, formatBraveResultsForPrompt, type BraveWebResult } from
 import { LUNA_SYNTHESIS_PREAMBLE, scrubForbiddenPhrasing } from './luna-tone';
 import type { SongRecommendationData, SongCard } from '@/types/engine.types';
 import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
+import { searchYearTag } from '@/lib/utils/current-year';
 
 const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -42,7 +43,7 @@ function buildCacheKey(p: SongSearchParams): string {
 /** Brave Search 쿼리 빌더 — mood/preference 기반 한국어 검색어 */
 function buildBraveQuery(p: SongSearchParams): string {
   const prefPart = p.preference ? ` ${p.preference}` : '';
-  return `${p.mood} 노래 추천${prefPart} 2025 2026`;
+  return `${p.mood} 노래 추천${prefPart} ${searchYearTag(2)}`;
 }
 
 /** Gemini 합성 프롬프트 — v85: 루나 "언니가 골라준" 톤 */

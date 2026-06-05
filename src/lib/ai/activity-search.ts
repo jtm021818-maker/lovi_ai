@@ -9,6 +9,7 @@ import { braveWebSearch, formatBraveResultsForPrompt, type BraveWebResult } from
 import { LUNA_SYNTHESIS_PREAMBLE, scrubForbiddenPhrasing } from './luna-tone';
 import type { ActivityRecommendationData, Activity } from '@/types/engine.types';
 import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
+import { searchYearTag } from '@/lib/utils/current-year';
 
 const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -35,7 +36,7 @@ function buildCacheKey(p: ActivitySearchParams): string {
 }
 
 function buildBraveQuery(p: ActivitySearchParams): string {
-  return `${p.area} ${p.category} 데이트 ${p.vibe} 후기 2026`;
+  return `${p.area} ${p.category} 데이트 ${p.vibe} 후기 ${searchYearTag(1)}`;
 }
 
 function buildSynthesisPrompt(p: ActivitySearchParams, snippets: string): string {

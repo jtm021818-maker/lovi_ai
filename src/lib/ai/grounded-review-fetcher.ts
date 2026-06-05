@@ -11,6 +11,7 @@
 
 import { GoogleGenAI, type GroundingMetadata, type GroundingChunk } from '@google/genai';
 import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
+import { currentYear } from '@/lib/utils/current-year';
 
 const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -77,7 +78,7 @@ export async function fetchGroundedReviews(
 ): Promise<ReviewSnippet[]> {
   const { title, context, max = 3 } = params;
 
-  const prompt = `너는 리뷰 수집 봇. 다음 후보에 대해 2026년 기준 최신 한국어 리뷰/후기를 google search 로 찾아서 **원문에 가까운 짧은 인용 문장** 을 ${max}개 뽑아줘.
+  const prompt = `너는 리뷰 수집 봇. 다음 후보에 대해 ${currentYear()}년 기준 최신 한국어 리뷰/후기를 google search 로 찾아서 **원문에 가까운 짧은 인용 문장** 을 ${max}개 뽑아줘.
 
 후보: ${title}
 ${context ? `맥락: ${context}` : ''}

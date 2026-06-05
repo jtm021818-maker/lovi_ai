@@ -31,9 +31,11 @@ import {
   nextBlockOrder,
   type BrowseSessionState,
   type BrowseCandidateSeed,
+  type AssistDirection,
 } from './browse-session-store';
 import type { BrowseBlock, BrowseSessionMeta } from '@/types/engine.types';
 import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
+import { searchYearTag } from '@/lib/utils/current-year';
 
 const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -176,19 +178,86 @@ ${meta.constraints?.length ? `맥락: ${meta.constraints.join(', ')}` : ''}
 }
 
 // ============================================
+// 1.5 🆕 트렌드 "방향 나침반" — LLM 즉석 생성 (검색 전 대화형 선택)
+//   "뭘 추천할지" 정해진 뒤, 현재연도 기준 어떤 각도로 파볼지 2~3개를 루나가 제안.
+//   기능적 UI 가 아니라 decision_prompt 말풍선으로 "어느 쪽으로 파볼까?" 하고 같이 고름.
+// ============================================
+
+async function generateAssistDirections(
+  meta: BrowseSessionMeta,
+): Promise<{ intro: string; directions: AssistDirection[] }> {
+  const yr = searchYearTag(1);
+  const prompt = `${LUNA_SYNTHESIS_PREAMBLE}
+
+[상황]
+동생(유저)이 "${meta.userAsk}" (${topicLabelOf(meta.topic)}) 를 같이 골라달라고 함.
+${meta.budget ? `예산: ${meta.budget}` : ''}
+${meta.constraints?.length ? `맥락: ${meta.constraints.join(', ')}` : ''}
+
+[할 일]
+${yr}년 기준 요즘 흐름을 떠올려서, 어떤 "방향(각도)" 으로 찾아볼지 2~3개를 추려줘.
+각 방향은 서로 확실히 다른 결 (예: 요즘 트렌드템 / 감성·정성 / 실용·가성비 / 경험·이벤트형 등).
+루나가 동생한테 "이 중에 어느 쪽으로 파볼까?" 하고 고르게 할 거야.
+
+[출력 JSON]
+{
+  "intro": "방향 고르자고 던지는 루나 말풍선 1개, 반말, ~40자",
+  "directions": [
+    { "label": "이모지 1개 + 방향 이름 + 살짝 티저 (~22자)", "queryHint": "검색쿼리에 붙일 핵심 키워드 3~6단어(한글)" }
+  ]
+}
+
+[규칙]
+- 끌리는 순서대로 (제일 추천하는 걸 맨 위).
+- label 은 버튼에 들어갈 짧은 한 줄. intro 설명과 중복 금지.
+- queryHint 에 "추천"/"${yr}" 같은 건 빼 (자동으로 붙음). 방향의 각도만.`;
+
+  try {
+    const r = await gemini.models.generateContent({
+      model: GEMINI_MODELS.FLASH_LITE_GA,
+      config: { maxOutputTokens: 400, temperature: 0.8 },
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    });
+    const j = extractJson(r.text ?? '') as
+      | { intro?: string; directions?: Array<{ label?: string; queryHint?: string }> }
+      | null;
+    const rawDirs = Array.isArray(j?.directions) ? j!.directions! : [];
+    const directions: AssistDirection[] = rawDirs
+      .filter((d) => d && typeof d.label === 'string' && d.label!.trim().length > 0)
+      .slice(0, 3)
+      .map((d, i) => ({
+        value: `dir${i + 1}`,
+        label: clamp(scrubForbiddenPhrasing(d.label!.trim()), 30),
+        queryHint: (typeof d.queryHint === 'string' ? d.queryHint.trim() : '').slice(0, 40),
+      }));
+    if (directions.length === 0) throw new Error('empty');
+    const intro =
+      clamp(scrubForbiddenPhrasing(j?.intro ?? ''), 70) ||
+      '내가 요즘 느낌 몇 개 추려봤는데, 어느 쪽으로 파볼까?';
+    return { intro, directions };
+  } catch {
+    // 실패 → 빈 배열 반환. 호출부가 방향단계 스킵하고 기존 검색 직행 (graceful).
+    return { intro: '', directions: [] };
+  }
+}
+
+// ============================================
 // 2. 쿼리 확장 (Flash-Lite)
 // ============================================
 
-async function expandQueries(meta: BrowseSessionMeta): Promise<string[]> {
-  const prompt = `2026년 기준 한국 웹에서 아래 유저 요청에 맞는 좋은 검색 쿼리 2~3개를 뽑아줘.
+async function expandQueries(meta: BrowseSessionMeta, direction?: AssistDirection): Promise<string[]> {
+  const yr1 = searchYearTag(1);   // "2026"
+  const yr2 = searchYearTag(2);   // "2025 2026"
+  const dirLine = direction ? `\n방향: ${direction.queryHint || direction.label}` : '';
+  const prompt = `${yr1}년 기준 한국 웹에서 아래 유저 요청에 맞는 좋은 검색 쿼리 2~3개를 뽑아줘.
 
 주제: ${topicLabelOf(meta.topic)}
-요청: ${meta.userAsk}
+요청: ${meta.userAsk}${dirLine}
 ${meta.budget ? `예산: ${meta.budget}` : ''}
 ${meta.constraints?.length ? `맥락: ${meta.constraints.join(', ')}` : ''}
 
 [출력] 순수 JSON 배열만. 예) ["쿼리1", "쿼리2", "쿼리3"]
-- 각 쿼리는 한글, 2026/2025 같은 연도 태그 포함.
+- 각 쿼리는 한글, ${yr2} 같은 연도 태그 포함.${direction ? '\n- 위 "방향" 의 각도를 반드시 반영.' : ''}
 - 서로 각도가 다르게 (가격 / 감성 / 후기 등).`;
 
   try {
@@ -206,10 +275,11 @@ ${meta.constraints?.length ? `맥락: ${meta.constraints.join(', ')}` : ''}
     if (qs.length === 0) throw new Error('empty');
     return qs;
   } catch {
-    const base = `${meta.userAsk} ${topicLabelOf(meta.topic)}`;
+    const dirKw = direction?.queryHint ? ` ${direction.queryHint}` : '';
+    const base = `${meta.userAsk} ${topicLabelOf(meta.topic)}${dirKw}`;
     return [
-      `${base} 추천 ${meta.budget ?? ''} 2026 후기`.trim().replace(/\s+/g, ' '),
-      `${base} 리뷰 2026`.trim().replace(/\s+/g, ' '),
+      `${base} 추천 ${meta.budget ?? ''} ${yr1} 후기`.trim().replace(/\s+/g, ' '),
+      `${base} 리뷰 ${yr1}`.trim().replace(/\s+/g, ' '),
     ];
   }
 }
@@ -547,7 +617,7 @@ export async function startBrowseAgent(
     createdAt: Date.now(),
   };
 
-  const state = createSession(meta, 5);
+  createSession(meta, 5);
   const emits: AgentBlockEmit[] = [];
 
   // 1. 오프닝
@@ -556,33 +626,73 @@ export async function startBrowseAgent(
     emits.push({ block: b, order: nextBlockOrder(meta.sessionId) });
   }
 
-  // 2. 쿼리 확장 + Brave 검색
-  updateSession(meta.sessionId, { stage: 'searching' });
-  const queries = await expandQueries(meta);
+  // 1.5 🆕 트렌드 방향 나침반 — 검색 전, "어느 쪽으로 파볼까?" 대화형 선택
+  const { intro, directions } = await generateAssistDirections(meta);
+  if (directions.length > 0) {
+    const promptId = `dir-${Date.now().toString(36)}`;
+    emits.push({
+      block: { type: 'luna_text', text: intro },
+      order: nextBlockOrder(meta.sessionId),
+    });
+    emits.push({
+      block: {
+        type: 'decision_prompt',
+        promptId,
+        options: [
+          ...directions.map((d, i) => ({
+            label: d.label,
+            value: d.value,
+            style: (i === 0 ? 'primary' : 'neutral') as 'primary' | 'neutral',
+          })),
+          { label: '🎲 너가 골라줘', value: 'auto', style: 'neutral' as const },
+        ],
+      },
+      order: nextBlockOrder(meta.sessionId),
+    });
+    updateSession(meta.sessionId, {
+      directions,
+      awaitingDecision: { promptId, context: 'trend_direction' },
+      stage: 'choosing_direction',
+    });
+    // 유저가 방향 고를 때까지 대기 (decision_prompt 에서 큐 자동 pause)
+    return { blocks: emits, ended: false };
+  }
+
+  // 방향 생성 실패 → 기존 검색 직행 (graceful)
+  const run = await runSearchAndFirstCandidate(meta.sessionId);
+  return { blocks: [...emits, ...run.blocks], ended: run.ended, endPayload: run.endPayload };
+}
+
+// ============================================
+// 7.5 🆕 쿼리 확장 + Brave 검색 + 첫 후보 — 방향 선택 후/직행 공용
+// ============================================
+
+async function runSearchAndFirstCandidate(
+  sessionId: string,
+  direction?: AssistDirection,
+): Promise<AgentRunResult> {
+  const state = getSession(sessionId);
+  if (!state) return { blocks: [], ended: true, endPayload: { shortlist: [], lunaFinal: '' } };
+
+  const emits: AgentBlockEmit[] = [];
+
+  updateSession(sessionId, { stage: 'searching' });
+  const queries = await expandQueries(state.meta, direction);
   const pool = await buildCandidatePool(queries, 10);
-  updateSession(meta.sessionId, { pool, stage: 'per_candidate' });
+  updateSession(sessionId, { pool, stage: 'per_candidate' });
 
   if (pool.length === 0) {
     const fallback = '음 이번엔 깊게 못 찾았어. 조건을 살짝 바꿔볼래?';
     emits.push({
       block: { type: 'luna_text', text: fallback },
-      order: nextBlockOrder(meta.sessionId),
+      order: nextBlockOrder(sessionId),
     });
-    return {
-      blocks: emits,
-      ended: true,
-      endPayload: { shortlist: [], lunaFinal: fallback },
-    };
+    return { blocks: emits, ended: true, endPayload: { shortlist: [], lunaFinal: fallback } };
   }
 
-  // 3. 첫 후보 진행
-  const more = await emitNextCandidate(meta.sessionId);
+  const more = await emitNextCandidate(sessionId);
   emits.push(...more.blocks);
-  return {
-    blocks: emits,
-    ended: more.ended,
-    endPayload: more.endPayload,
-  };
+  return { blocks: emits, ended: more.ended, endPayload: more.endPayload };
 }
 
 // ============================================
@@ -672,6 +782,34 @@ export async function resumeBrowseAgent(
   if (!state.awaitingDecision || state.awaitingDecision.promptId !== decision.promptId) {
     console.log(`[BrowseAgent] ⏭️ stale decision id=${decision.promptId} (awaiting=${state.awaitingDecision?.promptId})`);
     return { blocks: [], ended: false };
+  }
+
+  // 🆕 트렌드 방향 선택 resume — 고른 방향(또는 자동)으로 깊은 둘러보기 시작
+  if (state.awaitingDecision.context === 'trend_direction') {
+    const dirs = state.directions ?? [];
+    let chosen: AssistDirection | undefined;
+    let pickMsg = '';
+    if (decision.value === 'auto') {
+      chosen = dirs[0];
+      pickMsg = chosen
+        ? `오케이, 그럼 내가 제일 끌리는 "${chosen.label}" 쪽으로 가볼게!`
+        : '오케이, 내가 골라서 가볼게!';
+    } else {
+      chosen = dirs.find((d) => d.value === decision.value);
+      pickMsg = chosen ? `좋아, "${chosen.label}" 방향으로 찾아볼게!` : '';
+    }
+    updateSession(sessionId, {
+      awaitingDecision: undefined,
+      chosenDirection: chosen,
+      directions: undefined,
+    });
+    const dirEmits: AgentBlockEmit[] = [];
+    if (pickMsg) {
+      dirEmits.push({ block: { type: 'luna_text', text: pickMsg }, order: nextBlockOrder(sessionId) });
+    }
+    console.log(`[BrowseAgent] 🧭 방향 선택: ${decision.value} → "${chosen?.label ?? '-'}" (hint="${chosen?.queryHint ?? ''}")`);
+    const run = await runSearchAndFirstCandidate(sessionId, chosen);
+    return { blocks: [...dirEmits, ...run.blocks], ended: run.ended, endPayload: run.endPayload };
   }
 
   const emits: AgentBlockEmit[] = [];

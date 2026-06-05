@@ -30,11 +30,22 @@ export interface BrowseCandidateSeed {
 
 export type BrowseSessionStage =
   | 'opening'         // 오프닝 멘트 전송 중
+  | 'choosing_direction' // 🆕 트렌드 방향 선택 대기 (검색 전)
   | 'searching'       // Brave + query expand 중
   | 'per_candidate'   // 후보별 judge 루프 진행 중
   | 'awaiting_user'   // decision_prompt 후 유저 입력 대기
   | 'closing'         // shortlist 기반 마무리 멘트 중
   | 'ended';
+
+/** 🆕 트렌드 "방향 나침반" — LLM 이 즉석 생성한 검색 방향 1개 */
+export interface AssistDirection {
+  /** decision 버튼 value (방향 식별자) */
+  value: string;
+  /** 버튼 라벨 (이모지 + 한 줄 티저) */
+  label: string;
+  /** 검색 쿼리에 붙일 각도 힌트 */
+  queryHint: string;
+}
 
 export interface BrowseSessionState {
   meta: BrowseSessionMeta;
@@ -45,10 +56,14 @@ export interface BrowseSessionState {
   currentCandidate?: BrowseCandidateSeed;
   awaitingDecision?: {
     promptId: string;
-    /** 어떤 상황에서의 decision 인지 — per_candidate / closing */
-    context: 'per_candidate' | 'closing';
+    /** 어떤 상황에서의 decision 인지 — trend_direction / per_candidate / closing */
+    context: 'trend_direction' | 'per_candidate' | 'closing';
     candidateId?: string;
   };
+  /** 🆕 트렌드 방향 선택 대기 중 제시한 방향 목록 (resume 시 value 룩업용) */
+  directions?: AssistDirection[];
+  /** 🆕 유저가 고른(또는 자동 채택된) 검색 방향 — expandQueries 쿼리 정제에 사용 */
+  chosenDirection?: AssistDirection;
   stage: BrowseSessionStage;
   /** 블록 순번 카운터 — 클라이언트 정렬용 */
   blockOrder: number;

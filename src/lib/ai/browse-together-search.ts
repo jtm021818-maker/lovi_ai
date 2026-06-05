@@ -17,6 +17,7 @@ import {
   scrubForbiddenPhrasing,
 } from './luna-tone';
 import { GEMINI_MODELS } from '@/lib/ai/provider-registry';
+import { searchYearTag } from '@/lib/utils/current-year';
 import type {
   BrowseSessionData,
   BrowseCandidate,
@@ -50,20 +51,21 @@ function buildCacheKey(p: BrowseSearchParams): string {
 /** topic 별 Brave 쿼리 빌더 */
 function buildBraveQuery(p: BrowseSearchParams): string {
   const extra = [p.context, p.budget].filter(Boolean).join(' ');
+  const yr = searchYearTag(1);
   switch (p.topic) {
     case 'gift':
-      return `${p.query} 선물 추천 ${extra} 2026`;
+      return `${p.query} 선물 추천 ${extra} ${yr}`;
     case 'date-spot':
-      return `${p.query} 데이트 장소 ${extra} 리뷰 2026`;
+      return `${p.query} 데이트 장소 ${extra} 리뷰 ${yr}`;
     case 'activity':
-      return `${p.query} 체험 데이트 ${extra} 후기 2026`;
+      return `${p.query} 체험 데이트 ${extra} 후기 ${yr}`;
     case 'movie':
-      return `${p.query} 영화 드라마 추천 ${extra} 2026`;
+      return `${p.query} 영화 드라마 추천 ${extra} ${yr}`;
     case 'anniversary':
-      return `${p.query} 기념일 이벤트 아이디어 ${extra} 2026`;
+      return `${p.query} 기념일 이벤트 아이디어 ${extra} ${yr}`;
     case 'general':
     default:
-      return `${p.query} ${extra} 추천 2026`.trim();
+      return `${p.query} ${extra} 추천 ${yr}`.trim();
   }
 }
 
