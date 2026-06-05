@@ -114,67 +114,12 @@ function getAssistNextPhase(ctx: PhaseContext, current: ConversationPhaseV2): Co
 }
 
 // ============================================
-// 🆕 v122: 추천/검색 의도 구조적 안전망 (detectAssistIntent)
-//   원칙: conversation_mode 판단은 좌뇌 LLM 이 1순위. 단 LLM 이 "선물 찾는중"처럼
-//   가벼운 말투의 추천 "작업"을 CASUAL 로 자주 놓침 → 이 감지기로 받쳐줌(승격 전용).
-//   ⚠️ 감정상담(COUNSELING)은 절대 건드리지 않음. 호출부에서 baseline!=='COUNSELING' 일 때만 사용.
-//   브라우징 활성화(browse 발동)와 함께 ASSIST 레인의 구조적 트리거 역할.
+// 🔧 LLM-분기: conversation_mode(COUNSELING/CASUAL/ASSIST) 는 좌뇌 Gemini 가 100% 판단한다.
+//   기존의 정규식 안전망(detectAssistIntent/ASSIST_INTENT_RE)과 휴리스틱(inferConversationMode)은
+//   맥락 구분 실패(예: "선물 뭐할지 고백하려구")가 잦아 제거됨. ([[feedback_llm_judgment]])
+//   파이프라인이 프리페치된 좌뇌 conversation_mode 를 phaseCtx.conversationMode 로 주입한다.
+//   실패 시 폴백: 이전 턴 캐시 → 없으면 COUNSELING (파이프라인에서 처리).
 // ============================================
-const ASSIST_INTENT_RE = new RegExp(
-  [
-    '선물\\s*(뭐|추천|사|골라|찾|고르|준비)',                      // 선물+동작 ("선물 받았어" 제외)
-    '추천\\s*(좀|해|받|해줘|해주)?',                              // 추천해줘 / 추천 좀
-    '(기념일|\\d+\\s*주년|주년|프로포즈|발렌타인|화이트\\s*데이|빼빼로|크리스마스|깜짝\\s*이벤트)', // 기념일류
-    '(데이트|놀러|갈\\s*만한|갈\\s*곳|갈\\s*데)\\s*\\S{0,6}\\s*(어디|장소|코스|추천|뭐|갈까|좋|할까)', // 데이트 장소
-    '(영화|드라마|넷플|왓챠|티빙|디즈니|볼\\s*만한)\\s*\\S{0,6}\\s*(추천|뭐|볼까|없|좋|골라)',          // 볼거리
-    '(노래|음악|플레이리스트)\\s*\\S{0,6}\\s*(추천|뭐|들을|없|좋|골라)',                                // 음악
-    '뭐\\s*(사줄|사\\s*줄|줄까|선물|사지|살까)',                  // 뭐 사지/뭐 줄까/뭐 선물 (식사 "뭐 사 먹지" 류 제외 지향)
-    '어디\\s*(갈까|갈\\s*데|갈\\s*만한|가면\\s*좋|놀러)',          // 어디 갈까/놀러 (계획 맥락)
-    '골라\\s*(줘|봐|보자|줄래)',                                  // 골라줘/같이 골라보자
-  ].join('|').normalize('NFC'),  // 🆕 Hangul NFC 정규화 — 입력과 매칭 정규형 일치
-);
-
-/** 추천/검색 "작업" 신호 감지 (구조적 안전망 — 승격 전용). NFC 정규화로 한글 불일치 방지. */
-export function detectAssistIntent(text: string | undefined | null): boolean {
-  if (!text) return false;
-  return ASSIST_INTENT_RE.test(text.normalize('NFC'));
-}
-
-// ============================================
-// 🆕 v105: 일상/상담 분기 판단 (LLM이 분류한 primaryIntent + emotion 휴리스틱)
-// ============================================
-/**
- * 좌뇌 LLM이 이미 분류한 primaryIntent 와 emotionScore, scenario 로
- * COUNSELING vs CASUAL 판단. 좌뇌 스키마 변경 없이 즉시 작동.
- *
- * - VENTING / SEEKING_ADVICE / EXPRESSING_AMBIVALENCE / INSIGHT_EXPRESSION → COUNSELING
- * - emotionScore <= -3 또는 명확한 시나리오 있음 → COUNSELING
- * - 그 외 (MINIMAL_RESPONSE, RESISTANCE, STORYTELLING+가벼움) → CASUAL
- */
-export function inferConversationMode(
-  intent: ClientIntent | undefined,
-  emotionScore: number | undefined,
-  scenario: string | undefined | null,
-): 'COUNSELING' | 'CASUAL' | 'ASSIST' {
-  // 🆕 v121: ASSIST(추천/검색) 는 좌뇌 LLM 이 conversation_mode 로 직접 판단 → 캐시 경로로 들어옴.
-  //   휴리스틱 fallback 은 키워드 매칭을 피하기 위해 ASSIST 를 자체 판정하지 않음 (COUNSELING/CASUAL 만).
-  //   ([[feedback_llm_judgment]] — 맥락 판단은 LLM 우선, 코드는 구조적 안전망만)
-  // 강한 상담 의도 신호
-  if (intent === 'VENTING' || intent === 'SEEKING_ADVICE' ||
-      intent === 'EXPRESSING_AMBIVALENCE' || intent === 'INSIGHT_EXPRESSION') {
-    return 'COUNSELING';
-  }
-  // 강한 감정 → 상담 모드
-  if (typeof emotionScore === 'number' && emotionScore <= -3) {
-    return 'COUNSELING';
-  }
-  // 명확한 시나리오 (GENERAL 외) → 상담 모드
-  if (scenario && scenario !== 'GENERAL' && scenario !== 'UNKNOWN') {
-    return 'COUNSELING';
-  }
-  // 기본: 가벼운 대화 모드
-  return 'CASUAL';
-}
 
 // ============================================
 // 🆕 v73: Phase 별 필수 정보 카드 — context-assembler.ts 와 동기 유지
@@ -529,7 +474,7 @@ export class PhaseManager {
    * ✅ 좌뇌 pacing_meta 가 모든 페이싱 판단 책임
    */
   static getCurrentPhase(ctx: PhaseContext): ConversationPhaseV2 {
-    const { turnCount, currentPhase, phaseStartTurn, completedEvents, persona, phaseSignal, pacingMeta, consecutiveFrustratedTurns, filledCards, consecutiveReadyTurns, activeMode, primaryIntent, currentEmotionScore, conversationMode } = ctx;
+    const { turnCount, currentPhase, phaseStartTurn, completedEvents, persona, phaseSignal, pacingMeta, consecutiveFrustratedTurns, filledCards, consecutiveReadyTurns, activeMode, conversationMode } = ctx;
 
     // 🆕 v81: BRIDGE 몰입 모드 활성 중이면 Phase 전환 완전 bypass
     //   유저가 roleplay/draft/panel 등 진행 중 → Luna 가 [OPERATION_COMPLETE] 까지 모드 유지
@@ -539,32 +484,53 @@ export class PhaseManager {
       return currentPhase;
     }
 
-    // 🆕 v105/v116: 일상 분기 시스템
-    //   HOOK 1턴 후 conversationMode 판단 → CASUAL 이면 GREET 진입 (v116: 5-phase 진입점)
-    //   일상 phase 중 강한 감정/상담 의도 감지 시 MIRROR 로 자동 escape
+    // 🔧 LLM-분기: conversationMode 는 좌뇌 Gemini 가 정한 현재 턴 레인.
+    //   정책(사용자 확정): ASSIST/COUNSELING 으로만 "승격" 허용 — 비-CASUAL 레인에서 CASUAL 로
+    //   자동 다운그레이드하지 않는다(대화를 가볍게 깎아내리지 않음). 폴백 없으면 COUNSELING.
+    const llmMode: 'COUNSELING' | 'CASUAL' | 'ASSIST' = conversationMode ?? 'COUNSELING';
+
+    // ① HOOK: 턴2부터 분기 (턴1은 '듣기(HOOK)' 유지 — 사용자 정책)
     if (currentPhase === 'HOOK' && turnCount >= 2) {
-      const mode = conversationMode ?? inferConversationMode(primaryIntent, currentEmotionScore, undefined);
-      // 🆕 v122: ASSIST(추천/검색) → 전용 레인(ASSIST_INTENT) 진입. 상담/일상과 나란한 3번째 레인.
-      if (mode === 'ASSIST') {
-        console.log(`[PhaseManager:v122] 🔍 HOOK → ASSIST_INTENT (intent=${primaryIntent}, emotion=${currentEmotionScore})`);
+      if (llmMode === 'ASSIST') {
+        console.log(`[PhaseManager:LLM분기] 🔍 HOOK → ASSIST_INTENT`);
         return 'ASSIST_INTENT';
       }
-      // 🆕 v121: CASUAL → 경량 일상 레인(GREET).
-      if (mode === 'CASUAL') {
-        console.log(`[PhaseManager:v116] 💌 HOOK → GREET (intent=${primaryIntent}, emotion=${currentEmotionScore})`);
+      if (llmMode === 'CASUAL') {
+        console.log(`[PhaseManager:LLM분기] 💌 HOOK → GREET`);
         return 'GREET';
       }
+      // COUNSELING → 상담 레인 진행 (아래 fall-through)
     }
 
-    // 🆕 v122: ASSIST 3단계 레인 흐름 처리 (browse 라이프사이클 기반 전진)
+    // ② ASSIST 레인 중: COUNSELING 으로만 승격(→MIRROR). CASUAL 다운그레이드는 무시(ASSIST 유지).
     if (isAssistPhase(currentPhase)) {
+      if (llmMode === 'COUNSELING') {
+        console.log(`[PhaseManager:LLM분기] 💕 ASSIST → MIRROR (상담 승격)`);
+        return 'MIRROR';
+      }
       return getAssistNextPhase(ctx, currentPhase);
     }
 
-    // 🆕 v116: 일상 5-Phase 흐름 처리 (DAILY_CHAT 호환 alias 포함)
+    // ③ CASUAL 레인 중: ASSIST/COUNSELING 으로 승격 허용. 그 외엔 일상 5-phase 진행.
+    //   (이게 없으면 getCasualNextPhase 가 conversationMode 를 무시해 "선물 뭐 사지"가 일상에 갇힘.)
     if (isCasualPhaseInternal(currentPhase)) {
+      if (llmMode === 'ASSIST') {
+        console.log(`[PhaseManager:LLM분기] 🔍 일상 → ASSIST_INTENT (추천 승격, from ${currentPhase})`);
+        return 'ASSIST_INTENT';
+      }
+      if (llmMode === 'COUNSELING') {
+        console.log(`[PhaseManager:LLM분기] 💕 일상 → MIRROR (상담 승격, from ${currentPhase})`);
+        return 'MIRROR';
+      }
       const normalized = currentPhase === 'DAILY_CHAT' ? 'BANTER' : currentPhase;
       return getCasualNextPhase(ctx, normalized);
+    }
+
+    // ④ 상담 레인: MIRROR(초기 상담)에서 LLM 이 작업 의도로 판단하면 ASSIST 로 승격 허용.
+    //   BRIDGE/SOLVE/EMPOWER 는 게이트 기반 깊은 단계라 LLM 모드로 흔들지 않음(아래 게이트 로직 유지).
+    if (currentPhase === 'MIRROR' && llmMode === 'ASSIST') {
+      console.log(`[PhaseManager:LLM분기] 🔍 MIRROR → ASSIST_INTENT (추천 승격)`);
+      return 'ASSIST_INTENT';
     }
 
     const currentIdx = PHASE_ORDER.indexOf(currentPhase);

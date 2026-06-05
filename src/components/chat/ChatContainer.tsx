@@ -204,11 +204,21 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
   const enqueuedIdsRef = useRef<Set<string>>(new Set());
 
   // 🆕 v123: 화면에 보일 메시지 필터링
+  // 🔧 fix: 로딩 중 전체 블랭크(`if (isLoading) return []`) 제거.
+  //   기존 코드는 응답 대기(isLoading)마다 이전 대화 전체를 빈 화면으로 만들고,
+  //   응답이 끝나야 다시 보이는 회귀를 유발했음.
+  //   이제 "음성 순차 노출 대기 중인 AI 메시지"만 숨기고(=visibleMessageIds 에 들어오면 노출),
+  //   이전 대화·방금 보낸 유저 메시지·스트리밍 버블은 로딩 중에도 그대로 유지한다.
   const visibleMessages = useMemo(() => {
-    if (isLoading) return [];
     if (visibleMessageIds.size === 0) return messages; // 초기화 전 폴백
-    return messages.filter((m) => visibleMessageIds.has(m.id));
-  }, [messages, visibleMessageIds, isLoading]);
+    return messages.filter((m) => {
+      if (visibleMessageIds.has(m.id)) return true;
+      // 아직 reveal 되지 않은 메시지: 음성 ON + AI 메시지만 순차 노출 대상 → 숨김.
+      // 그 외(유저 메시지, 음성 OFF 시 모든 메시지)는 즉시 노출.
+      const pendingTtsReveal = voiceSettings.enabled && m.senderType === 'ai';
+      return !pendingTtsReveal;
+    });
+  }, [messages, visibleMessageIds, voiceSettings.enabled]);
 
   // 🆕 v79: 마지막 AI 메시지 ID (bubble FX 매칭용)
   const lastAiMsgId = useMemo(() => {
@@ -1452,17 +1462,20 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
           )}
         </div>
 
-        {/* v119: 우상단 플로팅 — 가방(인벤토리) */}
-        <div className="fixed top-3 right-3 z-[8000] flex flex-col gap-1.5 pointer-events-none">
-          <button
-            onClick={() => setShowBag(true)}
-            className="pointer-events-auto w-9 h-9 rounded-full bg-white/80 backdrop-blur-md border border-[#D5C2A5]/60 shadow-sm flex items-center justify-center active:scale-95 transition-transform"
-            title="내 가방"
-            aria-label="가방 열기"
-          >
-            <span className="text-base">🎒</span>
-          </button>
-        </div>
+        {/* v119: 우상단 플로팅 — 가방(인벤토리). 가방 시트가 열려 있으면 숨김
+            (열린 동안 시트의 닫기 버튼을 가리지 않도록 — 나가기 버튼 클릭 가로채기 방지) */}
+        {!showBag && (
+          <div className="fixed top-3 right-3 z-[8000] flex flex-col gap-1.5 pointer-events-none">
+            <button
+              onClick={() => setShowBag(true)}
+              className="pointer-events-auto w-9 h-9 rounded-full bg-white/80 backdrop-blur-md border border-[#D5C2A5]/60 shadow-sm flex items-center justify-center active:scale-95 transition-transform"
+              title="내 가방"
+              aria-label="가방 열기"
+            >
+              <span className="text-base">🎒</span>
+            </button>
+          </div>
+        )}
 
         <BagSheet open={showBag} onClose={() => setShowBag(false)} />
     </div>

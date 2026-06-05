@@ -315,10 +315,17 @@ function GridView(props: {
           )}
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full flex items-center justify-center active:scale-95 transition-transform"
-            style={{ background: 'rgba(0,0,0,0.06)', color: '#7c5738' }}
+            aria-label="가방 닫기"
+            className="flex items-center gap-1.5 h-8 pl-3 pr-3.5 rounded-full font-black text-[11.5px] active:scale-95 transition-transform"
+            style={{
+              background: 'linear-gradient(135deg, #ffffff 0%, #fff1e0 100%)',
+              border: '1.5px solid rgba(212,175,55,0.45)',
+              color: '#7c5738',
+              boxShadow: '0 2px 10px rgba(180,120,60,0.18)',
+            }}
           >
-            ✕
+            <span className="text-[12px] leading-none">✕</span>
+            <span>나가기</span>
           </button>
         </div>
       </div>
@@ -694,10 +701,17 @@ function DetailView({
           </button>
           <button
             onClick={onClose}
-            className="w-9 h-9 rounded-full flex items-center justify-center active:scale-95 transition-transform"
-            style={{ background: 'rgba(0,0,0,0.06)', color: '#7c5738' }}
+            aria-label="가방 닫기"
+            className="flex items-center gap-1.5 h-9 pl-3 pr-3.5 rounded-full font-black text-[11.5px] active:scale-95 transition-transform"
+            style={{
+              background: 'linear-gradient(135deg, #ffffff 0%, #fff1e0 100%)',
+              border: '1.5px solid rgba(212,175,55,0.45)',
+              color: '#7c5738',
+              boxShadow: '0 2px 10px rgba(180,120,60,0.18)',
+            }}
           >
-            ✕
+            <span className="text-[12px] leading-none">✕</span>
+            <span>나가기</span>
           </button>
         </div>
       </div>

@@ -860,6 +860,11 @@ export function useChat(sessionId: string): UseChatReturn {
       setLunaThoughtBubble(null);
       thoughtBubbleShownAt.current = null;
 
+      // 🛡️ 딥리서치/연극 로딩 칩 잔류 방지 — 스트림이 'started' 만 보내고
+      //   'done' 없이 끝나거나(에러/abort/파이프라인 예외) 하면 '대본 쓰는 중…' 칩이
+      //   하단에 영구히 남는 버그가 있었다. 스트림 종료 시 항상 정리한다.
+      setThinkingDeep(null);
+
       // 빈 AI 메시지 방어
       setMessages((prev) =>
         prev.map((m) =>

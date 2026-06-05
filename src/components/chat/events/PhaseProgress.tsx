@@ -384,24 +384,34 @@ function usePhaseTransition(currentPhase: ConversationPhaseV2 | null) {
   });
 
   useEffect(() => {
-    if (prevPhase === 'HOOK' && currentPhase && currentPhase !== 'HOOK') {
-      const direction: BranchDirection = branchDirectionOf(currentPhase);
-      const ts = Date.now();
-      setBranchEvent({ direction, timestamp: ts });
-      setBranchedTo(direction);
-      const timer = setTimeout(() => {
-        setBranchEvent((prev) => (prev && prev.timestamp === ts ? null : prev));
-      }, 1700);
-      setPrevPhase(currentPhase);
-      return () => clearTimeout(timer);
-    }
     // HOOK 으로 되돌아가면 배지/이벤트 리셋
-    if (currentPhase === 'HOOK' && prevPhase !== 'HOOK') {
-      setBranchedTo(null);
-      setBranchEvent(null);
+    if (currentPhase === 'HOOK') {
+      if (branchedTo !== null) { setBranchedTo(null); setBranchEvent(null); }
+      setPrevPhase(currentPhase);
+      return;
+    }
+    if (!currentPhase) { setPrevPhase(currentPhase); return; }
+
+    // 🔧 LLM-분기: 배지는 현재 phase 의 분기 방향에서 파생.
+    //   최초 분기(HOOK→X)뿐 아니라 레인 간 승격(일상→추천/상담 등 X→Y)도 배지를 갱신해야 함.
+    //   (기존엔 HOOK 기점 전환만 갱신해서 레인 간 승격 시 배지가 stale 됐음.)
+    const direction: BranchDirection = branchDirectionOf(currentPhase);
+    if (direction !== branchedTo) {
+      const cameFromHook = prevPhase === 'HOOK' || prevPhase === null;
+      setBranchedTo(direction);
+      // 셀러브레이션 오버레이는 최초 분기(HOOK→X)에만. 레인 간 승격은 배지/테마만 부드럽게 교체.
+      if (cameFromHook) {
+        const ts = Date.now();
+        setBranchEvent({ direction, timestamp: ts });
+        const timer = setTimeout(() => {
+          setBranchEvent((prev) => (prev && prev.timestamp === ts ? null : prev));
+        }, 1700);
+        setPrevPhase(currentPhase);
+        return () => clearTimeout(timer);
+      }
     }
     setPrevPhase(currentPhase);
-  }, [currentPhase, prevPhase]);
+  }, [currentPhase, prevPhase, branchedTo]);
 
   return { branchEvent, branchedTo };
 }

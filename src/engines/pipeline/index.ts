@@ -20,7 +20,7 @@ import { saveMemory } from '@/engines/human-like/memory-engine';
 import { routeModel } from '@/lib/ai/model-router';
 import { validateResponse } from '@/lib/ai/response-validator';
 import { retrieveMemories, formatMemoriesAsContext } from '@/lib/rag/retriever';
-import { PhaseManager, type PhaseContext, inferConversationMode, detectAssistIntent } from '@/engines/phase-manager';
+import { PhaseManager, type PhaseContext } from '@/engines/phase-manager';
 // 🆕 v105: 좌뇌 LLM이 판단한 conversation_mode 를 다음 턴에 활용
 import {
   getLastConversationMode,
@@ -809,6 +809,23 @@ export class CounselingPipeline {
 
     console.log(`[Pipeline] 📚 해결책: ${solutionMatches.length}개 매칭 | readiness: ${readinessScore}/100`);
 
+    // 🔧 LLM-분기: 좌뇌 Gemini 프리페치를 phase 결정 "전에" await → 현재 턴 conversation_mode 확보.
+    //   기존엔 phase 가 좌뇌 결과 전에 정규식/휴리스틱으로 결정되고 좌뇌 판단은 다음 턴 캐시로만 갔음.
+    //   우뇌(ACE v5) 응답도 동일 프리페치를 await 하므로(아래 dual-brain 진입부) 실제 응답 지연 ≈ 0.
+    //   (아래 dual-brain 진입부는 이 변수를 재사용 — settled promise.)
+    const prefetchedBrain = await fastLeftBrainPromise;
+    const llmConversationMode = ((prefetchedBrain as any)?.leftBrainAnalysis?.conversation_mode) as
+      'COUNSELING' | 'CASUAL' | 'ASSIST' | undefined;
+    if (llmConversationMode) {
+      // 다음 턴 폴백용으로 즉시 캐시 (스트림 중 에러가 나도 보존)
+      setLastConversationMode(
+        ragContext?.sessionId,
+        llmConversationMode,
+        (prefetchedBrain as any)?.leftBrainAnalysis?.conversation_mode_reason,
+      );
+    }
+    console.log(`[Pipeline:LLM분기] 🧠 좌뇌 conversation_mode=${llmConversationMode ?? '(없음→캐시/COUNSELING)'}`);
+
     // 🆕 v8: PhaseManager로 구간 결정
     const prevPhaseV2 = currentPhaseV2 ?? PhaseManager.getInitialPhase();
     const phaseCtx: PhaseContext = {
@@ -839,27 +856,11 @@ export class CounselingPipeline {
         return newStreak;
       })(),
       lastUserMessageLength: (userMessage ?? '').trim().length,
-      // 🆕 v105: 일상/상담 분기
-      //   - 우선: 이전 턴 좌뇌 LLM 직접 판단 (캐시)
-      //   - fallback: primaryIntent + emotion + scenario 휴리스틱
-      conversationMode: (() => {
-        const cached = getLastConversationMode(ragContext?.sessionId);
-        const baseline = cached
-          ? cached.mode
-          : inferConversationMode(
-              intentResult.primaryIntent,
-              effectiveEmotionScore,
-              stateResult.scenario as unknown as string | undefined,
-            );
-        // 🆕 v122: 추천 작업 구조적 안전망 — 좌뇌/캐시가 CASUAL 이어도 추천 신호 있으면 ASSIST 승격.
-        //   감정상담(COUNSELING)은 절대 안 건드림. (browse 전 "취향 파악" 턴에도 ASSIST 레인 보장.)
-        if (baseline !== 'COUNSELING' && detectAssistIntent(userMessage)) {
-          console.log(`[Pipeline:v122] 🔍 ASSIST 승격 (추천 신호 감지, baseline=${baseline})`);
-          return 'ASSIST';
-        }
-        console.log(`[Pipeline:v105] 💬 분기: ${baseline} (cached=${!!cached}, intent=${intentResult.primaryIntent}, emotion=${effectiveEmotionScore})`);
-        return baseline;
-      })(),
+      // 🔧 LLM-분기: 좌뇌 Gemini 의 현재 턴 conversation_mode 가 1순위.
+      //   실패 시 이전 턴 캐시 → 그래도 없으면 COUNSELING (정규식/휴리스틱 제거 — [[feedback_llm_judgment]]).
+      conversationMode: llmConversationMode
+        ?? getLastConversationMode(ragContext?.sessionId)?.mode
+        ?? 'COUNSELING',
       hasAskedForAdvice,
       hasGivenPermission: false,
       emotionBaseline: emotionBaseline,
@@ -2067,9 +2068,7 @@ ${researchResult.insight}
           }
         }
 
-        // 🆕 fast-path: 좌뇌 prefetched 결과 await (이미 거의 완료 상태일 것)
-        //   여기 도달까지 ~6초 흘렀고 좌뇌 LLM 은 ~3.7초 → await 즉시 resolve
-        const prefetchedBrain = await fastLeftBrainPromise;
+        // 🔧 LLM-분기: prefetchedBrain 은 phase 결정부에서 이미 await/보관됨 — 변수 재사용 (재-await 불필요).
         const fastBrainElapsed = Date.now() - tFastBrainStart;
         console.log(`[FastPath] ⚡ 좌뇌 prefetched 완료: ${fastBrainElapsed}ms (succeeded=${!!prefetchedBrain?.output})`);
 
@@ -2160,22 +2159,14 @@ ${researchResult.insight}
               }
             } else if (chunk.type === 'analysis') {
               capturedLeftBrainAnalysis = chunk.data;
-              // 🆕 v105: 좌뇌가 conversation_mode 직접 판단했으면 캐시 → 다음 턴 활용
+              // 🔧 LLM-분기: 좌뇌 conversation_mode 를 다음 턴 폴백용으로 캐시.
+              //   (프리페치가 null 이었던 경우 등 대비 — 보통은 phase 결정부에서 이미 캐시됨.)
+              //   정규식/sticky 승격 제거 — LLM 판단 그대로 존중.
               const lbMode = (chunk.data as any)?.conversation_mode;
               const lbReason = (chunk.data as any)?.conversation_mode_reason;
-              // 🆕 v122: 추천 안전망 + 스티키. 좌뇌가 CASUAL 이어도 (a) 이번 메시지에 추천 신호가 있거나
-              //   (b) 이전 턴이 ASSIST 였고 좌뇌가 COUNSELING(감정 전환) 이 아니면 → ASSIST 로 캐시 유지.
-              //   감정상담(좌뇌 COUNSELING)은 그대로 존중 → ASSIST 에서 자연 탈출.
-              const prevMode = getLastConversationMode(ragContext?.sessionId)?.mode;
-              let modeToCache: 'COUNSELING' | 'CASUAL' | 'ASSIST' | undefined =
-                (lbMode === 'COUNSELING' || lbMode === 'CASUAL' || lbMode === 'ASSIST') ? lbMode : undefined;
-              if (lbMode !== 'COUNSELING') {
-                if (detectAssistIntent(userMessage)) modeToCache = 'ASSIST';
-                else if (prevMode === 'ASSIST') modeToCache = 'ASSIST';
-              }
-              if (modeToCache) {
-                setLastConversationMode(ragContext?.sessionId, modeToCache, lbReason);
-                console.log(`[Pipeline:v122] 💾 conversation_mode 캐시: ${modeToCache} (lb=${lbMode ?? '-'}, prev=${prevMode ?? '-'})`);
+              if (lbMode === 'COUNSELING' || lbMode === 'CASUAL' || lbMode === 'ASSIST') {
+                setLastConversationMode(ragContext?.sessionId, lbMode, lbReason);
+                console.log(`[Pipeline:LLM분기] 💾 conversation_mode 캐시: ${lbMode}`);
               }
             } else if (chunk.type === 'thought_bubble') {
               // 🆕 fast-path: prefetched 로 이미 yield 했으면 중복 방지
@@ -2843,21 +2834,17 @@ ${researchResult.insight}
             lbPacing.phase_transition_recommendation === 'PUSH'
           );
 
-          // 🆕 v122: browse 가 이번 턴 발동했으면 ASSIST 레인 강제.
-          //   좌뇌가 conversation_mode 를 CASUAL 로 잘못 분류해도 (실제로 "같이 찾기" 중이므로)
-          //   UI/phase 가 현실과 일치하도록 구조적으로 고정. 캐시에도 저장 → 다음 턴 유지.
+          // 🆕 v122 / 🔧 LLM-분기: browse 가 이번 턴 실제 발동했으면 ASSIST 레인 강제.
+          //   browse 발동은 키워드가 아니라 "같이 찾기" 검색이 실제 시작된 구조적 이벤트라 정당.
+          //   정규식(detectAssistIntent) 기반 ASSIST 승격은 제거 — 분기는 좌뇌 LLM 이 결정.
           const browseFiredThisTurn = !!pendingBrowseSearch;
           const lbMode2 = ((capturedLeftBrainAnalysis as any)?.conversation_mode as 'COUNSELING' | 'CASUAL' | 'ASSIST' | undefined);
-          // 🆕 v122: effectiveMode — browse 발동 / 추천 신호 / 캐시(스티키) 중 하나라도 ASSIST 면 ASSIST.
-          //   (단 좌뇌 COUNSELING 이면 감정 우선 → ASSIST 승격 안 함.)
-          const assistThisTurn =
-            browseFiredThisTurn ||
-            (lbMode2 !== 'COUNSELING' && (detectAssistIntent(userMessage) || phaseCtx.conversationMode === 'ASSIST'));
-          const effectiveMode: 'COUNSELING' | 'CASUAL' | 'ASSIST' = assistThisTurn
+          const assistThisTurn = browseFiredThisTurn;
+          const effectiveMode: 'COUNSELING' | 'CASUAL' | 'ASSIST' = browseFiredThisTurn
             ? 'ASSIST'
             : (lbMode2 ?? phaseCtx.conversationMode ?? 'CASUAL');
-          if (assistThisTurn) {
-            setLastConversationMode(ragContext?.sessionId, 'ASSIST', browseFiredThisTurn ? 'browse 발동' : '추천 신호');
+          if (browseFiredThisTurn) {
+            setLastConversationMode(ragContext?.sessionId, 'ASSIST', 'browse 발동');
           }
 
           if (hasNewGateEvents || hasTransitionSignal || hasPacingTransition || assistThisTurn) {
