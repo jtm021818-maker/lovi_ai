@@ -317,6 +317,10 @@ export interface PhaseContext {
   // 🆕 v121: ASSIST 추가 — 추천/검색 작업 레인 (CASUAL 처럼 경량 라우팅)
   conversationMode?: 'COUNSELING' | 'CASUAL' | 'ASSIST';
 
+  // 🆕 명시적 레인 전환 — 유저가 "레인 바꿀까?" 제안을 수락한 턴에만 세팅.
+  //   하드 락(자동 전환 금지)을 이 한 턴만 우회해 지정 레인 진입 phase 로 강제 점프한다.
+  laneSwitchTo?: 'COUNSELING' | 'CASUAL' | 'ASSIST';
+
   // 감정 기준선
   emotionBaseline?: number;
   currentEmotionScore: number;
@@ -489,6 +493,24 @@ export class PhaseManager {
     //   자동 다운그레이드하지 않는다(대화를 가볍게 깎아내리지 않음). 폴백 없으면 COUNSELING.
     const llmMode: 'COUNSELING' | 'CASUAL' | 'ASSIST' = conversationMode ?? 'COUNSELING';
 
+    // 🔓 명시적 레인 전환 (유저가 루나 "레인 바꿀까?" 제안 수락) — 하드 락 1회 우회.
+    //   자동 전환은 막혀 있지만, 유저가 직접 동의한 이 턴엔 지정 레인 진입 phase 로 점프한다.
+    const { laneSwitchTo } = ctx;
+    if (laneSwitchTo) {
+      if (laneSwitchTo === 'ASSIST' && !isAssistPhase(currentPhase)) {
+        console.log(`[PhaseManager] 🔓 레인 전환 수락 → ASSIST_INTENT (from ${currentPhase})`);
+        return 'ASSIST_INTENT';
+      }
+      if (laneSwitchTo === 'COUNSELING' && !['MIRROR', 'BRIDGE', 'SOLVE', 'EMPOWER'].includes(currentPhase)) {
+        console.log(`[PhaseManager] 🔓 레인 전환 수락 → MIRROR (from ${currentPhase})`);
+        return 'MIRROR';
+      }
+      if (laneSwitchTo === 'CASUAL' && !isCasualPhaseInternal(currentPhase)) {
+        console.log(`[PhaseManager] 🔓 레인 전환 수락 → BANTER (from ${currentPhase})`);
+        return 'BANTER';
+      }
+    }
+
     // ① HOOK: 턴2부터 분기 (턴1은 '듣기(HOOK)' 유지 — 사용자 정책)
     if (currentPhase === 'HOOK' && turnCount >= 2) {
       if (llmMode === 'ASSIST') {
@@ -502,12 +524,12 @@ export class PhaseManager {
       // COUNSELING → 상담 레인 진행 (아래 fall-through)
     }
 
-    // ② ASSIST 레인 중: COUNSELING 으로만 승격(→MIRROR). CASUAL 다운그레이드는 무시(ASSIST 유지).
+    // ② ASSIST 레인: 🔒 하드 락 (사용자 정책 — "분기 한번 나뉘면 안 바뀜").
+    //   기존엔 단발 COUNSELING 판단이면 MIRROR 로 다운그레이드 → ASSIST_BROWSE 중 유저가
+    //   감정적인 말 한마디 하면 좌뇌가 그 턴을 COUNSELING 으로 보고 상담으로 튕겨내,
+    //   다음 턴 다시 ASSIST… 추천↔상담 왕복(thrash)의 직접 원인이었음.
+    //   이제 한번 ASSIST 로 분기하면 세션 내내 ASSIST 레인 유지. 레인 결정은 HOOK 분기에서만.
     if (isAssistPhase(currentPhase)) {
-      if (llmMode === 'COUNSELING') {
-        console.log(`[PhaseManager:LLM분기] 💕 ASSIST → MIRROR (상담 승격)`);
-        return 'MIRROR';
-      }
       return getAssistNextPhase(ctx, currentPhase);
     }
 
@@ -526,12 +548,10 @@ export class PhaseManager {
       return getCasualNextPhase(ctx, normalized);
     }
 
-    // ④ 상담 레인: MIRROR(초기 상담)에서 LLM 이 작업 의도로 판단하면 ASSIST 로 승격 허용.
-    //   BRIDGE/SOLVE/EMPOWER 는 게이트 기반 깊은 단계라 LLM 모드로 흔들지 않음(아래 게이트 로직 유지).
-    if (currentPhase === 'MIRROR' && llmMode === 'ASSIST') {
-      console.log(`[PhaseManager:LLM분기] 🔍 MIRROR → ASSIST_INTENT (추천 승격)`);
-      return 'ASSIST_INTENT';
-    }
+    // ④ 상담 레인: 🔒 하드 락 (사용자 정책) — 상담으로 분기하면 conversation_mode 단발 판단으로
+    //   ASSIST 로 점프하지 않는다(추천↔상담 왕복 방지). 상담 중 "같이 찾기"가 필요하면
+    //   BRIDGE 작전회의의 browse_together / [BROWSE_READY] 경로(파이프라인 재라우트)로만 진입한다.
+    //   (기존 MIRROR + ASSIST → ASSIST_INTENT 자동 승격 제거.)
 
     const currentIdx = PHASE_ORDER.indexOf(currentPhase);
     if (currentIdx < 0 || currentIdx >= PHASE_ORDER.length - 1) {

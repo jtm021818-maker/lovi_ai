@@ -26,6 +26,8 @@ import {
   getLastConversationMode,
   setLastConversationMode,
   updateShortReplyStreak,
+  bumpLaneMismatch,
+  clearLaneMismatch,
 } from '@/engines/phase-manager/conversation-mode-cache';
 import { HumanLikeEngine } from '@/engines/human-like';
 import { parsePhaseSignal } from '@/engines/human-like/phase-signal';
@@ -388,6 +390,8 @@ export class CounselingPipeline {
     | { type: 'axes_progress'; data: { filledCount: number; totalCount: number; isComplete: boolean; axes?: Partial<ReadIgnoredAxes> } }
     | { type: 'phase_event'; data: PhaseEvent }
     | { type: 'phase_change'; data: { phase: ConversationPhaseV2; progress: number; lunaThinking?: string; understandingLevel?: number; conversationMode?: 'COUNSELING' | 'CASUAL' | 'ASSIST' } }
+    // 🆕 레인 전환 제안 — 잠긴 레인과 좌뇌 모드가 N턴 연속 어긋날 때 루나가 부드럽게 제안 (유저 확인 후에만 전환)
+    | { type: 'lane_switch_hint'; data: { to: 'COUNSELING' | 'CASUAL' | 'ASSIST'; from: 'COUNSELING' | 'CASUAL' | 'ASSIST' | 'HOOK'; reason: string | null } }
     // 🆕 v40: 루나가 "진짜 생각하는 중" UI 이벤트 (Gemini Grounding DeepResearch)
     | { type: 'luna_thinking_deep'; data: { status: 'started' | 'done'; keyword?: string; phrases?: string[]; durationMs?: number; hasInsight?: boolean } }
     // 🆕 좌뇌 생각 미리보기 — 우뇌 시작 전 루나의 내면 생각
@@ -826,6 +830,12 @@ export class CounselingPipeline {
     }
     console.log(`[Pipeline:LLM분기] 🧠 좌뇌 conversation_mode=${llmConversationMode ?? '(없음→캐시/COUNSELING)'}`);
 
+    // 🆕 레인 전환 수락 턴: 캐시를 target 으로 커밋 (이후 폴백/표시 일관성 + 다음 턴부터 새 레인 고정).
+    if (suggestionMeta?.source === 'lane_switch') {
+      const t = (suggestionMeta?.context as { targetMode?: 'COUNSELING' | 'CASUAL' | 'ASSIST' } | undefined)?.targetMode;
+      if (t) setLastConversationMode(ragContext?.sessionId, t, '유저 레인 전환 수락');
+    }
+
     // 🆕 v8: PhaseManager로 구간 결정
     const prevPhaseV2 = currentPhaseV2 ?? PhaseManager.getInitialPhase();
     const phaseCtx: PhaseContext = {
@@ -861,6 +871,10 @@ export class CounselingPipeline {
       conversationMode: llmConversationMode
         ?? getLastConversationMode(ragContext?.sessionId)?.mode
         ?? 'COUNSELING',
+      // 🆕 명시적 레인 전환 — 유저가 루나 "레인 바꿀까?" 제안 수락 시에만 하드 락 1회 우회.
+      laneSwitchTo: (suggestionMeta?.source === 'lane_switch')
+        ? ((suggestionMeta?.context as { targetMode?: 'COUNSELING' | 'CASUAL' | 'ASSIST' } | undefined)?.targetMode)
+        : undefined,
       hasAskedForAdvice,
       hasGivenPermission: false,
       emotionBaseline: emotionBaseline,
@@ -2889,6 +2903,30 @@ ${researchResult.insight}
               const reProgress = Math.min(PhaseManager.getProgress(reCheckedPhase) + Math.min(turnCount * 3, 15), 100);
               const reThinking = computeLunaThinking(reCheckedPhase, 0, stateResult, updatedCompletedEvents);
               yield { type: 'phase_change', data: { phase: reCheckedPhase, progress: reProgress, lunaThinking: reThinking.lunaThinking, understandingLevel: reThinking.understandingLevel, conversationMode: effectiveMode } };
+            }
+          }
+
+          // 🆕 레인 전환 제안 (하드 락 보완) — 잠긴 레인과 좌뇌 모드가 2턴 연속 어긋나면
+          //   자동 전환 대신 루나가 "레인 바꿀까?" 칩을 띄운다(유저 확인 후에만 실제 전환).
+          //   target=CASUAL(다운그레이드) / browse 발동 턴 / 전환 수락 턴은 제안 X + streak 리셋.
+          const ASSIST_LANE = ['ASSIST_INTENT', 'ASSIST_BROWSE', 'ASSIST_PICK'];
+          const CASUAL_LANE = ['GREET', 'CATCHUP', 'BANTER', 'LINGER', 'FAREWELL', 'DAILY_CHAT'];
+          const laneOf = (p: string): 'COUNSELING' | 'CASUAL' | 'ASSIST' | 'HOOK' =>
+            p === 'HOOK' ? 'HOOK'
+              : ASSIST_LANE.includes(p) ? 'ASSIST'
+                : CASUAL_LANE.includes(p) ? 'CASUAL'
+                  : 'COUNSELING';
+          const lockedLane = laneOf(newPhaseV2);
+          const wantLane = lbMode2;
+          if (!wantLane || lockedLane === 'HOOK' || browseFiredThisTurn || wantLane === lockedLane || wantLane === 'CASUAL' || suggestionMeta?.source === 'lane_switch') {
+            clearLaneMismatch(ragContext?.sessionId);
+          } else {
+            const streak = bumpLaneMismatch(ragContext?.sessionId, wantLane);
+            // 정확히 2턴째에만 1회 emit (>=2 면 매 턴 재발동 → 나그). streak 리셋 후 다시 2가 되어야 재제안.
+            if (streak === 2) {
+              const reason = ((capturedLeftBrainAnalysis as { conversation_mode_reason?: string } | undefined)?.conversation_mode_reason) ?? null;
+              console.log(`[Pipeline] 🔀 레인 전환 제안: ${lockedLane} → ${wantLane} (streak ${streak})`);
+              yield { type: 'lane_switch_hint', data: { to: wantLane, from: lockedLane, reason } };
             }
           }
         } catch (e) {

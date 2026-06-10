@@ -110,3 +110,62 @@ export function clearShortReplyStreak(sessionId: string | undefined | null): voi
   if (!sessionId) return;
   SHORT_REPLY_CACHE.delete(sessionId);
 }
+
+// ============================================
+// 🆕 레인 전환 제안 (Lane Switch Suggestion)
+//
+// 하드 락 정책상 conversation_mode 단발 판단으로 레인을 자동 전환하지 않는다(thrash 방지).
+// 대신 잠긴 레인과 좌뇌 판단이 N턴 연속 어긋나면 "루나가 전환 제안" 칩을 띄운다(유저 확인 후에만 전환).
+//
+// 흐름:
+//   매 턴: 잠긴 레인 != 좌뇌 모드 → bumpLaneMismatch(target) (같은 target 연속이면 streak++)
+//          일치하거나 HOOK/browse 발동 턴 → clearLaneMismatch (streak 0)
+//   streak >= 2 AND 미억제 → lane_switch_hint emit
+//   유저가 칩 [아니] → suppressLaneSwitch (일정 시간 재제안 차단)
+//   유저가 칩 [응] 또는 레인 전환 → clearLaneMismatch
+// ============================================
+const LANE_MISMATCH_CACHE = new Map<string, { target: string; count: number; suppressedUntil: number; updatedAt: number }>();
+const LANE_SUPPRESS_MS = 5 * 60 * 1000;   // 거절 후 5분간 재제안 차단
+
+/**
+ * 잠긴 레인과 어긋난 좌뇌 target 모드 누적. 같은 target 연속이면 streak 증가, 바뀌면 1로 리셋.
+ * @returns 현재 연속 streak (제안 발동 판단용)
+ */
+export function bumpLaneMismatch(
+  sessionId: string | undefined | null,
+  target: 'COUNSELING' | 'CASUAL' | 'ASSIST',
+): number {
+  if (!sessionId) return 0;
+  const prev = LANE_MISMATCH_CACHE.get(sessionId);
+  const suppressedUntil = prev?.suppressedUntil ?? 0;
+  const count = prev && prev.target === target ? prev.count + 1 : 1;
+  LANE_MISMATCH_CACHE.set(sessionId, { target, count, suppressedUntil, updatedAt: Date.now() });
+  return count;
+}
+
+/** 일치/HOOK/browse 턴 → streak 리셋 (suppression 은 유지). */
+export function clearLaneMismatch(sessionId: string | undefined | null): void {
+  if (!sessionId) return;
+  const prev = LANE_MISMATCH_CACHE.get(sessionId);
+  if (!prev) return;
+  LANE_MISMATCH_CACHE.set(sessionId, { ...prev, target: '', count: 0, updatedAt: Date.now() });
+}
+
+/** 유저가 제안 거절 → 일정 시간 재제안 차단. */
+export function suppressLaneSwitch(sessionId: string | undefined | null): void {
+  if (!sessionId) return;
+  const prev = LANE_MISMATCH_CACHE.get(sessionId);
+  LANE_MISMATCH_CACHE.set(sessionId, {
+    target: '', count: 0,
+    suppressedUntil: Date.now() + LANE_SUPPRESS_MS,
+    updatedAt: Date.now(),
+  });
+  void prev;
+}
+
+/** 현재 재제안 억제 중인지. */
+export function isLaneSwitchSuppressed(sessionId: string | undefined | null): boolean {
+  if (!sessionId) return false;
+  const prev = LANE_MISMATCH_CACHE.get(sessionId);
+  return !!prev && Date.now() < prev.suppressedUntil;
+}

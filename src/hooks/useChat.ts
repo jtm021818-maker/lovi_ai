@@ -93,6 +93,12 @@ interface UseChatReturn {
   browseTypingDot: boolean;
   /** 🆕 v105.2: DAILY_CHAT 작별 시그널 (timestamp). null 아니면 ChatContainer 가 5초 후 세션 종료 */
   casualFarewellSignal: number | null;
+  // 🆕 레인 전환 제안 (루나 제안 → 유저 확인). 하드 락 우회는 유저 수락 시에만.
+  laneSwitchSuggestion: { to: 'COUNSELING' | 'CASUAL' | 'ASSIST'; from: 'COUNSELING' | 'CASUAL' | 'ASSIST' | 'HOOK'; reason: string | null } | null;
+  /** 제안 수락 — lane_switch 메시지 전송으로 하드 락 1회 우회 */
+  acceptLaneSwitch: () => void;
+  /** 제안 거절 — 칩 닫고 5분간 재제안 억제 */
+  dismissLaneSwitch: () => void;
 }
 
 export function useChat(sessionId: string): UseChatReturn {
@@ -189,6 +195,14 @@ export function useChat(sessionId: string): UseChatReturn {
   const [resolvedBrowsePrompts, setResolvedBrowsePrompts] = useState<Set<string>>(() => new Set());
   // 루나 타이핑 인디케이터 (dot) 표시 상태 — browse 블록 전용 페이싱용
   const [browseTypingDot, setBrowseTypingDot] = useState(false);
+
+  // 🆕 레인 전환 제안 — 루나가 "레인 바꿀까?" 제안 시 표시되는 확인 칩 상태.
+  //   자동 전환은 막혀 있고(thrash 방지), 유저가 [응] 눌러야만 실제 전환됨.
+  const [laneSwitchSuggestion, setLaneSwitchSuggestion] = useState<
+    { to: 'COUNSELING' | 'CASUAL' | 'ASSIST'; from: 'COUNSELING' | 'CASUAL' | 'ASSIST' | 'HOOK'; reason: string | null } | null
+  >(null);
+  // 거절 후 일정 시간 재제안 차단 (프론트 측 suppression).
+  const laneSwitchSuppressUntilRef = useRef<number>(0);
 
   // 메시지 추가 콜백 (큐 내부에서 호출)
   const addBrowseMessage = useCallback((msg: ChatMessage) => {
@@ -342,6 +356,7 @@ export function useChat(sessionId: string): UseChatReturn {
     setSuggestions([]);
     setPanelData(null);
     setRetryStatus(null);  // 🆕 v48: 재시도 상태 초기화
+    setLaneSwitchSuggestion(null);  // 🆕 새 턴 시작 → 이전 레인 전환 제안 칩 정리
     // 🆕 v43: 세션 레벨 이벤트 보존 — 완전 초기화 대신 기존 발동된 이벤트 타입을 유지하면서 새 턴의 이벤트만 허용
     // (DB race condition으로 같은 이벤트가 다음 턴에서 또 yield되어도 클라이언트에서 차단)
     // firedEventTypesRef.current를 초기화하지 않음 — 세션 동안 누적 유지
@@ -720,6 +735,18 @@ export function useChat(sessionId: string): UseChatReturn {
                 break;
               }
 
+              // 🆕 레인 전환 제안 — 루나가 "레인 바꿀까?" 제안. 거절 suppression 중이거나 이미 표시 중이면 무시.
+              case 'lane_switch_hint': {
+                const hint = event.data as { to: 'COUNSELING' | 'CASUAL' | 'ASSIST'; from: 'COUNSELING' | 'CASUAL' | 'ASSIST' | 'HOOK'; reason: string | null };
+                if (Date.now() < laneSwitchSuppressUntilRef.current) {
+                  console.log('[useChat] 🔀 레인 전환 제안 무시 (거절 후 억제 중)');
+                  break;
+                }
+                console.log('[useChat] 🔀 레인 전환 제안 수신:', hint.from, '→', hint.to);
+                setLaneSwitchSuggestion(hint);
+                break;
+              }
+
               // 🆕 v41: 친밀도 레벨업 — 축하 팝업 트리거
               case 'intimacy_level_up': {
                 const levelUp = event.data as any;
@@ -1004,6 +1031,23 @@ export function useChat(sessionId: string): UseChatReturn {
     [sessionId, browseQueue, sendMessage],
   );
 
+  // 🆕 레인 전환 제안 수락 — [응] 탭 → 하드 락 1회 우회하는 lane_switch 메시지 전송.
+  const acceptLaneSwitch = useCallback(() => {
+    const s = laneSwitchSuggestion;
+    if (!s) return;
+    setLaneSwitchSuggestion(null);
+    const text = s.to === 'COUNSELING' ? '응, 그 얘기 좀 들어줄래?'
+      : s.to === 'ASSIST' ? '응, 같이 찾아보자'
+      : '응, 그러자';
+    void sendMessage(text, { source: 'lane_switch', context: { targetMode: s.to } });
+  }, [laneSwitchSuggestion, sendMessage]);
+
+  // 🆕 레인 전환 제안 거절 — 칩 닫고 5분간 재제안 억제.
+  const dismissLaneSwitch = useCallback(() => {
+    setLaneSwitchSuggestion(null);
+    laneSwitchSuppressUntilRef.current = Date.now() + 5 * 60 * 1000;
+  }, []);
+
   return {
     messages, isLoading, nudges, stateResult, suggestions, panelData,
     axesProgress, phaseEvents, currentPhase, conversationMode, phaseProgress, concernDepth,
@@ -1028,5 +1072,9 @@ export function useChat(sessionId: string): UseChatReturn {
     browseTypingDot,
     // 🆕 v105.2: DAILY_CHAT 작별 시그널
     casualFarewellSignal,
+    // 🆕 레인 전환 제안 (루나 제안 → 유저 확인)
+    laneSwitchSuggestion,
+    acceptLaneSwitch,
+    dismissLaneSwitch,
   };
 }

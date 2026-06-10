@@ -787,6 +787,13 @@ export async function POST(req: NextRequest) {
               );
               break;
 
+            // 🆕 레인 전환 제안 — 루나가 "레인 바꿀까?" 제안 (클라이언트가 확인 칩 표시)
+            case 'lane_switch_hint':
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ type: 'lane_switch_hint', data: event.data })}\n\n`)
+              );
+              break;
+
             // 🆕 v105.2: DAILY_CHAT 작별 시그널 — 클라이언트가 5초 후 silent 세션 종료
             case 'casual_farewell':
               controller.enqueue(

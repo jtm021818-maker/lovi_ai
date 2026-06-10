@@ -12,6 +12,7 @@ import InlineSuggestions from './InlineSuggestions';
 import PanelBubble from './PanelBubble';
 import { useChat } from '@/hooks/useChat';
 import { useLunaVoice } from '@/hooks/useLunaVoice';
+import LaneSwitchPrompt from '@/components/chat/LaneSwitchPrompt';
 import { useSessionAutoComplete } from '@/hooks/useSessionAutoComplete';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
@@ -185,6 +186,8 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
     handleBrowseDecision, resolvedBrowsePrompts, browseTypingDot,
     // 🆕 v105.2: DAILY_CHAT 작별 시그널
     casualFarewellSignal,
+    // 🆕 레인 전환 제안 (루나 제안 → 유저 확인)
+    laneSwitchSuggestion, acceptLaneSwitch, dismissLaneSwitch,
   } = useChat(sessionId);
   const { toggle: toggleSpeak, isSpeaking, speak, isSupported: ttsSupported, settings: voiceSettings, updateSettings: updateVoiceSettings } = useLunaVoice();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -719,7 +722,6 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
 
   /** 🆕 이벤트별 렌더러 */
   const renderPhaseEvent = (event: PhaseEvent, idx: number) => {
-    console.log(`[ChatContainer] 렌더링 시도 이벤트:`, event.type);
     switch (event.type) {
       case 'EMOTION_THERMOMETER': return <EmotionThermometer key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
       case 'MIND_READING': return <MindReading key={`event-${idx}`} event={event} onSelect={handleSuggestionSelect} disabled={isLoading} />;
@@ -1229,6 +1231,13 @@ export default function ChatContainer({ sessionId }: ChatContainerProps) {
               <LunaThoughtBubble key="thought-bubble" thought={lunaThoughtBubble} />
             )}
           </AnimatePresence>
+
+          {/* 🆕 레인 전환 제안 칩 — 루나가 "레인 바꿀까?" 제안 (유저 확인 후에만 전환) */}
+          <LaneSwitchPrompt
+            suggestion={laneSwitchSuggestion}
+            onAccept={acceptLaneSwitch}
+            onDismiss={dismissLaneSwitch}
+          />
 
           {/* 🆕 v40: 루나 딥리서치 — "진짜 고민 중" 로딩 UI (Gemini Grounding) */}
           {thinkingDeep && (

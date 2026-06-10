@@ -1310,7 +1310,7 @@ export type SuggestionCategory =
 /** 선택지 메타 정보 — 프론트→서버→엔진 전달 */
 export interface SuggestionMeta {
   /** 메시지 출처 */
-  source: 'typed' | 'suggestion' | 'emotion_thermometer' | 'insight_card' | 'emotion_mirror' | 'luna_story' | 'luna_strategy' | 'mind_reading' | 'pattern_mirror' | 'solution_preview' | 'solution_preview_delay' | 'solution_card_draft' | 'solution_card_other' | 'message_copy' | 'message_modify' | 'message_custom' | 'growth_report_promise' | 'growth_report_continue' | 'tone_select' | 'draft_workshop' | 'roleplay_feedback' | 'panel_report' | 'idea_refine' | 'browse_decision' | 'event' | 'spirit_event';
+  source: 'typed' | 'suggestion' | 'emotion_thermometer' | 'insight_card' | 'emotion_mirror' | 'luna_story' | 'luna_strategy' | 'mind_reading' | 'pattern_mirror' | 'solution_preview' | 'solution_preview_delay' | 'solution_card_draft' | 'solution_card_other' | 'message_copy' | 'message_modify' | 'message_custom' | 'growth_report_promise' | 'growth_report_continue' | 'tone_select' | 'draft_workshop' | 'roleplay_feedback' | 'panel_report' | 'idea_refine' | 'browse_decision' | 'event' | 'spirit_event' | 'lane_switch';
   context?: Record<string, any>;
   /** 선택지가 의도한 전략 */
   strategyHint?: StrategyType;
