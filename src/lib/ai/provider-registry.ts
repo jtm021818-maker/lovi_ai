@@ -668,7 +668,7 @@ export async function* streamWithCascade(
  * AsyncGenerator를 감싸서 첫 청크가 timeoutMs 내에 안 오면 에러 발생.
  * 첫 청크 이후에는 타임아웃 없이 정상 스트리밍.
  */
-async function* wrapWithTTFBTimeout<T>(
+export async function* wrapWithTTFBTimeout<T>(
   gen: AsyncGenerator<T>,
   timeoutMs: number,
   label: string

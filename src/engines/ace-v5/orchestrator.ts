@@ -10,7 +10,7 @@
  *   6. 메타 발화 제거 + 태그 첨부
  */
 
-import { streamWithProvider, GEMINI_MODELS } from '@/lib/ai/provider-registry';
+import { streamWithProvider, GEMINI_MODELS, wrapWithTTFBTimeout } from '@/lib/ai/provider-registry';
 import { analyzeLeftBrain } from '@/engines/left-brain';
 import { LogCollector } from '@/lib/utils/logger';
 
@@ -514,9 +514,13 @@ async function* streamVoiceOnceGen(
     availableEpisodesForNickname: params.availableEpisodesForNickname ?? [],
   });
 
-  // v63: Claude 완전 제거 — Gemini 3 Flash Preview 단일.
+  // v63: Claude 완전 제거 — Gemini 단일.
+  // 🆕 fix: 우뇌 모델을 Preview(gemini-3-flash-preview) → GA(gemini-3.1-flash-lite) 로 전환.
+  //   - 우뇌 역할은 draft 의 카톡 스타일 표현/연출 변환 (deep reasoning 불필요, thinkingLevel=minimal).
+  //   - Preview 티어는 과부하/콜드스타트 시 첫 토큰을 안 뱉어 60s 함수 타임아웃 유발 (root cause).
+  //   - 좌뇌가 이미 GA Flash-Lite 로 안정적으로 동작(3.2s) 함을 검증 → 동일 모델 사용.
   const provider = 'gemini' as const;
-  const modelId = GEMINI_MODELS.FLASH_3;
+  const modelId = GEMINI_MODELS.FLASH_LITE_GA;
 
   const thinkingLevel = params.thinkingLevel ?? 'minimal';
 
@@ -534,7 +538,7 @@ async function* streamVoiceOnceGen(
     },
   });
 
-  const stream = streamWithProvider(
+  const rawStream = streamWithProvider(
     provider,
     ACE_V5_SYSTEM_PROMPT,
     [{ role: 'user' as const, content: userMessage }],
@@ -544,6 +548,13 @@ async function* streamVoiceOnceGen(
     undefined,
     provider === 'gemini' ? { thinkingLevel, includeThoughts: false } : undefined,
   );
+
+  // 🆕 fix: 우뇌 스트림 TTFB(첫 토큰) 타임아웃 가드.
+  //   streamWithProvider 는 streamWithCascade 와 달리 자체 타임아웃이 없어, Gemini 가
+  //   첫 토큰을 안 뱉고 멈추면 Vercel 60s 함수 타임아웃까지 전체 라우트가 행됨 (root cause).
+  //   첫 토큰만 레이스 → 초과 시 throw → dual-brain catch 가 좌뇌 draft 로 폴백 (채팅 안 죽음).
+  const ACE_TTFB_TIMEOUT_MS = 15000;
+  const stream = wrapWithTTFBTimeout(rawStream, ACE_TTFB_TIMEOUT_MS, `ACE_V5/${modelId}`);
 
   let fullText = '';
   for await (const chunk of stream) {

@@ -197,21 +197,24 @@ export function buildUserModelPrompt(model: UserModel): string {
   }
 
   // 감정 패턴
-  if (model.emotionalPatterns.topTriggers.length > 0) {
-    parts.push(`자주 힘들어하는 주제: ${model.emotionalPatterns.topTriggers.join(', ')}`);
+  // 🆕 fix: 방어 가드 — partial model(nested 배열 누락) 진입 시 .length/.find crash 방지 (HLRE 안정화)
+  const topTriggers = Array.isArray(model.emotionalPatterns?.topTriggers) ? model.emotionalPatterns.topTriggers : [];
+  if (topTriggers.length > 0) {
+    parts.push(`자주 힘들어하는 주제: ${topTriggers.join(', ')}`);
   }
-  if (model.emotionalPatterns.copingStyle === 'suppress') {
+  if (model.emotionalPatterns?.copingStyle === 'suppress') {
     parts.push('이 유저는 감정을 잘 안 드러내. "괜찮아" 뒤에 진짜 감정이 있을 수 있어.');
   }
 
   // 관계
-  const partner = model.relationships.find(r => r.role === 'partner' && r.status === 'active');
+  const partner = (Array.isArray(model.relationships) ? model.relationships : [])
+    .find(r => r.role === 'partner' && r.status === 'active');
   if (partner) {
     parts.push(`현재 파트너: ${partner.name}`);
   }
 
   // 친밀도
-  const intimacy = model.lunaRelationship.intimacyScore;
+  const intimacy = model.lunaRelationship?.intimacyScore ?? 10;
   if (intimacy >= 60) {
     parts.push('너랑 꽤 친해진 사이. 편하게 솔직하게 말해도 돼.');
   } else if (intimacy >= 30) {
@@ -219,8 +222,9 @@ export function buildUserModelPrompt(model: UserModel): string {
   }
 
   // 우리만의 언어
-  if (model.lunaRelationship.sharedLanguage.length > 0) {
-    const lang = model.lunaRelationship.sharedLanguage
+  const sharedLanguage = Array.isArray(model.lunaRelationship?.sharedLanguage) ? model.lunaRelationship.sharedLanguage : [];
+  if (sharedLanguage.length > 0) {
+    const lang = sharedLanguage
       .slice(0, 3)
       .map(l => `"${l.term}"=${l.meaning}`)
       .join(', ');
@@ -243,7 +247,28 @@ export async function loadUserModel(supabase: any, userId: string): Promise<User
       .eq('id', userId)
       .single();
     if (data?.user_model && Object.keys(data.user_model).length > 0) {
-      const merged = { ...createDefaultUserModel(), ...data.user_model };
+      // 🆕 fix: 얕은 병합 금지 — DB 의 부분 nested 객체(구 스키마/부분 저장)가 기본값의
+      //   nested 객체 전체를 덮어쓰면 topTriggers/sharedLanguage 같은 배열이 사라져
+      //   buildUserModelPrompt 의 .length 접근에서 TypeError (HLRE preProcess 실패의 root cause).
+      //   nested 객체/배열은 기본값과 명시적으로 deep-merge 한다.
+      const defaults = createDefaultUserModel();
+      const raw_um = data.user_model as any;
+      const merged: UserModel = {
+        ...defaults,
+        ...raw_um,
+        communicationStyle: { ...defaults.communicationStyle, ...(raw_um.communicationStyle ?? {}) },
+        emotionalPatterns: {
+          ...defaults.emotionalPatterns,
+          ...(raw_um.emotionalPatterns ?? {}),
+          topTriggers: Array.isArray(raw_um.emotionalPatterns?.topTriggers) ? raw_um.emotionalPatterns.topTriggers : [],
+        },
+        relationships: Array.isArray(raw_um.relationships) ? raw_um.relationships : [],
+        lunaRelationship: {
+          ...defaults.lunaRelationship,
+          ...(raw_um.lunaRelationship ?? {}),
+          sharedLanguage: Array.isArray(raw_um.lunaRelationship?.sharedLanguage) ? raw_um.lunaRelationship.sharedLanguage : [],
+        },
+      };
       const { createDefaultIntimacyState } = require('@/engines/intimacy/types') as typeof import('@/engines/intimacy/types');
 
       // 🆕 v41.1: 마이그레이션 — 여러 형태 지원

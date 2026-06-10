@@ -196,7 +196,12 @@ export function useLunaVoice() {
         body: JSON.stringify({ text, preset: settings.preset, volume: settings.volume }),
         signal,
       });
-      if (!res.ok) throw new Error(`Edge TTS API error: ${res.status}`);
+      // 🆕 fix: 음성은 부가 기능 — 서버 실패(503 transient / 500 / 403 비프리미엄 등) 시
+      //   throw 하지 않고 조용히 스킵. 텍스트는 이미 정상 표시됨.
+      if (!res.ok) {
+        console.warn(`[LunaVoice] TTS 스킵 (status=${res.status}) — 텍스트만 표시`);
+        return;
+      }
       const blob = await res.blob();
       await playBlob(blob, audioRef, setIsSpeaking);
     },

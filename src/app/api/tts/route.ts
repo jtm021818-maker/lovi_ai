@@ -113,18 +113,41 @@ export async function POST(req: NextRequest) {
     const presetId: PresetId = (preset && PRESETS[preset as PresetId]) ? (preset as PresetId) : DEFAULT_PRESET;
     const { voice, pitch, rate } = PRESETS[presetId];
 
-    const tts = new EdgeTTS({
-      voice,
-      pitch,
-      rate,
-      volume: volume || DEFAULT_VOLUME,
-    });
+    // 🆕 fix: Edge TTS 무료 엔드포인트(Microsoft)는 간헐적 500/네트워크 오류가 잦음.
+    //   → 짧은 백오프로 재시도해 transient 실패를 흡수. 음성은 부가 기능이라 끝까지 실패해도
+    //     채팅 텍스트 흐름은 영향 없음 (클라이언트가 조용히 스킵하도록 503+skip 신호 반환).
+    const MAX_TTS_ATTEMPTS = 3;
+    let audioBuffer: Buffer | null = null;
+    let lastErr: unknown = null;
+    for (let attempt = 1; attempt <= MAX_TTS_ATTEMPTS; attempt++) {
+      try {
+        const tts = new EdgeTTS({ voice, pitch, rate, volume: volume || DEFAULT_VOLUME });
+        await tts.ttsPromise(cleaned, tmpPath);
+        const buf = await readFile(tmpPath);
+        if (buf && buf.length > 0) {
+          audioBuffer = buf;
+          break;
+        }
+        throw new Error('empty audio buffer');
+      } catch (e) {
+        lastErr = e;
+        console.warn(`[TTS] Edge-TTS 실패 (${attempt}/${MAX_TTS_ATTEMPTS}): ${(e as { message?: string })?.message}`);
+        if (attempt < MAX_TTS_ATTEMPTS) {
+          await new Promise((r) => setTimeout(r, 300 * attempt)); // 300ms → 600ms 백오프
+        }
+      }
+    }
 
-    await tts.ttsPromise(cleaned, tmpPath);
+    if (!audioBuffer) {
+      // 모든 재시도 소진 — 음성만 스킵, 텍스트는 정상. 503(서비스 일시 불가) + skip 플래그.
+      console.warn('[TTS] 모든 재시도 소진 → 음성 스킵 (텍스트 정상)');
+      return NextResponse.json(
+        { error: 'TTS temporarily unavailable', skip: true, detail: (lastErr as { message?: string })?.message },
+        { status: 503 }
+      );
+    }
 
-    const audioBuffer = await readFile(tmpPath);
-
-    return new NextResponse(audioBuffer, {
+    return new NextResponse(new Uint8Array(audioBuffer), {
       headers: {
         'Content-Type': 'audio/mpeg',
         'Content-Length': String(audioBuffer.length),
@@ -132,7 +155,7 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (err: any) {
-    console.error('[TTS] Edge-TTS 오류:', err?.message);
+    console.error('[TTS] 처리 오류:', err?.message);
     return NextResponse.json(
       { error: 'TTS generation failed', detail: err?.message },
       { status: 500 }
