@@ -62,7 +62,8 @@ async function callGeminiBrain(params: {
   turnIdx: number;
   // 🆕 v70: 풍부한 컨텍스트 주입용 옵셔널 필드
   userId?: string;
-  currentPhase?: 'HOOK' | 'MIRROR' | 'BRIDGE' | 'SOLVE' | 'EMPOWER';
+  // 🆕 레인 스티키용 — ConversationPhaseV2 전체(ASSIST_*/CASUAL phase 포함) 허용.
+  currentPhase?: string;
   phaseStartTurn?: number;
   workingMemory?: any;  // WorkingMemoryScratchpad
   supabase?: any;       // SupabaseClient
@@ -121,7 +122,9 @@ async function callGeminiBrain(params: {
       sessionId: params.sessionId,
       turnIdx: params.turnIdx,
       recentTrajectory: richContext.recentTrajectory ?? [],
-      phase: extractPhase(params.contextBlock),
+      // 🆕 레인 스티키: fast 경로는 contextBlock 이 비어 extractPhase 가 HOOK 으로 떨어짐.
+      //   pipeline 이 넘긴 현재 커밋 phase 를 우선 사용 → buildContextBlock 이 "현재 레인" 스티키 주입.
+      phase: params.currentPhase ?? extractPhase(params.contextBlock),
       intimacyLevel: extractIntimacy(params.contextBlock),
       // 🆕 v70: 조립된 풍부한 필드 주입
       relevantEpisodes: richContext.relevantEpisodes,
@@ -506,6 +509,8 @@ export async function runLeftBrainStandalone(params: {
   sessionId: string;
   turnIdx: number;
   userId?: string;
+  // 🆕 레인 스티키 — 현재 커밋된 phase(=레인) 전달. fastMode 라도 conversation_mode 안정성 확보.
+  currentPhase?: string;
 }, logCollector?: LogCollector): Promise<{
   output: BrainOutput | null;
   latencyMs: number;
@@ -518,6 +523,7 @@ export async function runLeftBrainStandalone(params: {
     sessionId: params.sessionId,
     turnIdx: params.turnIdx,
     userId: params.userId,
+    currentPhase: params.currentPhase,   // 🆕 레인 스티키
     chatHistory: [],
     fastMode: true,
   }, logCollector);

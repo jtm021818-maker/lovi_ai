@@ -511,25 +511,38 @@ export class PhaseManager {
       }
     }
 
-    // ① HOOK: 턴2부터 분기 (턴1은 '듣기(HOOK)' 유지 — 사용자 정책)
-    if (currentPhase === 'HOOK' && turnCount >= 2) {
+    // ① HOOK 분기 — 🔧 fix: 비대칭 누수 차단.
+    //   기존엔 ASSIST/CASUAL 분기가 turnCount>=2 게이트였는데, 상담 진행(HOOK→MIRROR)은
+    //   게이트가 없어 턴1에 카드충족/pacing JUMP 로 먼저 발동 → "여친 선물" 같은 작업 의도가
+    //   상담(MIRROR)으로 새고, 하드 락이 거기 고정해버리는 버그가 있었음.
+    //   → 작업(ASSIST)·수다(CASUAL)는 '듣기 모먼트' 불필요하므로 턴1에도 즉시 분기.
+    //     COUNSELING 만 턴1 듣기(HOOK) 유지 후 턴2+ 에서 MIRROR 진행(아래 fall-through).
+    if (currentPhase === 'HOOK') {
       if (llmMode === 'ASSIST') {
-        console.log(`[PhaseManager:LLM분기] 🔍 HOOK → ASSIST_INTENT`);
+        console.log(`[PhaseManager:LLM분기] 🔍 HOOK → ASSIST_INTENT (작업 즉시 분기)`);
         return 'ASSIST_INTENT';
       }
       if (llmMode === 'CASUAL') {
-        console.log(`[PhaseManager:LLM분기] 💌 HOOK → GREET`);
+        console.log(`[PhaseManager:LLM분기] 💌 HOOK → GREET (수다 즉시 분기)`);
         return 'GREET';
       }
-      // COUNSELING → 상담 레인 진행 (아래 fall-through)
+      // COUNSELING: 턴1 은 듣기(HOOK) 유지 — 감정 상담은 한 템포 들어줌(사용자 정책).
+      //   턴2+ 에서만 일반 진행(카드/pacing)으로 MIRROR 전환.
+      if (turnCount < 2) {
+        return 'HOOK';
+      }
+      // COUNSELING 턴2+ → fall-through (아래 일반 진행 → MIRROR)
     }
 
-    // ② ASSIST 레인: 🔒 하드 락 (사용자 정책 — "분기 한번 나뉘면 안 바뀜").
-    //   기존엔 단발 COUNSELING 판단이면 MIRROR 로 다운그레이드 → ASSIST_BROWSE 중 유저가
-    //   감정적인 말 한마디 하면 좌뇌가 그 턴을 COUNSELING 으로 보고 상담으로 튕겨내,
-    //   다음 턴 다시 ASSIST… 추천↔상담 왕복(thrash)의 직접 원인이었음.
-    //   이제 한번 ASSIST 로 분기하면 세션 내내 ASSIST 레인 유지. 레인 결정은 HOOK 분기에서만.
+    // ② ASSIST 레인: LLM-native — 전환 판단의 source of truth 는 좌뇌 맥락 판단.
+    //   좌뇌 프롬프트에 "현재 레인 = ASSIST, 의도적 전환 아니면 유지" 스티키 지침을 주입했으므로,
+    //   단발 곁다리 감정/잡담으로는 COUNSELING 이 안 나옴(=안 흔들림). 좌뇌가 "진짜 상담으로 바꿈"을
+    //   판단했을 때만 COUNSELING 출력 → MIRROR 로 전환. (코드 하드 락 제거.)
     if (isAssistPhase(currentPhase)) {
+      if (llmMode === 'COUNSELING') {
+        console.log(`[PhaseManager:LLM분기] 💕 ASSIST → MIRROR (좌뇌 상담 전환 판단)`);
+        return 'MIRROR';
+      }
       return getAssistNextPhase(ctx, currentPhase);
     }
 
@@ -548,10 +561,14 @@ export class PhaseManager {
       return getCasualNextPhase(ctx, normalized);
     }
 
-    // ④ 상담 레인: 🔒 하드 락 (사용자 정책) — 상담으로 분기하면 conversation_mode 단발 판단으로
-    //   ASSIST 로 점프하지 않는다(추천↔상담 왕복 방지). 상담 중 "같이 찾기"가 필요하면
-    //   BRIDGE 작전회의의 browse_together / [BROWSE_READY] 경로(파이프라인 재라우트)로만 진입한다.
-    //   (기존 MIRROR + ASSIST → ASSIST_INTENT 자동 승격 제거.)
+    // ④ 상담 레인: LLM-native — MIRROR(초기 상담)에서 좌뇌가 (스티키 하에) "작업으로 전환" 판단 시 승격.
+    //   스티키 지침 덕에 단발 추천 언급으로는 ASSIST 가 안 나오고, 진짜 작업 전환일 때만 나옴.
+    //   BRIDGE/SOLVE/EMPOWER 깊은 단계는 게이트 기반이라 모드로 흔들지 않음
+    //   (상담 한복판의 "같이 찾기"는 browse_together / [BROWSE_READY] 경로로만 진입).
+    if (currentPhase === 'MIRROR' && llmMode === 'ASSIST') {
+      console.log(`[PhaseManager:LLM분기] 🔍 MIRROR → ASSIST_INTENT (좌뇌 작업 전환 판단)`);
+      return 'ASSIST_INTENT';
+    }
 
     const currentIdx = PHASE_ORDER.indexOf(currentPhase);
     if (currentIdx < 0 || currentIdx >= PHASE_ORDER.length - 1) {

@@ -1762,9 +1762,18 @@ export default function PhaseProgress({ currentPhase, progress, persona = 'luna'
   if (!currentPhase) return null;
 
   // 🆕 v118 — 분기 후 트랙에 얹을 overlay (배지 + 셀러브레이션)
+  // 🔧 fix: 배지 방향은 "실제 렌더되는 트랙"과 동일 소스로 파생.
+  //   기존엔 배지=branchedTo(currentPhase 파생)인데 트랙은 conversationMode==='ASSIST' 폴백(아래 1779)도
+  //   타서, conversationMode 와 phase 가 어긋나면 'ASSIST 스텝퍼 + 상담 배지' 로 쪼개졌음.
+  //   배지를 트랙 선택과 같은 로직으로 맞춰 항상 일치시킨다.
+  const displayedDirection: BranchDirection =
+    isAssistPhase(currentPhase) ? 'assist'
+      : (conversationMode === 'ASSIST' && currentPhase !== 'HOOK') ? 'assist'
+        : isCasualPhase(currentPhase) ? 'daily'
+          : 'consult';
   const branchOverlay: ReactNode = branchedTo ? (
     <>
-      <BranchBadge direction={branchedTo} justArrived={!!branchEvent} />
+      <BranchBadge direction={displayedDirection} justArrived={!!branchEvent} />
       <AnimatePresence>
         {branchEvent && <DivergenceCelebration key={branchEvent.timestamp} direction={branchEvent.direction} />}
       </AnimatePresence>

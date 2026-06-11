@@ -105,8 +105,11 @@ export const LEFT_BRAIN_SYSTEM_PROMPT = `너는 루나의 "좌뇌 — 무의식�
 
 ⚠️ 추가:
 - 같은 "STORYTELLING/SEEKING_ADVICE" intent라도 위 1→2→3 순서로 재판단. intent 라벨이 ASSIST 를 가리지 못하게.
-- 한번 한 모드로 가도 유저가 흐름 바꾸면 다른 모드로 복귀 가능.
-- 진짜 애매하면 CASUAL 디폴트 (단, ①의 추천 작업 신호가 조금이라도 있으면 ASSIST 우선).
+- 🧭 **레인 스티키 (가장 중요)**: 컨텍스트에 "현재 대화 레인" 이 주어지면 그 레인을 **기본 유지**.
+  유저가 **의도적으로 주제를 통째로 갈아탔을 때만** 다른 모드로 전환해. 곁다리 감정/잡담 한두 마디로는 절대 안 바꿈.
+  (레인은 메시지 단위가 아니라 대화 흐름 단위 — 매 턴 흔들면 화면 모드가 깜빡이며 망가짐.)
+- 단, 위 ①의 추천 작업 신호가 명백하면(예: "이제 선물 좀 찾아줘") 상담 중이라도 ASSIST 로 전환 가능 — 이건 의도적 전환임.
+- 진짜 애매하면: 현재 레인이 있으면 **그 레인 유지**, 없으면(HOOK) CASUAL 디폴트 (단, ①의 추천 작업 신호 조금이라도 있으면 ASSIST 우선).
 
 추가 필드:
 - conversation_mode: "COUNSELING" | "CASUAL" | "ASSIST"
@@ -768,6 +771,31 @@ export function buildContextBlock(params: {
 
   lines.push(`Phase: ${params.phase}`);
   lines.push(`친밀도 레벨: ${params.intimacyLevel}/5`);
+
+  // 🆕 LLM-native 레인 스티키 — 코드 하드 락 대신 좌뇌 맥락 판단이 전환 안정성을 담당.
+  //   현재 커밋된 레인을 알려주고, "의도적 전환"이 아니면 같은 conversation_mode 를 유지하게 한다.
+  //   (HOOK = 아직 분기 전 → 스티키 없음, 자유 판단.)
+  {
+    const ASSIST_PHASES = ['ASSIST_INTENT', 'ASSIST_BROWSE', 'ASSIST_PICK'];
+    const CASUAL_PHASES = ['GREET', 'CATCHUP', 'BANTER', 'LINGER', 'FAREWELL', 'DAILY_CHAT'];
+    const curLane: 'COUNSELING' | 'CASUAL' | 'ASSIST' | null =
+      ASSIST_PHASES.includes(params.phase) ? 'ASSIST'
+        : CASUAL_PHASES.includes(params.phase) ? 'CASUAL'
+          : params.phase === 'HOOK' ? null
+            : 'COUNSELING'; // MIRROR/BRIDGE/SOLVE/EMPOWER
+    if (curLane) {
+      const laneKo = curLane === 'ASSIST' ? '추천/검색(ASSIST)'
+        : curLane === 'CASUAL' ? '일상수다(CASUAL)'
+          : '감정상담(COUNSELING)';
+      lines.push(`\n## 🧭 현재 대화 레인 = ${laneKo} — conversation_mode 판단 시 반드시 반영`);
+      lines.push(`이 대화는 이미 **${laneKo}** 레인으로 진행 중이야. 레인은 메시지마다 바뀌는 게 아니라 대화 흐름 단위로 안정적이어야 해.`);
+      lines.push(`- 기본값: conversation_mode = "${curLane}" 로 **유지**해.`);
+      lines.push(`- **유저가 의도적으로 주제를 통째로 갈아탔을 때만** 다른 모드로 전환:`);
+      lines.push(`  · 곁다리 감정/잡담 한두 마디로는 절대 바꾸지 마. (예: 선물 고르다가 "아 근데 걔가 좀 서운하게 했어" 한마디 → 여전히 ASSIST 유지)`);
+      lines.push(`  · 유저가 명백히 "이제 그 얘기 말고 ~하고 싶어 / 다른 거 하자"처럼 흐름을 바꿨을 때만 전환해.`);
+      lines.push(`- 애매하면 **현재 레인 유지**가 정답. (이게 안 지켜지면 화면 모드가 깜빡이며 망가져.)`);
+    }
+  }
 
   // 🆕 v58: 시간대 컨텍스트
   if (params.timeContext) {

@@ -99,6 +99,18 @@ const CRISIS_MESSAGE = `지금 많이 힘드시죠. 혼자가 아니에요. 💙
 언제든 다시 이야기하러 오셔도 괜찮아요. 당신은 소중한 사람이에요.`;
 
 /**
+ * 🆕 phase → 커밋된 레인 모드.
+ *   하드 락 이후 "레인의 source of truth" 는 좌뇌 raw 판단이 아니라 현재 phase 다.
+ *   UI 로 보내는 conversationMode 를 항상 이 함수로 phase 에서 파생해야
+ *   스텝퍼(phase 기반)·배지·thinking 이 어긋나지 않는다(추천 스텝퍼 + 상담 배지 버그 방지).
+ */
+function phaseLaneMode(phase: ConversationPhaseV2): 'COUNSELING' | 'CASUAL' | 'ASSIST' {
+  if (phase === 'ASSIST_INTENT' || phase === 'ASSIST_BROWSE' || phase === 'ASSIST_PICK') return 'ASSIST';
+  if (phase === 'GREET' || phase === 'CATCHUP' || phase === 'BANTER' || phase === 'LINGER' || phase === 'FAREWELL' || phase === 'DAILY_CHAT') return 'CASUAL';
+  return 'COUNSELING'; // HOOK + MIRROR/BRIDGE/SOLVE/EMPOWER
+}
+
+/**
  * 6단계 파이프라인 오케스트레이터 (인간화 고도화)
  */
 // 🆕 ACE v4: 루나의 현재 생각 + 이해도 계산
@@ -449,6 +461,9 @@ export class CounselingPipeline {
           sessionId: ragContext?.sessionId ?? ragContext?.userId ?? 'unknown',
           turnIdx: turnCount,
           userId: ragContext?.userId,
+          // 🆕 레인 스티키 — 현재 커밋된 phase(=레인) 전달. fast 좌뇌가 conversation_mode 를
+          //   현재 레인 기준으로 안정적으로 판단(의도적 전환만 다른 모드). 코드 하드 락 대체.
+          currentPhase: (currentPhaseV2 as string | undefined) ?? 'HOOK',
         }, logCollector).catch((e: any) => {
           console.warn('[FastPath] 좌뇌 standalone 실패 (무시):', e?.message);
           return null;
@@ -947,7 +962,9 @@ export class CounselingPipeline {
     const { lunaThinking, understandingLevel } = computeLunaThinking(
       newPhaseV2, turnsInCurrentPhase, stateResult, completedEvents ?? [],
     );
-    yield { type: 'phase_change', data: { phase: newPhaseV2, progress: adjustedProgress, lunaThinking, understandingLevel, conversationMode: phaseCtx.conversationMode } };
+    // 🔧 conversationMode 는 phase 에서 파생 (하드 락 후 phase 가 레인 source of truth).
+    //   좌뇌 raw 모드를 그대로 보내면 phase(=MIRROR 고정)와 어긋나 추천 스텝퍼+상담 배지 버그 발생.
+    yield { type: 'phase_change', data: { phase: newPhaseV2, progress: adjustedProgress, lunaThinking, understandingLevel, conversationMode: phaseLaneMode(newPhaseV2) } };
 
     // v2→v1 매핑 (레거시 호환)
     let conversationPhase = PhaseManager.toLegacyPhase(newPhaseV2);
@@ -2902,7 +2919,7 @@ ${researchResult.insight}
               updatedPhaseStartTurn = turnCount;
               const reProgress = Math.min(PhaseManager.getProgress(reCheckedPhase) + Math.min(turnCount * 3, 15), 100);
               const reThinking = computeLunaThinking(reCheckedPhase, 0, stateResult, updatedCompletedEvents);
-              yield { type: 'phase_change', data: { phase: reCheckedPhase, progress: reProgress, lunaThinking: reThinking.lunaThinking, understandingLevel: reThinking.understandingLevel, conversationMode: effectiveMode } };
+              yield { type: 'phase_change', data: { phase: reCheckedPhase, progress: reProgress, lunaThinking: reThinking.lunaThinking, understandingLevel: reThinking.understandingLevel, conversationMode: phaseLaneMode(reCheckedPhase) } };
             }
           }
 
